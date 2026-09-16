@@ -76,6 +76,7 @@ public class KodvianDbContext : DbContext
             entity.ToTable("Projects");
             entity.Property(x => x.Nombre).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Descripcion).HasMaxLength(2000);
+            entity.Property(x => x.GoogleDriveFolderUrl).HasMaxLength(2048);
             entity.Property(x => x.Estado).HasConversion<int>();
             entity.Property(x => x.Prioridad).HasConversion<int>();
             entity.Property(x => x.Presupuesto).HasColumnType("numeric(18,2)");

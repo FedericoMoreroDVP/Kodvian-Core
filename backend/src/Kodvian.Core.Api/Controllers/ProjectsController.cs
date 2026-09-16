@@ -82,6 +82,25 @@ public class ProjectsController : ControllerBase
         return Ok(ApiResponseDto<ProjectDetailDto>.Ok(data, "El proyecto se actualizó correctamente"));
     }
 
+    [HttpGet("{id:guid}/drive-link")]
+    [Authorize(Policy = "ProjectsDocumentsRead")]
+    public async Task<ActionResult<ApiResponseDto<ProjectDriveLinkDto>>> GetDriveLink(Guid id, CancellationToken cancellationToken)
+    {
+        var data = await _projectService.GetDriveLinkAsync(id, cancellationToken);
+        if (data is null) return NotFound(ApiResponseDto<ProjectDriveLinkDto>.Fail("Proyecto no encontrado"));
+        return Ok(ApiResponseDto<ProjectDriveLinkDto>.Ok(data, "Enlace obtenido correctamente"));
+    }
+
+    [HttpPut("{id:guid}/drive-link")]
+    [Authorize(Policy = "ProjectsDocumentsRead")]
+    [Authorize(Policy = "ProjectsDocumentsWrite")]
+    public async Task<ActionResult<ApiResponseDto<ProjectDriveLinkDto>>> UpdateDriveLink(Guid id, [FromBody] ProjectDriveLinkRequestDto request, CancellationToken cancellationToken)
+    {
+        var data = await _projectService.UpdateDriveLinkAsync(id, request, cancellationToken);
+        if (data is null) return NotFound(ApiResponseDto<ProjectDriveLinkDto>.Fail("Proyecto no encontrado"));
+        return Ok(ApiResponseDto<ProjectDriveLinkDto>.Ok(data, data.GoogleDriveFolderUrl is null ? "Enlace quitado correctamente" : "Enlace guardado correctamente"));
+    }
+
     [HttpGet("document-types")]
     [Authorize(Policy = "ProjectsDocumentsRead")]
     public async Task<ActionResult<ApiResponseDto<IReadOnlyCollection<ProjectDocumentTypeDto>>>> GetDocumentTypes(CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 ﻿import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
+import { ProjectDriveLink } from '../models/project-drive-link.model';
 
 import {
   ApiResponse,
@@ -70,6 +71,14 @@ export class ProyectosService {
 
   actualizar(id: string, payload: ProyectoFormulario): Observable<ProyectoDetalle> {
     return this.http.put<ApiResponse<ProyectoDetalle>>(`${this.endpoint}/${id}`, payload).pipe(map((r) => r.data));
+  }
+
+  obtenerEnlaceDrive(id: string): Observable<ProjectDriveLink> {
+    return this.http.get<ApiResponse<ProjectDriveLink>>(`${this.endpoint}/${id}/drive-link`).pipe(map(r => r.data));
+  }
+
+  guardarEnlaceDrive(id: string, googleDriveFolderUrl: string | null): Observable<ProjectDriveLink> {
+    return this.http.put<ApiResponse<ProjectDriveLink>>(`${this.endpoint}/${id}/drive-link`, { googleDriveFolderUrl }).pipe(map(r => r.data));
   }
 
   obtenerDesarrolladores(): Observable<DesarrolladorExterno[]> {

@@ -1,4 +1,4 @@
-﻿<h2 mat-dialog-title class="dialog-title">Detalle del proyecto</h2>
+<h2 mat-dialog-title class="dialog-title">Detalle del proyecto</h2>
 <mat-dialog-content class="dialog-body">
   <div class="detail-grid">
     <article class="detail-card full-width">
@@ -8,14 +8,8 @@
         <strong class="value value-main">{{ valor(proyecto.name) }}</strong>
       </div>
       <div class="detail-row two-cols">
-        <div>
-          <span class="label">Cliente</span>
-          <p class="value">{{ valor(proyecto.clientName) }}</p>
-        </div>
-        <div>
-          <span class="label">Analista a cargo</span>
-          <p class="value">{{ valor(proyecto.responsibleName) }}</p>
-        </div>
+        <div><span class="label">Cliente</span><p class="value">{{ valor(proyecto.clientName) }}</p></div>
+        <div><span class="label">Analista a cargo</span><p class="value">{{ valor(proyecto.responsibleName) }}</p></div>
       </div>
     </article>
 
@@ -24,27 +18,17 @@
       <div class="detail-row">
         <span class="label">Estado</span>
         <p class="value">
-            <span
-              class="status-chip"
-              [class.status-planning]="proyecto.status === 'Planificacion'"
-              [class.status-budgeted]="proyecto.status === 'Presupuestado'"
-              [class.status-progress]="proyecto.status === 'EnCurso'"
-              [class.status-paused]="proyecto.status === 'Pausado'"
-              [class.status-finished]="proyecto.status === 'Finalizado'"
-            [class.status-cancelled]="proyecto.status === 'Cancelado'"
-          >
-            {{ mostrarEstado(proyecto.status) }}
-          </span>
+          <span class="status-chip"
+            [class.status-planning]="proyecto.status === 'Planificacion'"
+            [class.status-budgeted]="proyecto.status === 'Presupuestado'"
+            [class.status-progress]="proyecto.status === 'EnCurso'"
+            [class.status-paused]="proyecto.status === 'Pausado'"
+            [class.status-finished]="proyecto.status === 'Finalizado'"
+            [class.status-cancelled]="proyecto.status === 'Cancelado'">{{ mostrarEstado(proyecto.status) }}</span>
         </p>
       </div>
-      <div class="detail-row">
-        <span class="label">Prioridad</span>
-        <p class="value"><span class="priority-chip">{{ valor(proyecto.priority) }}</span></p>
-      </div>
-      <div class="detail-row">
-        <span class="label">Porcentaje de avance</span>
-        <p class="value">{{ proyecto.progressPercentage }}%</p>
-      </div>
+      <div class="detail-row"><span class="label">Prioridad</span><p class="value"><span class="priority-chip">{{ valor(proyecto.priority) }}</span></p></div>
+      <div class="detail-row"><span class="label">Porcentaje de avance</span><p class="value">{{ proyecto.progressPercentage }}%</p></div>
       <div class="detail-row">
         <span class="label">Activo</span>
         <p class="value"><span class="active-chip" [class.active-yes]="proyecto.isActive" [class.active-no]="!proyecto.isActive">{{ proyecto.isActive ? 'Si' : 'No' }}</span></p>
@@ -60,111 +44,45 @@
     </article>
 
     <article class="detail-card full-width">
-      <div class="documents-header">
-        <p class="section-eyebrow">Documentación del proyecto</p>
-      </div>
-
+      <p class="section-eyebrow">Documentación del proyecto</p>
       @if (!puedeLeerDocumentos) {
         <p class="empty-documents">No tienes permisos para visualizar documentación de proyectos.</p>
       } @else {
-        @if (puedeEscribirDocumentos) {
-          <div class="upload-panel">
-            <div class="upload-fields">
-              <label>
-                <span>Título</span>
-                <input type="text" [(ngModel)]="nuevoDocumento.title" maxlength="200" placeholder="Ej: Contrato marco 2026" />
-              </label>
-              <label>
-                <span>Tipo</span>
-                <select [(ngModel)]="nuevoDocumento.type">
-                  @for (tipo of tiposDocumento; track tipo.value) {
-                    <option [value]="tipo.value">{{ tipo.label }}</option>
-                  }
-                </select>
-              </label>
-              <label>
-                <span>Nota (opcional)</span>
-                <input type="text" [(ngModel)]="nuevoDocumento.notes" maxlength="500" placeholder="Contexto de carga" />
-              </label>
-            </div>
-            <div class="documents-actions">
-              <input #fileInput type="file" accept="application/pdf,.pdf" class="file-input" (change)="onArchivoSeleccionado($event)" />
-              <button mat-button type="button" class="action-upload" [disabled]="subiendoDocumento" (click)="seleccionarArchivo(fileInput)">
-                {{ subiendoDocumento ? 'Cargando...' : 'Nuevo documento (v1)' }}
-              </button>
-            </div>
-          </div>
+        @if (cargandoEnlace) { <p class="empty-documents" role="status">Cargando enlace…</p> }
+        @if (errorEnlace) { <p class="drive-error" role="alert">{{ errorEnlace }}</p> }
+        @if (!enlaceCargado && !cargandoEnlace) {
+          <button mat-button type="button" (click)="cargarEnlace()">Reintentar</button>
         }
-
-        @if (cargandoDocumentos) {
-          <p class="empty-documents">Cargando documentos...</p>
-        } @else if (documentos.length === 0) {
-          <p class="empty-documents">Este proyecto no tiene documentos cargados.</p>
-        } @else {
-          <div class="documents-list">
-            @for (documento of documentos; track documento.id) {
-              <div class="document-item">
-                <div class="document-meta">
-                  <strong>{{ documento.title }}</strong>
-                  <small>{{ documento.typeLabel }} · v{{ documento.currentVersionNumber }} · {{ documento.fileName }}</small>
-                  <small>{{ documento.uploadedAt | date:'dd/MM/yyyy HH:mm' }} · {{ documento.uploadedByName }} · {{ formatBytes(documento.sizeBytes) }}</small>
-                </div>
-                <div class="document-actions">
-                  <button mat-button type="button" class="doc-action" (click)="descargarDocumento(documento)">Descargar</button>
-                  <button mat-button type="button" class="doc-action" (click)="toggleHistorial(documento.id)">
-                    {{ historialAbierto[documento.id] ? 'Ocultar historial' : 'Ver historial' }}
-                  </button>
-                  @if (puedeEscribirDocumentos) {
-                    <input #versionInput type="file" accept="application/pdf,.pdf" class="file-input" (change)="onNuevaVersionSeleccionada(documento, $event)" />
-                    <input class="version-notes" type="text" maxlength="500" [(ngModel)]="notasVersiones[documento.id]" placeholder="Nota versión (opcional)" />
-                    <button mat-button type="button" class="doc-action" [disabled]="subiendoVersionId === documento.id" (click)="seleccionarArchivo(versionInput)">
-                      {{ subiendoVersionId === documento.id ? 'Cargando...' : 'Nueva versión' }}
-                    </button>
-                  }
-                  @if (puedeEliminarDocumentos) {
-                    <button mat-button type="button" class="doc-action danger" (click)="eliminarDocumento(documento)">Eliminar</button>
-                  }
-                </div>
-
-                @if (historialAbierto[documento.id]) {
-                  <div class="history-panel">
-                    @if (cargandoVersiones[documento.id]) {
-                      <p class="empty-documents">Cargando historial...</p>
-                    } @else if (versionesPorDocumento[documento.id].length === 0) {
-                      <p class="empty-documents">Sin versiones registradas.</p>
-                    } @else {
-                      <div class="history-list">
-                        @for (version of versionesPorDocumento[documento.id]; track version.id) {
-                          <div class="history-item">
-                            <div class="history-meta">
-                              <strong>v{{ version.versionNumber }} · {{ version.fileName }}</strong>
-                              <small>{{ version.uploadedAt | date:'dd/MM/yyyy HH:mm' }} · {{ version.uploadedByName }} · {{ formatBytes(version.sizeBytes) }}</small>
-                              @if (version.notes) {
-                                <small class="history-notes">{{ version.notes }}</small>
-                              }
-                            </div>
-                            <button mat-button type="button" class="doc-action" (click)="descargarVersion(documento, version)">Descargar versión</button>
-                          </div>
-                        }
-                      </div>
-                    }
-                  </div>
-                }
+        @if (enlaceCargado) {
+          @if (puedeEscribirDocumentos) {
+            <form class="drive-panel" (ngSubmit)="guardarEnlace()" novalidate>
+              <label for="project-drive-link">Enlace de Google Drive</label>
+              <input id="project-drive-link" name="driveLink" type="url" [(ngModel)]="enlaceDrive" maxlength="2048"
+                placeholder="https://drive.google.com/drive/folders/..." [disabled]="guardandoEnlace"
+                [attr.aria-invalid]="!enlaceValido" aria-describedby="drive-help" />
+              <small id="drive-help">Pega el enlace compartido de la carpeta del proyecto. Los archivos y sus permisos se administran en Google Drive.</small>
+              @if (!enlaceValido) { <p class="drive-error" role="alert">Usa un enlace HTTPS de drive.google.com.</p> }
+              <div class="documents-actions">
+                <button mat-flat-button color="primary" type="submit" [disabled]="guardandoEnlace || !enlaceValido || (enlaceDrive.trim() || null) === enlaceGuardado">{{ guardandoEnlace ? 'Guardando…' : 'Guardar enlace' }}</button>
+                @if (enlaceGuardado) { <button mat-button type="button" [disabled]="guardandoEnlace" (click)="guardarEnlace(true)">Quitar enlace</button> }
               </div>
-            }
-          </div>
+            </form>
+          }
+          @if (enlaceParaAbrir; as link) {
+            <a mat-stroked-button [href]="link" target="_blank" rel="noopener noreferrer">Abrir en Google Drive</a>
+          } @else if (!enlaceGuardado) {
+            <p class="empty-documents">Este proyecto todavía no tiene un enlace de Google Drive vinculado.</p>
+          }
         }
       }
     </article>
 
     <article class="detail-card full-width">
       <p class="section-eyebrow">Descripcion</p>
-      <div class="detail-row">
-        <p class="value">{{ valor(proyecto.description) }}</p>
-      </div>
+      <div class="detail-row"><p class="value">{{ valor(proyecto.description) }}</p></div>
     </article>
   </div>
 </mat-dialog-content>
 <mat-dialog-actions align="end" class="dialog-actions">
-  <button mat-flat-button color="primary" class="action-close" mat-dialog-close>Cerrar</button>
+  <button mat-flat-button color="primary" class="action-close" mat-dialog-close [disabled]="guardandoEnlace">Cerrar</button>
 </mat-dialog-actions>

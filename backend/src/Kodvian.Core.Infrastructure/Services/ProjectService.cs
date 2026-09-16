@@ -4,6 +4,7 @@ using Kodvian.Core.Application.Common.Files;
 using Kodvian.Core.Application.Common.Models;
 using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Application.Projects.Abstractions;
+using Kodvian.Core.Application.Projects;
 using Kodvian.Core.Application.Projects.Dtos;
 using Kodvian.Core.Application.Projects.Requests;
 using Kodvian.Core.Domain.Entities;
@@ -111,6 +112,25 @@ public class ProjectService : IProjectService
             .Where(x => x.Id == project.Id)
             .Select(ToDetailDto())
             .FirstAsync(cancellationToken);
+    }
+
+    public async Task<ProjectDriveLinkDto?> GetDriveLinkAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Projects.AsNoTracking().Where(x => x.Id == id)
+            .Select(x => new ProjectDriveLinkDto { GoogleDriveFolderUrl = x.GoogleDriveFolderUrl })
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<ProjectDriveLinkDto?> UpdateDriveLinkAsync(Guid id, ProjectDriveLinkRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var link = GoogleDriveLinkRules.Normalize(request.GoogleDriveFolderUrl);
+        var project = await _dbContext.Projects.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (project is null) return null;
+
+        project.GoogleDriveFolderUrl = link;
+        project.FechaActualizacion = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new ProjectDriveLinkDto { GoogleDriveFolderUrl = link };
     }
 
     public async Task<ProjectDetailDto?> UpdateAsync(Guid id, ProjectUpsertRequestDto request, CancellationToken cancellationToken = default)

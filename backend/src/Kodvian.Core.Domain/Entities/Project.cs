@@ -7,6 +7,7 @@ public class Project : BaseEntity
     public Guid ClienteId { get; set; }
     public string Nombre { get; set; } = string.Empty;
     public string? Descripcion { get; set; }
+    public string? GoogleDriveFolderUrl { get; set; }
     public Guid? ResponsableId { get; set; }
     public ProjectStatus Estado { get; set; } = ProjectStatus.Planificacion;
     public ProjectPriority Prioridad { get; set; } = ProjectPriority.Media;

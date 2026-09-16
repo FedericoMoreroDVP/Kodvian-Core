@@ -10,7 +10,7 @@ El modulo de proyectos centraliza la gestion de trabajos para clientes: estado, 
 - Crear y editar proyecto.
 - Asignar opcionalmente un analista a cargo del proyecto desde el formulario o desde el dialog Equipo del proyecto.
 - Ver detalle.
-- Gestionar documentos y versiones.
+- Pegar, guardar, modificar, abrir o quitar un enlace de Google Drive para la documentación del proyecto.
 - Asignar desarrolladores operativamente sin datos economicos.
 - Registrar pagos a desarrolladores solo como administrador.
 - Consultar ledger de contrato solo como administrador.
@@ -33,7 +33,13 @@ Proyectos:
 - `POST /api/projects`.
 - `PUT /api/projects/{id}`.
 
-Documentos:
+Documentación mediante Google Drive:
+
+- `GET /api/projects/{id}/drive-link`: obtiene `{ googleDriveFolderUrl }`; devuelve `null` en ese campo si no hay enlace y 404 si no existe el proyecto.
+- `PUT /api/projects/{id}/drive-link`: guarda `{ googleDriveFolderUrl: "https://drive.google.com/..." }`. Enviar `null` o texto vacío quita el enlace.
+- Los endpoints mantienen el envoltorio `success`, `message`, `data`.
+
+API anterior de archivos (ya no utilizada por la pantalla de detalle):
 
 - `GET /api/projects/document-types`.
 - `GET /api/projects/{id}/documents`.
@@ -59,6 +65,7 @@ Contratos y pagos:
 ## Modelo de datos
 
 - `Project`.
+- `Project.GoogleDriveFolderUrl`: texto opcional de hasta 2048 caracteres; migración `20260916202919_ProjectGoogleDriveLink`.
 - `Client`.
 - `TaskItem`.
 - `ProjectDocument`.
@@ -79,7 +86,9 @@ Enums:
 ## Permisos
 
 - `projects.read` y `projects.write` para proyectos.
-- `projects.documents.read`, `projects.documents.write`, `projects.documents.delete` para documentos.
+- `projects.documents.read` para consultar el enlace y `projects.documents.write` para guardarlo, modificarlo o quitarlo; ambos endpoints requieren también `projects.read`.
+- La operación de escritura requiere lectura de documentación. La URL se consulta por un endpoint independiente y no se expone en el detalle genérico del proyecto.
+- `projects.documents.delete` permanece asociado a la API anterior de archivos.
 - `ProjectDeveloperAssignment` usa permisos operativos de proyectos, sin datos economicos.
 - Contratos economicos, pagos y ledger son solo administrador.
 - El frontend evalua permisos de documentos en el detalle.
@@ -89,7 +98,8 @@ Enums:
 
 - Listado con filtros/paginacion.
 - Dialog de detalle.
-- Estados de documentos: sin documentos, versiones, descarga, upload, delete.
+- Estados del enlace: cargando, sin enlace, enlace guardado, guardando y error con reintento.
+- Los usuarios de consulta ven el botón Abrir en Google Drive; el formulario y Quitar enlace requieren escritura.
 - Estados de contratos/pagos/comprobantes.
 - Errores de upload/download.
 
@@ -99,19 +109,31 @@ Enums:
 - El analista a cargo usa `Project.ResponsableId` y solo puede apuntar a un usuario activo con rol `Analista` y perfil `Developer` asociado.
 - El perfil `Developer` del analista permite crear acuerdos economicos y pagos con `ProjectDeveloperContract` y `DeveloperPayment`.
 - El porcentaje de avance debe ser coherente con estado y tareas.
-- Los documentos de proyecto se versionan, no se reemplazan silenciosamente.
+- Un proyecto puede guardar un único enlace opcional de Google Drive, pegado manualmente.
+- Solo se aceptan direcciones HTTPS del dominio exacto `drive.google.com`, con una ruta, sin credenciales ni puertos alternativos. Se quitan espacios externos y se conservan los parámetros compartidos, incluidos `resourcekey` y `usp`.
+- La validación del formato se ejecuta en frontend y backend; no comprueba la existencia o los permisos de la carpeta en Google Drive.
+- Abrir el enlace utiliza una pestaña nueva con `noopener noreferrer`. Los archivos y permisos se administran directamente en Drive.
+- Guardar el enlace modifica únicamente ese campo y la fecha de actualización; la edición general del proyecto conserva el enlace.
+- Quitar el enlace solo elimina su asociación con el proyecto, sin operar sobre Google Drive.
+- El detalle ya no muestra subida de archivos, tipos, notas ni historial de versiones. No se realiza transferencia automática de archivos.
 - La asignacion operativa de equipo no contiene montos, porcentajes ni modalidad de pago.
 - Los contratos pueden ser por porcentaje o monto fijo.
 - Los pagos deben asociarse a un contrato.
 
 ## Riesgos y cuidados
 
-- Documento de proyecto usa baja logica; no confundir con eliminacion fisica de comprobantes.
-- Uploads solo deben aceptar PDFs validos.
+- La API anterior de documentos conserva su esquema y comportamiento; la nueva migración solo agrega la columna del enlace, sin borrar tablas ni archivos.
 - Validar permisos backend para acciones sensibles.
 - Evitar inconsistencias entre presupuesto de proyecto, contratos y pagos.
 
 ## Tests requeridos
+
+Pruebas implementadas para el enlace de Drive:
+
+- `ProjectDriveLinkTests`: validación de URL, parámetros compartidos, guardado, lectura, sustitución, eliminación, proyecto inexistente y conservación del enlace al editar el proyecto. Persistencia comprobada con EF InMemory.
+- `proyecto-detail-dialog.component.spec.ts`: consumo de GET/PUT, apertura en pestaña nueva, permisos visibles, errores recuperables, estado vacío y validación de URL.
+
+Cobertura general del módulo:
 
 - Backend: tests de `ProjectService` para listado, detalle, lookups, alta y edicion.
 - Backend: tests de documentos para alta, versionado, descarga, listado y baja logica.
