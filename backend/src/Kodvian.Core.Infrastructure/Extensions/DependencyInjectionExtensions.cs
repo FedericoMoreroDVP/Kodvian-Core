@@ -34,6 +34,7 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IPasswordHasher, PasswordHasherService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<ISessionValidator, SessionValidator>();
         services.AddScoped<IClientService, ClientService>();
         services.AddScoped<IDeveloperService, DeveloperService>();
         services.AddScoped<IProjectDeveloperAssignmentService, ProjectDeveloperAssignmentService>();
@@ -49,6 +50,8 @@ public static class DependencyInjectionExtensions
         services.AddScoped<ITeamUserService, TeamUserService>();
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
+        services.AddScoped<UserAccessGuard>();
+        services.AddScoped<Kodvian.Core.Application.Administration.IUserAdministrationService, UserAdministrationService>();
 
         return services;
     }

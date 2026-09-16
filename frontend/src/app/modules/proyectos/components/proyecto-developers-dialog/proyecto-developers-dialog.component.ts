@@ -113,7 +113,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
 
   loadLookups(): void {
     this.proyectosService.obtenerLookups().subscribe({
-      next: (data) => this.analysts = data.responsibles,
+      next: (data) => { this.analysts = data.responsibles; this.preserveCurrentAnalyst(); },
       error: () => this.snackBar.open('No se pudieron cargar los analistas', 'Cerrar', { duration: 3500 })
     });
   }
@@ -125,6 +125,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
         this.selectedAnalystId = project.responsibleId ?? '';
         this.data.project.responsibleId = project.responsibleId;
         this.data.project.responsibleName = project.responsibleName;
+        this.preserveCurrentAnalyst();
       },
       error: () => this.snackBar.open('No se pudo cargar el detalle del proyecto', 'Cerrar', { duration: 3500 })
     });
@@ -135,6 +136,13 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
       next: (data) => this.developers = data,
       error: () => this.snackBar.open('No se pudieron cargar los desarrolladores', 'Cerrar', { duration: 3500 })
     });
+  }
+
+  private preserveCurrentAnalyst(): void {
+    const project = this.projectDetail;
+    if (project?.responsibleId && !this.analysts.some(a => a.id === project.responsibleId)) {
+      this.analysts = [...this.analysts, { id: project.responsibleId, name: `${project.responsibleName ?? 'Responsable'} (asignación existente)` }];
+    }
   }
 
   guardarAnalista(): void {

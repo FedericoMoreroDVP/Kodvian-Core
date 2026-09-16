@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Application.Developers.Abstractions;
 using Kodvian.Core.Application.Developers.Dtos;
 using Kodvian.Core.Application.Developers.Requests;
@@ -36,7 +37,8 @@ public class ProjectDeveloperAssignmentService : IProjectDeveloperAssignmentServ
             throw new InvalidOperationException("Proyecto no encontrado");
         }
 
-        var developerExists = await _dbContext.Developers.AnyAsync(x => x.Id == request.DeveloperId, cancellationToken);
+        var developerExists = await _dbContext.Developers.AnyAsync(x => x.Id == request.DeveloperId && x.Activo
+            && (!x.Users.Any() || x.Users.Any(u => u.UserRoles.Any(r => r.Role.Activo && r.Role.Name == RoleNames.Developer))), cancellationToken);
         if (!developerExists)
         {
             throw new InvalidOperationException("Desarrollador no encontrado");

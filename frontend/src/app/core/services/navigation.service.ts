@@ -23,6 +23,7 @@ export class NavigationService {
       return [];
     }
 
-    return this.items.filter((item) => !item.permission || user.permissions.includes(item.permission));
+    return this.items.filter(item => (!item.permission || user.permissions.includes(item.permission))
+      && (item.route !== '/administracion' || user.roles.includes('Administrador')));
   }
 }

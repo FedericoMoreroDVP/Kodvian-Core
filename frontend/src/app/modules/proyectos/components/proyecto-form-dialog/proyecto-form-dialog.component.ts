@@ -65,6 +65,9 @@ export class ProyectoFormDialogComponent {
 
   constructor(@Inject(MAT_DIALOG_DATA) public readonly data: ProyectoFormData) {
     if (data.proyecto) {
+      if (data.proyecto.responsibleId && !data.responsables.some(r => r.id === data.proyecto!.responsibleId)) {
+        data.responsables = [...data.responsables, { id: data.proyecto.responsibleId, name: `${data.proyecto.responsibleName ?? 'Responsable'} (asignación existente)` }];
+      }
       this.form.patchValue({
         clientId: data.proyecto.clientId,
         name: data.proyecto.name,

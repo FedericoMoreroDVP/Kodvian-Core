@@ -48,6 +48,11 @@ export class DesarrolladoresPageComponent implements OnInit {
     return this.authSession.user?.permissions.includes('finances.read') ?? false;
   }
 
+  get canWriteTeam(): boolean { return this.authSession.user?.permissions.includes('team.write') ?? false; }
+  canEdit(roles: string[] = []): boolean {
+    return this.canWriteTeam && (!roles.includes('Administrador') || this.authSession.user?.roles.includes('Administrador') === true);
+  }
+
   ngOnInit(): void {
     this.cargarDesarrolladores();
     this.filtrosForm.valueChanges.subscribe(() => this.aplicarFiltroLocal());
@@ -83,6 +88,7 @@ export class DesarrolladoresPageComponent implements OnInit {
   }
 
   nuevoDesarrollador(): void {
+    if (!this.canWriteTeam) return;
     const ref = this.dialog.open(DesarrolladorFormDialogComponent, {
       width: '980px',
       maxWidth: 'calc(100vw - 32px)',
@@ -104,6 +110,7 @@ export class DesarrolladoresPageComponent implements OnInit {
   }
 
   editarDesarrollador(row: DesarrolladorExterno): void {
+    if (!this.canEdit(row.roles)) return;
     const ref = this.dialog.open(DesarrolladorFormDialogComponent, {
       width: '980px',
       maxWidth: 'calc(100vw - 32px)',
@@ -126,6 +133,7 @@ export class DesarrolladoresPageComponent implements OnInit {
   }
 
   nuevoAnalista(): void {
+    if (!this.canWriteTeam) return;
     const ref = this.dialog.open(AnalistaFormDialogComponent, {
       width: '760px',
       maxWidth: 'calc(100vw - 32px)',
@@ -147,6 +155,7 @@ export class DesarrolladoresPageComponent implements OnInit {
   }
 
   editarAnalista(row: TeamUser): void {
+    if (!this.canEdit(row.roles)) return;
     const ref = this.dialog.open(AnalistaFormDialogComponent, {
       width: '760px',
       maxWidth: 'calc(100vw - 32px)',

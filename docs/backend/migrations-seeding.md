@@ -33,6 +33,10 @@ Roles con IDs fijos estan definidos en `KodvianDbContext`:
 - Administrator.
 - Operative.
 - ReadOnly.
+- Analyst.
+- Developer.
+
+La migración `20260916205633_UserMultipleRoles` copia `Users.RoleId` a `UserRoles` antes de eliminar la columna original y agrega `SessionVersion`. El seed crea la relación con Administrador. El despliegue requiere un nuevo inicio de sesión para los usuarios existentes. El retroceso se bloquea si una cuenta tiene múltiples roles, evitando perder esas asignaciones.
 
 ## Produccion
 

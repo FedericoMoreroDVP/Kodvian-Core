@@ -107,3 +107,10 @@ h2 {
     font-size: 28px;
   }
 }
+.users-search { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+.users-search mat-form-field { flex: 1; min-width: 230px; }
+.users-table-wrapper { overflow-x: auto; }
+.users-table { width: 100%; border-collapse: collapse; }
+.users-table th, .users-table td { text-align: left; padding: 12px; border-bottom: 1px solid var(--kd-border-subtle); }
+.role-label { display: inline-block; border: 1px solid var(--kd-border-subtle); border-radius: 12px; padding: 3px 8px; margin: 2px; font-size: 12px; }
+[role=alert] { color: #ff9b9b; }

@@ -10,6 +10,7 @@ export interface DesarrolladorExterno {
   isActive: boolean;
   hasSystemAccess: boolean;
   isSystemAccessActive: boolean;
+  roles: string[];
 }
 
 export interface DesarrolladorFormulario {
@@ -29,6 +30,7 @@ export interface TeamUser {
   fullName: string;
   email: string;
   role: string;
+  roles: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;

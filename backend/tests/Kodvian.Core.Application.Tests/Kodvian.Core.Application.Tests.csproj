@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.8" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
@@ -24,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Kodvian.Core.Application\Kodvian.Core.Application.csproj" />
     <ProjectReference Include="..\..\src\Kodvian.Core.Infrastructure\Kodvian.Core.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Kodvian.Core.Api\Kodvian.Core.Api.csproj" />
   </ItemGroup>
 
 </Project>

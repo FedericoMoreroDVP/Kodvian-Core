@@ -9,6 +9,7 @@ export interface CurrentUser {
   fullName: string;
   email: string;
   role: string;
+  roles: string[];
   developerId?: string;
   permissions: string[];
 }

@@ -135,14 +135,13 @@ public class ProjectService : IProjectService
 
     public async Task<ProjectDetailDto?> UpdateAsync(Guid id, ProjectUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
-        await ValidateReferencesAsync(request, cancellationToken);
-
         var project = await _dbContext.Projects.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (project is null)
         {
             return null;
         }
 
+        await ValidateReferencesAsync(request, cancellationToken, project.ResponsableId);
         ApplyRequest(project, request);
         project.FechaActualizacion = DateTime.UtcNow;
 
@@ -171,7 +170,7 @@ public class ProjectService : IProjectService
 
         var responsibles = await _dbContext.Users
             .AsNoTracking()
-            .Where(x => x.Activo && x.DeveloperId != null && x.Role != null && x.Role.Name == RoleNames.Analyst)
+            .Where(x => x.Activo && x.DeveloperId != null && x.UserRoles.Any(r => r.Role.Name == RoleNames.Analyst && r.Role.Activo))
             .OrderBy(x => x.FullName)
             .Take(300)
             .Select(x => new ProjectLookupItemDto
@@ -598,7 +597,7 @@ public class ProjectService : IProjectService
         };
     }
 
-    private async Task ValidateReferencesAsync(ProjectUpsertRequestDto request, CancellationToken cancellationToken)
+    private async Task ValidateReferencesAsync(ProjectUpsertRequestDto request, CancellationToken cancellationToken, Guid? currentResponsibleId = null)
     {
         var clientExists = await _dbContext.Clients.AnyAsync(x => x.Id == request.ClientId, cancellationToken);
         if (!clientExists)
@@ -606,10 +605,10 @@ public class ProjectService : IProjectService
             throw new ArgumentException("El cliente seleccionado no existe");
         }
 
-        if (request.ResponsibleId.HasValue)
+        if (request.ResponsibleId.HasValue && request.ResponsibleId != currentResponsibleId)
         {
             var analystExists = await _dbContext.Users.AnyAsync(
-                x => x.Id == request.ResponsibleId.Value && x.Activo && x.DeveloperId != null && x.Role != null && x.Role.Name == RoleNames.Analyst,
+                x => x.Id == request.ResponsibleId.Value && x.Activo && x.DeveloperId != null && x.UserRoles.Any(r => r.Role.Name == RoleNames.Analyst && r.Role.Activo),
                 cancellationToken);
             if (!analystExists)
             {

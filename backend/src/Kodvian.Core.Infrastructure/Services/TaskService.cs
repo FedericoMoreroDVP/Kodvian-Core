@@ -1,6 +1,7 @@
 ﻿using System.Linq.Expressions;
 using Kodvian.Core.Application.Common.Models;
 using Kodvian.Core.Application.Tasks.Abstractions;
+using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Application.Tasks.Dtos;
 using Kodvian.Core.Application.Tasks.Requests;
 using Kodvian.Core.Domain.Entities;
@@ -118,14 +119,13 @@ public class TaskService : ITaskService
 
     public async Task<TaskDetailDto?> UpdateAsync(Guid id, TaskUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
-        await ValidateReferencesAsync(null, request, cancellationToken);
-
         var task = await _dbContext.Tasks.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (task is null)
         {
             return null;
         }
 
+        await ValidateReferencesAsync(null, request, cancellationToken, task.DeveloperId);
         ApplyRequest(task, request);
         task.FechaActualizacion = DateTime.UtcNow;
 
@@ -223,7 +223,8 @@ public class TaskService : ITaskService
 
         var developers = await _dbContext.Developers
             .AsNoTracking()
-            .Where(x => x.Activo)
+            .Where(x => x.Activo && (!x.Users.Any() || x.Users.Any(u => u.UserRoles.Any(r => r.Role.Activo
+                && (r.Role.Name == RoleNames.Analyst || r.Role.Name == RoleNames.Developer)))))
             .OrderBy(x => x.FullName)
             .Take(300)
             .Select(x => new TaskLookupItemDto { Id = x.Id, Name = x.FullName })
@@ -416,7 +417,7 @@ public class TaskService : ITaskService
         public DateTime? UpdatedAt { get; init; }
     }
 
-    private async Task ValidateReferencesAsync(Guid? createdById, TaskUpsertRequestDto request, CancellationToken cancellationToken)
+    private async Task ValidateReferencesAsync(Guid? createdById, TaskUpsertRequestDto request, CancellationToken cancellationToken, Guid? currentDeveloperId = null)
     {
         var projectExists = await _dbContext.Projects.AnyAsync(x => x.Id == request.ProjectId, cancellationToken);
         if (!projectExists)
@@ -426,7 +427,11 @@ public class TaskService : ITaskService
 
         if (request.DeveloperId.HasValue)
         {
-            var developerExists = await _dbContext.Developers.AnyAsync(x => x.Id == request.DeveloperId.Value, cancellationToken);
+            var candidates = _dbContext.Developers.Where(x => x.Id == request.DeveloperId.Value);
+            if (request.DeveloperId != currentDeveloperId)
+                candidates = candidates.Where(x => x.Activo && (!x.Users.Any() || x.Users.Any(u => u.UserRoles.Any(r => r.Role.Activo
+                    && (r.Role.Name == RoleNames.Analyst || r.Role.Name == RoleNames.Developer)))));
+            var developerExists = await candidates.AnyAsync(cancellationToken);
             if (!developerExists)
             {
                 throw new ArgumentException("El desarrollador seleccionado no existe");

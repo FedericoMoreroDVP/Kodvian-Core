@@ -14,18 +14,20 @@ public class TeamUserService : ITeamUserService
 {
     private readonly KodvianDbContext _dbContext;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly UserAccessGuard _access;
 
-    public TeamUserService(KodvianDbContext dbContext, IPasswordHasher passwordHasher)
+    public TeamUserService(KodvianDbContext dbContext, IPasswordHasher passwordHasher, UserAccessGuard access)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
+        _access = access;
     }
 
     public async Task<IReadOnlyCollection<TeamUserDto>> GetAnalystsAsync(CancellationToken cancellationToken = default)
     {
         return await _dbContext.Users
             .AsNoTracking()
-            .Where(x => x.Role != null && x.Role.Name == RoleNames.Analyst)
+            .Where(x => x.UserRoles.Any(r => r.Role.Name == RoleNames.Analyst && r.Role.Activo))
             .OrderByDescending(x => x.Activo)
             .ThenBy(x => x.FullName)
             .Select(ToDto())
@@ -34,6 +36,8 @@ public class TeamUserService : ITeamUserService
 
     public async Task<TeamUserDto> CreateAnalystAsync(TeamUserUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await _access.BeginAsync(cancellationToken);
+        await _access.CheckActorAsync(false, cancellationToken);
         if (string.IsNullOrWhiteSpace(request.Password))
         {
             throw new InvalidOperationException("La contraseña inicial es obligatoria");
@@ -46,7 +50,7 @@ public class TeamUserService : ITeamUserService
             throw new InvalidOperationException("Ya existe un usuario con ese email");
         }
 
-        var analystRole = await _dbContext.Roles.FirstOrDefaultAsync(x => x.Name == RoleNames.Analyst, cancellationToken);
+        var analystRole = await _dbContext.Roles.FirstOrDefaultAsync(x => x.Name == RoleNames.Analyst && x.Activo, cancellationToken);
         if (analystRole is null)
         {
             throw new InvalidOperationException("El rol Analista no está configurado");
@@ -57,29 +61,34 @@ public class TeamUserService : ITeamUserService
             FullName = request.FullName.Trim(),
             Email = email,
             PasswordHash = _passwordHasher.HashPassword(request.Password),
-            RoleId = analystRole.Id,
+            UserRoles = [new UserRole { RoleId = analystRole.Id }],
             Activo = request.IsActive
         };
 
-        var developer = CreateDeveloperProfile(request.FullName, email, request.IsActive);
-        user.Developer = developer;
+        await _access.EnsureProfileAsync(user, cancellationToken);
 
         _dbContext.Users.Add(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return await GetAnalystByIdAsync(user.Id, cancellationToken) ?? throw new InvalidOperationException("No se pudo recuperar el usuario creado");
     }
 
     public async Task<TeamUserDto?> UpdateAnalystAsync(Guid id, TeamUserUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await _access.BeginAsync(cancellationToken);
+        var actorIsAdmin = await _access.CheckActorAsync(false, cancellationToken);
         var user = await _dbContext.Users
-            .Include(x => x.Role)
-            .FirstOrDefaultAsync(x => x.Id == id && x.Role != null && x.Role.Name == RoleNames.Analyst, cancellationToken);
+            .Include(x => x.UserRoles).ThenInclude(x => x.Role)
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserRoles.Any(r => r.Role.Name == RoleNames.Analyst && r.Role.Activo), cancellationToken);
 
         if (user is null)
         {
             return null;
         }
 
+        UserAccessGuard.CheckTargets(actorIsAdmin, [user]);
+        if (user.DeveloperId.HasValue && await _dbContext.Users.AnyAsync(x => x.Id != user.Id && x.DeveloperId == user.DeveloperId, cancellationToken))
+            throw new ArgumentException("El perfil está vinculado a varias cuentas. Revisa la vinculación antes de editarlo.");
         var email = NormalizeEmail(request.Email);
         var emailExists = await _dbContext.Users.AnyAsync(x => x.Id != id && x.Email == email, cancellationToken);
         if (emailExists)
@@ -91,7 +100,8 @@ public class TeamUserService : ITeamUserService
         user.Email = email;
         user.Activo = request.IsActive;
         user.FechaActualizacion = DateTime.UtcNow;
-        await EnsureDeveloperProfileAsync(user, cancellationToken);
+        user.SessionVersion = Guid.NewGuid();
+        await _access.EnsureProfileAsync(user, cancellationToken);
 
         if (user.Developer is not null)
         {
@@ -106,7 +116,9 @@ public class TeamUserService : ITeamUserService
             user.PasswordHash = _passwordHasher.HashPassword(request.Password);
         }
 
+        await _access.EnsureAdministratorRemainsAsync(user.Id, user.Activo && UserAccessGuard.IsAdministrator(user), cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return await GetAnalystByIdAsync(id, cancellationToken);
     }
 
@@ -114,7 +126,7 @@ public class TeamUserService : ITeamUserService
     {
         return await _dbContext.Users
             .AsNoTracking()
-            .Where(x => x.Id == id && x.Role != null && x.Role.Name == RoleNames.Analyst)
+            .Where(x => x.Id == id && x.UserRoles.Any(r => r.Role.Name == RoleNames.Analyst && r.Role.Activo))
             .Select(ToDto())
             .FirstOrDefaultAsync(cancellationToken);
     }
@@ -126,7 +138,7 @@ public class TeamUserService : ITeamUserService
             Id = x.Id,
             FullName = x.FullName,
             Email = x.Email,
-            Role = x.Role != null ? x.Role.Name : string.Empty,
+            Roles = x.UserRoles.Where(r => r.Role.Activo).OrderBy(r => r.Role.Name).Select(r => r.Role.Name).ToArray(),
             DeveloperId = x.DeveloperId,
             IsActive = x.Activo,
             CreatedAt = x.FechaCreacion,
@@ -139,26 +151,4 @@ public class TeamUserService : ITeamUserService
         return email.Trim().ToLowerInvariant();
     }
 
-    private async Task EnsureDeveloperProfileAsync(User user, CancellationToken cancellationToken)
-    {
-        if (user.DeveloperId.HasValue)
-        {
-            await _dbContext.Entry(user).Reference(x => x.Developer).LoadAsync(cancellationToken);
-            return;
-        }
-
-        var developer = CreateDeveloperProfile(user.FullName, user.Email, user.Activo);
-        user.Developer = developer;
-    }
-
-    private static Developer CreateDeveloperProfile(string fullName, string email, bool isActive)
-    {
-        return new Developer
-        {
-            FullName = fullName.Trim(),
-            Email = email,
-            Notes = "Perfil remunerable de analista",
-            Activo = isActive
-        };
-    }
 }

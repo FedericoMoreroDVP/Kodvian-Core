@@ -19,7 +19,7 @@ La aplicacion busca centralizar informacion operativa que normalmente queda dist
 - Gestion de desarrolladores externos.
 - Contratos de desarrolladores por proyecto, pagos, comprobantes y ledger mensual.
 - Gestion financiera de ingresos, egresos, categorias, proveedores, comprobantes y resumen mensual.
-- Administracion basica de usuarios.
+- Administración de usuarios con listado, búsqueda, paginación y asignación de múltiples roles, exclusiva para administradores.
 - Login, sesion autenticada y control de acceso por permisos.
 
 ## Principios del producto
@@ -41,6 +41,6 @@ La aplicacion busca centralizar informacion operativa que normalmente queda dist
 ## Limites actuales
 
 - No hay portal publico ni portal externo de clientes documentado.
-- Administracion de usuarios existe como endpoint/pantalla inicial, pero el controller actualmente devuelve un resultado vacio.
+- La creación y edición de datos de personas se realiza en Equipo; Administración permite modificar los roles de las cuentas existentes.
 - La autorizacion fina no esta aplicada de forma uniforme en todos los controllers.
 - La documentacion de Railway cubre deploy, pero no reemplaza validaciones funcionales post-release.

@@ -1,29 +1,31 @@
 <section class="administracion-page">
   <mat-card class="hero-card">
-    <div class="header-row hero-block">
-      <div>
-        <p class="eyebrow">Control interno</p>
-        <h2>Administracion</h2>
-        <p class="subtitulo">Gestion central de usuarios, permisos y configuraciones operativas.</p>
-      </div>
-      <span class="estado-pill">Operacion segura</span>
-    </div>
+    <div class="header-row hero-block"><div>
+      <p class="eyebrow">Administración</p>
+      <h2>Usuarios</h2>
+      <p class="subtitulo">Gestiona los roles de cada cuenta. Una persona puede ser administradora, analista y desarrolladora.</p>
+    </div></div>
   </mat-card>
-
-  <div class="resumen-grid">
-    <mat-card class="panel-card">
-      <h3>Estado del modulo</h3>
-      <p>Base inicial lista para escalar con gestion de roles, auditoria y parametros.</p>
-      <span class="tag-ready">Preparado</span>
-    </mat-card>
-
-    <mat-card class="panel-card">
-      <h3>Proximos pasos sugeridos</h3>
-      <ul>
-        <li>Catalogo de roles y permisos granulares</li>
-        <li>Trazabilidad de acciones administrativas</li>
-        <li>Parametros globales por entorno</li>
-      </ul>
-    </mat-card>
-  </div>
+  <mat-card class="panel-card">
+    <form (ngSubmit)="filter()" class="users-search">
+      <mat-form-field appearance="outline"><mat-label>Buscar por nombre o correo</mat-label><input matInput name="search" [(ngModel)]="search" /></mat-form-field>
+      <button mat-flat-button type="submit" [disabled]="loading">Buscar</button>
+      <button mat-button type="button" (click)="search = ''; filter()" [disabled]="loading">Limpiar</button>
+    </form>
+    @if (rolesError) { <p role="alert">{{ rolesError }} <button mat-button (click)="loadRoles()">Reintentar</button></p> }
+    @if (error) { <p role="alert">{{ error }} <button mat-button (click)="load()">Reintentar</button></p> }
+    @if (loading) { <p role="status">Cargando usuarios…</p> }
+    <div class="users-table-wrapper"><table class="users-table">
+      <thead><tr><th>Nombre</th><th>Correo</th><th>Acceso</th><th>Roles</th><th>Acciones</th></tr></thead>
+      <tbody>
+        @for (user of users; track user.id) {
+          <tr><td>{{ user.fullName }}</td><td>{{ user.email }}</td><td>{{ user.isActive ? 'Activo' : 'Inactivo' }}</td>
+            <td>@for (role of user.roles; track role) { <span class="role-label">{{ role }}</span> }</td>
+            <td><button mat-button type="button" [disabled]="!roles.length || loading" (click)="edit(user)">Modificar roles</button></td>
+          </tr>
+        } @empty { @if (!loading && !error) { <tr><td colspan="5">No se encontraron usuarios.</td></tr> } }
+      </tbody>
+    </table></div>
+    <mat-paginator [length]="total" [pageIndex]="pageNumber - 1" [pageSize]="pageSize" [pageSizeOptions]="[10, 20, 50]" [disabled]="loading" (page)="page($event)" />
+  </mat-card>
 </section>

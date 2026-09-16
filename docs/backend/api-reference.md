@@ -234,11 +234,15 @@ Base route: `/api/users`
 
 | Metodo | Ruta | Descripcion |
 |---|---|---|
-| GET | `/api/users` | Listado paginado de usuarios. Actualmente devuelve resultado vacio. |
+| GET | `/api/users` | Listado paginado con `pageNumber`, `pageSize` y `search` por nombre/correo. Solo administradores. |
+| GET | `/api/users/roles` | Catálogo de roles admitidos. Solo administradores. |
+| PUT | `/api/users/{id}/roles` | Reemplaza los roles con `{ roles, expectedVersion }`. Solo administradores; conserva perfiles y asignaciones e invalida sesiones anteriores. |
+
+Los usuarios devueltos incluyen `roles`, `isActive`, `developerId` y `sessionVersion`. `expectedVersion` se toma del listado para evitar sobrescribir cambios posteriores.
 
 ## Notas de seguridad
 
 - Los controllers principales usan policies por modulo.
-- El rol `Desarrollador` consume `/api/my-work`; no debe usar endpoints generales de gestion.
-- El rol `Analista` no accede a finanzas, contratos economicos, pagos ni ledger.
+- El rol Desarrollador aislado consume `/api/my-work`; al combinarlo con otros roles obtiene la unión de sus permisos.
+- El rol Analista aislado no accede a finanzas, contratos económicos, pagos ni ledger. Sí puede hacerlo una cuenta que también incluya Administrador.
 - Para nuevos endpoints sensibles, agregar policy backend aunque el frontend oculte botones.

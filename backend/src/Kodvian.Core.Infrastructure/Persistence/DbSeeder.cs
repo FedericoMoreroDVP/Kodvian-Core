@@ -61,7 +61,7 @@ public static class DbSeeder
             FullName = adminFullName,
             Email = adminEmail,
             PasswordHash = passwordHasher.HashPassword(adminPassword),
-            RoleId = adminRole.Id
+            UserRoles = [new UserRole { RoleId = adminRole.Id }]
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);

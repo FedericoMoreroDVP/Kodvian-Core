@@ -67,6 +67,9 @@ export class TareaFormDialogComponent {
   constructor(@Inject(MAT_DIALOG_DATA) public readonly data: TareaFormData) {
     this.savedTaskId = data.tarea?.id;
     if (data.tarea) {
+      if (data.tarea.developerId && !data.developers.some(d => d.id === data.tarea!.developerId)) {
+        data.developers = [...data.developers, { id: data.tarea.developerId, name: `${data.tarea.developerName ?? 'Miembro'} (asignación existente)` }];
+      }
       this.form.patchValue({
         projectId: data.tarea.projectId,
         title: data.tarea.title,

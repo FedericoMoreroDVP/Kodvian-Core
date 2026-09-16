@@ -5,10 +5,10 @@ public class User : BaseEntity
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
-    public Guid RoleId { get; set; }
+    public Guid SessionVersion { get; set; } = Guid.NewGuid();
     public Guid? DeveloperId { get; set; }
 
-    public Role? Role { get; set; }
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
     public Developer? Developer { get; set; }
 
     public ICollection<Project> Projects { get; set; } = new List<Project>();

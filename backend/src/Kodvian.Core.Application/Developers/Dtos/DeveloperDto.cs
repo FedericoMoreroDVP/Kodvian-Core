@@ -11,4 +11,5 @@ public class DeveloperDto
     public bool IsActive { get; set; }
     public bool HasSystemAccess { get; set; }
     public bool IsSystemAccessActive { get; set; }
+    public IReadOnlyCollection<string> Roles { get; set; } = Array.Empty<string>();
 }

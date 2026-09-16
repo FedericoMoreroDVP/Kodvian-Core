@@ -4,13 +4,13 @@ import { map } from 'rxjs';
 
 import { AuthSessionService } from '../auth/auth-session.service';
 
-const ADMINISTRATION_READ = 'administration.read';
+import { homeRoute } from '../auth/home-route';
 
 export const administrationGuard: CanActivateFn = () => {
   const session = inject(AuthSessionService);
   const router = inject(Router);
 
-  return session.hasPermission(ADMINISTRATION_READ).pipe(
-    map((hasPermission) => hasPermission ? true : router.createUrlTree(['/dashboard']))
+  return session.ensureSessionLoaded().pipe(
+    map(user => user?.roles.includes('Administrador') ? true : router.createUrlTree([homeRoute(user)]))
   );
 };

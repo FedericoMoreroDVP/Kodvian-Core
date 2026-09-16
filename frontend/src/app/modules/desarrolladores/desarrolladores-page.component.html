@@ -5,6 +5,7 @@
       <h2>Equipo</h2>
       <p class="subtitulo">Administración de desarrolladores, analistas y accesos al sistema</p>
     </div>
+    @if (canWriteTeam) {
     <div class="header-actions">
       <button mat-stroked-button type="button" (click)="nuevoAnalista()">
         <mat-icon>person_add</mat-icon>
@@ -15,6 +16,7 @@
         Nuevo desarrollador
       </button>
     </div>
+    }
   </div>
 
   <form [formGroup]="filtrosForm" class="filtros-row">
@@ -30,7 +32,7 @@
         <p class="eyebrow compact">Usuarios internos</p>
         <h3>Analistas</h3>
       </div>
-      <span>Gestionan clientes, proyectos, tareas y equipo sin acceso financiero.</span>
+       <span>Gestionan clientes, proyectos, tareas y equipo. Pueden combinar su función con otros roles.</span>
     </div>
 
     <div class="tabla-wrapper panel-table">
@@ -46,8 +48,8 @@
         </ng-container>
 
         <ng-container matColumnDef="role">
-          <th mat-header-cell *matHeaderCellDef>Rol</th>
-          <td mat-cell *matCellDef="let row">{{ row.role }}</td>
+           <th mat-header-cell *matHeaderCellDef>Roles</th>
+           <td mat-cell *matCellDef="let row">{{ row.roles.join(' · ') }}</td>
         </ng-container>
 
         <ng-container matColumnDef="status">
@@ -62,7 +64,7 @@
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef>Acciones</th>
           <td mat-cell *matCellDef="let row">
-            <button mat-button type="button" class="table-action" (click)="editarAnalista(row)">Editar</button>
+            @if (canEdit(row.roles)) { <button mat-button type="button" class="table-action" (click)="editarAnalista(row)">Editar</button> }
           </td>
         </ng-container>
 
@@ -89,7 +91,7 @@
     <table mat-table [dataSource]="filtrados" class="tabla-desarrolladores">
       <ng-container matColumnDef="fullName">
         <th mat-header-cell *matHeaderCellDef>Nombre</th>
-        <td mat-cell *matCellDef="let row"><strong>{{ row.fullName }}</strong></td>
+        <td mat-cell *matCellDef="let row"><strong>{{ row.fullName }}</strong><small class="member-roles">{{ row.roles.join(' · ') }}</small></td>
       </ng-container>
 
       <ng-container matColumnDef="email">
@@ -132,7 +134,7 @@
             @if (canViewEconomics) {
               <button mat-button type="button" class="table-action" (click)="toggleResumen(row, $event)">Resumen</button>
             }
-            <button mat-button type="button" class="table-action" (click)="editarDesarrollador(row); $event.stopPropagation()">Editar</button>
+            @if (canEdit(row.roles)) { <button mat-button type="button" class="table-action" (click)="editarDesarrollador(row); $event.stopPropagation()">Editar</button> }
           </div>
         </td>
       </ng-container>

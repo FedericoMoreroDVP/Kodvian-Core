@@ -25,7 +25,7 @@
         <span class="avatar">{{ userInitials }}</span>
         <span class="user-copy">
           <strong>{{ user.fullName }}</strong>
-          <small>{{ user.role }}</small>
+          <small>{{ user.roles.join(' · ') }}</small>
         </span>
       </div>
     }

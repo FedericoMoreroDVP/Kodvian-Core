@@ -24,10 +24,10 @@ public class AuthService : IAuthService
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
 
         var user = await _dbContext.Users
-            .Include(x => x.Role)
+            .Include(x => x.UserRoles).ThenInclude(x => x.Role)
             .FirstOrDefaultAsync(x => x.Email == normalizedEmail, cancellationToken);
 
-        if (user is null || !user.Activo || user.Role is null || !user.Role.Activo)
+        if (user is null || !user.Activo || !user.UserRoles.Any(x => x.Role.Activo))
         {
             return null;
         }
@@ -38,13 +38,15 @@ public class AuthService : IAuthService
             return null;
         }
 
-        var permissions = RolePermissionMap.GetPermissions(user.Role.Name);
+        var roles = user.UserRoles.Where(x => x.Role.Activo).Select(x => x.Role.Name).OrderBy(x => x).ToArray();
+        var permissions = RolePermissionMap.GetPermissions(roles);
         var token = _tokenService.GenerateToken(new TokenGenerationDto
         {
             UserId = user.Id,
             Email = user.Email,
             FullName = user.FullName,
-            Role = user.Role.Name,
+            Roles = roles,
+            SessionVersion = user.SessionVersion,
             DeveloperId = user.DeveloperId,
             Permissions = permissions
         });
@@ -58,7 +60,7 @@ public class AuthService : IAuthService
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
-                Role = user.Role.Name,
+                Roles = roles,
                 DeveloperId = user.DeveloperId,
                 Permissions = permissions
             }
@@ -69,10 +71,10 @@ public class AuthService : IAuthService
     {
         var user = await _dbContext.Users
             .AsNoTracking()
-            .Include(x => x.Role)
+            .Include(x => x.UserRoles).ThenInclude(x => x.Role)
             .FirstOrDefaultAsync(x => x.Id == userId && x.Activo, cancellationToken);
 
-        if (user is null || user.Role is null || !user.Role.Activo)
+        if (user is null || !user.UserRoles.Any(x => x.Role.Activo))
         {
             return null;
         }
@@ -82,9 +84,9 @@ public class AuthService : IAuthService
             Id = user.Id,
             FullName = user.FullName,
             Email = user.Email,
-            Role = user.Role.Name,
+            Roles = user.UserRoles.Where(x => x.Role.Activo).Select(x => x.Role.Name).OrderBy(x => x).ToArray(),
             DeveloperId = user.DeveloperId,
-            Permissions = RolePermissionMap.GetPermissions(user.Role.Name)
+            Permissions = RolePermissionMap.GetPermissions(user.UserRoles.Where(x => x.Role.Activo).Select(x => x.Role.Name))
         };
     }
 }

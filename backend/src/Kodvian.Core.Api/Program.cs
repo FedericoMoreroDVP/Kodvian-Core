@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Kodvian.Core.Api.Auth;
 using Kodvian.Core.Api.Middleware;
 using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Infrastructure.Extensions;
@@ -79,6 +80,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -94,7 +97,8 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
-            }
+            },
+            OnTokenValidated = SessionTokenValidation.ValidateAsync
         };
 
         options.TokenValidationParameters = new TokenValidationParameters

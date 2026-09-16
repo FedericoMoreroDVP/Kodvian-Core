@@ -63,7 +63,7 @@ Relaciones:
 - Tiene muchas `TaskItem`.
 - Tiene muchas `ProjectDeveloperAssignment`.
 - Puede estar vinculado a un `User` analista para permitir acuerdos y pagos al analista a cargo.
-- Los perfiles `Developer` vinculados a usuarios con rol `Analista` son remunerables internos y no se listan como desarrolladores operativos.
+- Los perfiles de analistas se listan también como desarrolladores operativos si su usuario incluye el rol Desarrollador.
 
 ### ProjectDeveloperAssignment
 
@@ -177,7 +177,8 @@ Restricciones:
 
 - Email unico.
 - Password hash requerido.
-- Role requerido.
+- Uno o más roles mediante `UserRoles`, con clave compuesta `(UserId, RoleId)`. Solo lectura es exclusivo.
+- `SessionVersion` identifica la versión de sesión y se rota al cambiar roles o editar la cuenta.
 - Puede vincularse a un `Developer` mediante `DeveloperId` para acceso al portal de trabajo asignado.
 
 Relaciones nuevas:

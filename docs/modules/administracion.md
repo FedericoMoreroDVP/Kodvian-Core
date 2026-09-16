@@ -1,74 +1,71 @@
-# Administracion
+# Administración — Usuarios
 
-## Resumen funcional
+## Funcionalidad
 
-El modulo de administracion concentra operaciones internas de administracion del sistema. En el estado actual, la ruta y pantalla existen, pero el endpoint de usuarios devuelve un resultado vacio.
+Ruta `/administracion`, exclusiva para usuarios que incluyan el rol **Administrador**.
+El listado contiene nombre, correo, estado de acceso, roles y la acción **Modificar roles**.
+Incluye búsqueda por nombre/correo y paginación de 10, 20 o 50 filas.
 
-## Flujos principales
+El diálogo permite seleccionar varios roles. Ejemplos: Administrador + Desarrollador,
+Administrador + Analista, Analista + Desarrollador y los tres combinados.
+Operativo sigue disponible. Solo lectura es exclusivo y no se combina con otro rol.
+Se exige al menos un rol válido y activo. Cancelar no modifica la cuenta; un error conserva la selección.
 
-- Acceder a la pantalla de administracion con permiso correspondiente.
-- Consultar listado de usuarios cuando el backend este implementado.
+## API
 
-## Pantallas frontend
+Todos los endpoints requieren `AdministratorOnly`:
 
-- Ruta: `/administracion`.
-- Page: `frontend/src/app/modules/administracion/administracion-page.component.ts|html|scss`.
-- Route file: `frontend/src/app/modules/administracion/administracion.routes.ts`.
-- Guard: `administrationGuard`.
+- `GET /api/users?pageNumber=1&pageSize=20&search=texto`: listado real paginado.
+- `GET /api/users/roles`: catálogo de roles admitidos.
+- `PUT /api/users/{id}/roles`: `{ "roles": ["Administrador", "Desarrollador"], "expectedVersion": "UUID" }`.
 
-## Contratos backend
+Cada usuario del listado devuelve `id`, `fullName`, `email`, `isActive`, `roles`,
+`developerId` y `sessionVersion`. La versión permite detectar un formulario desactualizado.
+Los cambios de roles se efectúan únicamente mediante esta operación administrativa.
+Las altas de Equipo continúan asignando su rol operativo inicial, sin aceptar roles arbitrarios del cliente.
 
-- `GET /api/users`.
+## Datos y permisos
 
-Archivos:
+- `UserRoles` relaciona usuarios y roles mediante clave compuesta `(UserId, RoleId)`.
+- Los permisos efectivos son la unión sin duplicados de los permisos de los roles activos.
+- `User.DeveloperId` conserva la identidad operativa/remunerable; cambiar los roles no cambia ese identificador.
+- Al agregar Analista o Desarrollador a una cuenta sin perfil, se crea uno o se vincula un perfil externo con el mismo correo si es único y no está vinculado a otra cuenta. Se rechazan coincidencias ambiguas.
+- Una persona con Analista + Desarrollador aparece en ambas categorías de Equipo, utilizando la misma cuenta y perfil.
+- Retirar un rol conserva tareas, evidencias, asignaciones y contratos. Los selectores de nuevas asignaciones usan los roles actuales; las ediciones de asignaciones existentes pueden conservar al responsable anterior.
 
-- Controller: `UsersController.cs`.
-- DTO: `UserListItemDto.cs`.
-- Entities: `User`, `Role`.
+## Protección de cuentas
 
-## Modelo de datos
+- Solo un administrador puede modificar una cuenta administradora desde los formularios de Equipo (incluidos contraseña, correo y actividad).
+- La edición normal conserva los roles; editar un desarrollador no vuelve a asignarle un rol único.
+- Las ediciones de perfiles vinculados a varias cuentas se rechazan para evitar modificar una cuenta equivocada.
+- Debe permanecer al menos un administrador activo. Se comprueba al retirar roles y al desactivar acceso desde Equipo.
+- Todas las mutaciones de cuentas/roles adquieren el mismo bloqueo transaccional de PostgreSQL mediante `pg_advisory_xact_lock`. La identidad, versión de sesión y autorización del actor se vuelven a validar después de adquirirlo.
+- La transacción usa el aislamiento predeterminado Read Committed. Una segunda operación concurrente ve el resultado de la primera antes de decidir si puede continuar.
 
-- `User`.
-- `Role`.
-- Permisos derivados de `RolePermissionMap`.
+## Sesiones y navegación
 
-## Permisos
+- Los tokens incluyen todos los roles y el claim `session_version`.
+- Cada petición autenticada comprueba en la base de datos que la cuenta esté activa, tenga roles activos y conserve esa versión.
+- Cambiar roles rota la versión y revoca las sesiones anteriores en su siguiente petición. Las ediciones de cuentas desde Equipo también rotan la versión.
+- Si el administrador cambia sus propios roles, la interfaz limpia la sesión y vuelve al ingreso.
+- Los administradores entran a Inicio. Si también tienen Desarrollador, mantienen Mi trabajo en el menú.
+- El menú y el guard excluyen Administración para usuarios no administradores, incluso si conservan el permiso histórico `administration.read`.
 
-- Frontend requiere `administration.read`.
-- Backend requiere policy `AdministrationRead` y role `Administrador`.
+## Migración y despliegue
 
-## Estados de UI
+`20260916205633_UserMultipleRoles` crea la tabla puente, copia el `RoleId` de cada
+usuario existente, genera la versión de sesión y después elimina la columna de rol único.
+El seed del administrador utiliza `UserRoles`. Las sesiones emitidas antes de esta actualización
+no contienen la versión y requieren un nuevo inicio de sesión.
 
-- Acceso permitido para usuario con permiso.
-- Redireccion a dashboard si no tiene permiso.
-- Listado vacio segun estado actual del endpoint.
+El retroceso de la migración exige exactamente un rol por usuario; se rechaza si pudiera perder combinaciones.
+La migración fue generada y su SQL revisado; no se aplicó a una base real durante la implementación.
 
-## Reglas de negocio
+## Pruebas
 
-- Administracion no debe ser accesible sin permiso.
-- La gestion de usuarios debe evitar exponer password hashes o datos sensibles.
-- Roles y permisos deben derivar del modelo backend.
+- `UserRolesTests`: combinaciones, exclusividad de Solo lectura, cambio de función, conservación del perfil y asignaciones, protección administrativa, último administrador, edición de Equipo, sesiones, acceso a proyectos y listado paginado.
+- `UserRolesApiTests`: peticiones HTTP con JWT real contra TestServer para comprobar 401/403/200 y rechazo de un token emitido antes del cambio de roles. Persistencia EF InMemory.
+- `RoleQueryTranslationTests`: traducción de las consultas de Equipo a PostgreSQL con Npgsql, sin ejecutar contra una base.
+- Frontend: selección múltiple, errores recuperables, búsqueda/paginación, cierre de sesión propia, menú y guard administrativo.
 
-## Riesgos y cuidados
-
-- No asumir que el modulo esta completo.
-- Evitar UI de escritura hasta que existan endpoints backend seguros.
-- Definir reglas de alta, baja, cambio de rol y reset de password antes de implementar.
-
-## Tests requeridos
-
-- Backend: tests de `UsersController` cuando implemente listado real.
-- Backend: tests de policy `AdministrationRead` y role `Administrador` para acceso permitido y denegado.
-- Backend: tests de alta, edicion, cambio de rol, activacion/desactivacion y reset de password cuando esos flujos existan.
-- Frontend: specs de `administrationGuard` para permiso presente y ausente.
-- Frontend: specs de `AdministracionPageComponent` para listado, loading, empty y error cuando consuma usuarios reales.
-- Frontend: specs de visibilidad de menu si se filtra administracion por permisos.
-
-## Mejoras futuras
-
-- Listado real de usuarios.
-- Alta/edicion de usuarios.
-- Cambio de rol.
-- Activar/desactivar usuarios.
-- Reset de password seguro.
-- Auditoria de cambios administrativos.
+La migración y la serialización de cambios concurrentes deben comprobarse además en un entorno PostgreSQL de prueba; los tests InMemory no verifican bloqueos reales.

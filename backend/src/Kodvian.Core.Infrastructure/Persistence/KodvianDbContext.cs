@@ -33,6 +33,7 @@ public class KodvianDbContext : DbContext
     public DbSet<ProjectDocumentVersion> ProjectDocumentVersions => Set<ProjectDocumentVersion>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -426,15 +427,17 @@ public class KodvianDbContext : DbContext
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => x.DeveloperId);
 
-            entity.HasOne(x => x.Role)
-                .WithMany(x => x.Users)
-                .HasForeignKey(x => x.RoleId)
-                .OnDelete(DeleteBehavior.Restrict);
-
             entity.HasOne(x => x.Developer)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.DeveloperId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+        modelBuilder.Entity<UserRole>(entity =>
+        {
+            entity.ToTable("UserRoles");
+            entity.HasKey(x => new { x.UserId, x.RoleId });
+            entity.HasOne(x => x.User).WithMany(x => x.UserRoles).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Role).WithMany(x => x.UserRoles).HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

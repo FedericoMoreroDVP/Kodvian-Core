@@ -36,7 +36,7 @@ Endpoint:
 
 - `GET /api/auth/me`
 
-Devuelve el usuario autenticado y sus permisos. El frontend lo usa para restaurar sesion al recargar.
+Devuelve el usuario autenticado, `roles`, `developerId` y permisos. El campo `role` se conserva como etiqueta compuesta para compatibilidad. El frontend usa `roles` para identificar combinaciones y restaura la sesión al recargar.
 
 ## Logout
 
@@ -58,6 +58,8 @@ En `Program.cs`, el backend valida al iniciar:
 
 La validacion del token incluye issuer, audience, lifetime y signing key. El `ClockSkew` configurado es de 1 minuto.
 
+`SessionTokenValidation` ejecuta `ISessionValidator` en `OnTokenValidated`: consulta el estado activo y `Users.SessionVersion`. La ausencia o diferencia del claim `session_version` invalida el token con 401. Cambiar roles o editar cuentas desde Equipo rota la versión; las sesiones anteriores dejan de funcionar en la siguiente petición.
+
 ## Roles
 
 Definidos en `RoleNames.cs`:
@@ -67,6 +69,8 @@ Definidos en `RoleNames.cs`:
 - `Solo lectura`.
 - `Analista`.
 - `Desarrollador`.
+
+Un usuario tiene uno o más roles mediante `UserRoles`. Solo lectura es exclusivo. Los permisos se calculan por unión de los roles activos. El JWT contiene un claim de rol por cada rol asignado, además de la versión de sesión.
 
 ## Permisos
 
@@ -97,7 +101,7 @@ Definido en `RolePermissionMap.cs`.
 
 `Administrador`:
 
-- Acceso completo a todos los permisos listados.
+- Gestión general, finanzas, dashboard y administración. Los permisos de Mi trabajo se agregan al combinarlo con Desarrollador.
 
 `Operativo`:
 
@@ -114,7 +118,7 @@ Definido en `RolePermissionMap.cs`.
 - Documentos de proyecto read.
 - Tareas read.
 - Equipo read.
-- Administracion read.
+- Conserva el permiso histórico `administration.read`, pero la pantalla y API de Usuarios exigen el rol Administrador y no están disponibles para Solo lectura.
 
 `Analista`:
 
@@ -167,4 +171,5 @@ El rol `Analista` gestiona operacion de clientes, equipo, proyectos, documentos 
 
 - La visibilidad de botones en frontend no reemplaza autorizacion backend.
 - Para nuevas acciones de escritura o datos sensibles, crear policy o verificar permiso explicitamente.
-- `UsersController` requiere `AdministrationRead` y role `Administrador`, pero actualmente devuelve un resultado vacio.
+- `UsersController` aplica `AdministratorOnly`, lista usuarios y permite cambiar roles. El servicio vuelve a comprobar al actor y su versión antes de escribir.
+- Un administrador puede combinarse con Analista o Desarrollador. Los formularios de Equipo no pueden sobrescribir esos roles ni permitir que un no administrador modifique cuentas administradoras.

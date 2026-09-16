@@ -28,8 +28,9 @@ public class TokenService : ITokenService
             new(JwtRegisteredClaimNames.Email, tokenGeneration.Email),
             new(ClaimTypes.NameIdentifier, tokenGeneration.UserId.ToString()),
             new(ClaimTypes.Name, tokenGeneration.FullName),
-            new(ClaimTypes.Role, tokenGeneration.Role)
+            new(CustomClaimTypes.SessionVersion, tokenGeneration.SessionVersion.ToString())
         };
+        claims.AddRange(tokenGeneration.Roles.Distinct().Select(role => new Claim(ClaimTypes.Role, role)));
 
         if (tokenGeneration.DeveloperId.HasValue)
         {
