@@ -256,7 +256,11 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
-.kanban-card:not(.cdk-drag-disabled) { cursor: grab; }
+.kanban-card:not(.cdk-drag-disabled) {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
 .kanban-card.cdk-drag-dragging { cursor: grabbing; }
 .kanban-card.saving { opacity: .65; }
 .kanban-col.cdk-drop-list-receiving, .kanban-col.cdk-drop-list-dragging { outline: 2px solid #18bd75; outline-offset: -2px; }

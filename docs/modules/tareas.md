@@ -94,7 +94,7 @@ Prioridades:
 
 - La vista inicial siempre es tablero. Se conserva la opción de lista.
 - Las tarjetas ofrecen Ver detalle y Editar; el formulario permite cambiar el estado con teclado.
-- Arrastre con pulsación sostenida: 180 ms con mouse, 300 ms táctil. Los botones de la tarjeta no inician arrastre.
+- Arrastre inmediato con mouse manteniendo el botón presionado, sin espera inicial; pulsación sostenida de 300 ms en pantallas táctiles. Los botones de la tarjeta no inician arrastre y el texto no se selecciona durante el gesto.
 - Soltar sobre otra columna, incluso vacía, persiste el estado usando el PATCH existente y conserva `kanbanOrder`.
 - Soltar fuera o dentro de la misma columna no escribe ni reordena.
 - Durante la escritura se bloquean nuevos movimientos; si falla se restaura la posición original.

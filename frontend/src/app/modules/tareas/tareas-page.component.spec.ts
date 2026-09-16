@@ -80,7 +80,7 @@ describe('Tablero de tareas: movimientos', () => {
 });
 
 describe('Tablero: interacción real con CDK', () => {
-  it('persiste al mantener presionada la tarjeta y soltarla en una columna vacía', async () => {
+  it('permite mover inmediatamente con mouse, sin iniciar arrastre desde los botones', async () => {
     const api = jasmine.createSpyObj('api', ['obtenerLookups', 'obtenerKanban', 'actualizarEstado']);
     api.obtenerLookups.and.returnValue(of({ projects: [], developers: [] }));
     const source: KanbanColumn = { status: 'Pendiente', title: '', items: [
@@ -113,9 +113,17 @@ describe('Tablero: interacción real con CDK', () => {
     const send = (element: EventTarget, type: string, clientX: number, clientY: number) =>
       element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1, clientX, clientY }));
     const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-    send(card, 'mousedown', x, y); await wait(250);
-    send(document, 'mousemove', x + 10, y + 10); await wait(30);
-    expect(document.querySelector('.cdk-drag-preview')).withContext('El arrastre debe iniciarse tras la pulsación sostenida').not.toBeNull();
+    for (const button of Array.from(card.querySelectorAll('button'))) {
+      send(button, 'mousedown', x, y);
+      send(document, 'mousemove', x + 10, y + 10);
+      expect(document.querySelector('.cdk-drag-preview')).withContext('Los botones no deben iniciar arrastre').toBeNull();
+      send(document, 'mouseup', x + 10, y + 10);
+    }
+    expect(drag.dragStartDelay).toEqual({ mouse: 0, touch: 300 });
+    const title = card.querySelector('strong')!;
+    send(title, 'mousedown', x, y);
+    send(document, 'mousemove', x + 10, y + 10);
+    expect(document.querySelector('.cdk-drag-preview')).withContext('El arrastre con mouse debe iniciarse sin espera').not.toBeNull();
     send(document, 'mousemove', end.left + 40, end.top + 80); await wait(30);
     send(document, 'mouseup', end.left + 40, end.top + 80); await wait(400);
     expect(api.actualizarEstado).toHaveBeenCalledWith('task', 'EnCurso', 9);
