@@ -48,6 +48,7 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ITeamUserService, TeamUserService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
 
         return services;
     }

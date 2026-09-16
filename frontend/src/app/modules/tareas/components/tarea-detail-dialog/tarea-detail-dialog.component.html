@@ -14,7 +14,8 @@
     <div><strong>Horas reales:</strong> {{ valor(tarea.realHours) }}</div>
     <div class="full-width"><strong>Descripción:</strong> {{ valor(tarea.description) }}</div>
   </div>
+  <app-tarea-attachments [taskId]="tarea.id" [canWrite]="canWriteAttachments" (busyChange)="setBusy($event)" />
 </mat-dialog-content>
 <mat-dialog-actions align="end">
-  <button mat-flat-button color="primary" mat-dialog-close>Cerrar</button>
+  <button mat-flat-button color="primary" mat-dialog-close [disabled]="busy">Cerrar</button>
 </mat-dialog-actions>

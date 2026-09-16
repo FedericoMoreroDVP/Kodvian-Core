@@ -6,12 +6,14 @@
       <p class="subtitulo">Gestión operativa diaria</p>
     </div>
     <div class="acciones-header">
-      <button mat-button [color]="vista === 'lista' ? 'primary' : undefined" (click)="cambiarVista('lista')">Vista de lista</button>
-      <button mat-button [color]="vista === 'kanban' ? 'primary' : undefined" (click)="cambiarVista('kanban')">Vista de tablero</button>
-      <button mat-flat-button color="primary" (click)="abrirNuevaTarea()">
+      <button mat-button [disabled]="!!movingId" [color]="vista === 'lista' ? 'primary' : undefined" (click)="cambiarVista('lista')">Vista de lista</button>
+      <button mat-button [disabled]="!!movingId" [color]="vista === 'kanban' ? 'primary' : undefined" (click)="cambiarVista('kanban')">Vista de tablero</button>
+      @if (canWrite) {
+      <button mat-flat-button color="primary" [disabled]="!!movingId || !projects.length" (click)="abrirNuevaTarea()">
         <mat-icon>add</mat-icon>
         Nueva tarea
       </button>
+      }
     </div>
   </div>
 
@@ -118,8 +120,10 @@
           <th mat-header-cell *matHeaderCellDef>Acciones</th>
           <td mat-cell *matCellDef="let row" class="acciones-row">
             <button mat-button class="table-action" type="button" (click)="verDetalle(row.id)">Ver detalle</button>
-            <button mat-button class="table-action" type="button" (click)="editar(row)">Editar</button>
-            <button mat-button class="table-action" type="button" (click)="cambiarEstado(row.id, row.status)">Cambiar estado</button>
+            @if (canWrite) {
+              <button mat-button class="table-action" type="button" (click)="editar(row.id)">Editar</button>
+              <button mat-button class="table-action" type="button" (click)="cambiarEstado(row.id, row.status)">Cambiar estado</button>
+            }
           </td>
         </ng-container>
 
@@ -134,23 +138,25 @@
 
     <mat-paginator [length]="total" [pageSize]="pageSize" [pageIndex]="pageNumber - 1" [pageSizeOptions]="[10, 20, 50]" (page)="cambiarPagina($event)"></mat-paginator>
   } @else {
-    <div class="kanban-grid">
+    @if (canWrite) { <p class="drag-hint">Mantén presionada una tarjeta y arrástrala a otra columna para cambiar su estado.</p> }
+    <div class="kanban-grid" cdkDropListGroup>
       @for (column of kanban; track column.status) {
-        <section class="kanban-col">
+        <section class="kanban-col" cdkDropList [cdkDropListData]="column" [cdkDropListSortingDisabled]="true" [cdkDropListDisabled]="!canWrite || !!movingId || cargando" (cdkDropListDropped)="moverTarjeta($event)">
           <h3>{{ mostrarEstado(column.status) }}</h3>
           @if (column.items.length === 0) {
             <p class="vacio">Sin tareas</p>
           }
           @for (item of column.items; track item.id) {
-            <article class="kanban-card">
+            <article class="kanban-card" cdkDrag [cdkDragData]="item" [cdkDragStartDelay]="{ mouse: 180, touch: 300 }" [cdkDragDisabled]="!canWrite || !!movingId || cargando" [class.saving]="movingId === item.id" [attr.aria-busy]="movingId === item.id">
               <strong>{{ item.title }}</strong>
               <span>{{ item.projectName }}</span>
                <small>Desarrollador: {{ item.developerName || item.responsibleName || '-' }}</small>
               <small>Prioridad: <span class="tag-priority">{{ item.priority }}</span></small>
               <small>Vence: {{ item.dueDate || '-' }}</small>
-              <div class="kanban-actions">
+              @if (movingId === item.id) { <small role="status">Guardando cambio…</small> }
+              <div class="kanban-actions" (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
                 <button mat-button type="button" (click)="verDetalle(item.id)">Ver detalle</button>
-                <button mat-button type="button" (click)="cambiarEstado(item.id, column.status)">Cambiar estado</button>
+                @if (canWrite) { <button mat-button type="button" [disabled]="!!movingId" (click)="editar(item.id)">Editar</button> }
               </div>
             </article>
           }

@@ -1,4 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
+import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
+import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -17,13 +19,13 @@ import { TareaDetailDialogComponent } from './components/tarea-detail-dialog/tar
 import { TareaFormDialogComponent } from './components/tarea-form-dialog/tarea-form-dialog.component';
 import { TareaStatusDialogComponent } from './components/tarea-status-dialog/tarea-status-dialog.component';
 import { compareDates, formatDateToIso } from '../../core/date.utils';
-import { EstadoTarea, KanbanColumn, LookupItem, PrioridadTarea, TareaDetalle, TareaFormulario, TareaListado, TareaLookups } from './models/tareas.models';
+import { EstadoTarea, KanbanColumn, LookupItem, PrioridadTarea, TareaDetalle, TareaListado, TareaLookups } from './models/tareas.models';
 import { TareasService } from './services/tareas.service';
 
 @Component({
   selector: 'app-tareas-page',
   standalone: true,
-  imports: [ReactiveFormsModule, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatSnackBarModule],
+  imports: [DragDropModule, ReactiveFormsModule, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatSnackBarModule],
   templateUrl: './tareas-page.component.html',
   styleUrl: './tareas-page.component.scss'
 })
@@ -34,6 +36,9 @@ export class TareasPageComponent implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly session = inject(AuthSessionService);
+  movingId: string | null = null;
+  get canWrite(): boolean { return this.session.user?.permissions.includes('tasks.write') ?? false; }
 
   private debeAbrirNuevaTarea = false;
 
@@ -57,7 +62,7 @@ export class TareasPageComponent implements OnInit {
     dueDateTo: [null as Date | null]
   });
 
-  vista: 'lista' | 'kanban' = 'lista';
+  vista: 'lista' | 'kanban' = 'kanban';
   tareas: TareaListado[] = [];
   kanban: KanbanColumn[] = [];
   projects: LookupItem[] = [];
@@ -74,6 +79,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   cambiarVista(vista: 'lista' | 'kanban'): void {
+    if (this.movingId) return;
     this.vista = vista;
     this.cargarDatos();
   }
@@ -103,6 +109,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   cargarDatos(): void {
+    if (this.movingId) return;
     if (this.vista === 'kanban') {
       this.cargarKanban();
       return;
@@ -144,6 +151,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   aplicarFiltros(): void {
+    if (this.movingId) return;
     if (!this.rangoFechasValido()) {
       this.snackBar.open('La fecha desde no puede ser mayor que la fecha hasta', 'Cerrar', { duration: 3500 });
       return;
@@ -154,6 +162,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   limpiarFiltros(): void {
+    if (this.movingId) return;
     this.filtrosForm.reset({ search: '', projectId: '', developerId: '', status: '', priority: '', dueDateFrom: null, dueDateTo: null });
     this.pageNumber = 1;
     this.cargarDatos();
@@ -166,21 +175,14 @@ export class TareasPageComponent implements OnInit {
   }
 
   abrirNuevaTarea(): void {
+    if (!this.canWrite) return;
     const dialogRef = this.dialog.open(TareaFormDialogComponent, {
       width: '960px',
       data: { projects: this.projects, developers: this.developers }
     });
 
-    dialogRef.afterClosed().subscribe((payload?: TareaFormulario) => {
-      if (!payload) return;
-
-      this.tareasService.crear(payload).subscribe({
-        next: () => {
-          this.snackBar.open('La tarea se creó correctamente', 'Cerrar', { duration: 3000 });
-          this.cargarDatos();
-        },
-        error: (error) => this.snackBar.open(error?.error?.message ?? 'Ocurrió un error al guardar', 'Cerrar', { duration: 3500 })
-      });
+    dialogRef.afterClosed().subscribe((changed?: boolean) => {
+      if (changed) this.cargarDatos();
     });
   }
 
@@ -191,24 +193,17 @@ export class TareasPageComponent implements OnInit {
     });
   }
 
-  editar(row: TareaListado): void {
-    this.tareasService.obtenerDetalle(row.id).subscribe({
+  editar(id: string): void {
+    if (!this.canWrite || this.movingId) return;
+    this.tareasService.obtenerDetalle(id).subscribe({
       next: (detalle: TareaDetalle) => {
         const dialogRef = this.dialog.open(TareaFormDialogComponent, {
           width: '960px',
           data: { tarea: detalle, projects: this.projects, developers: this.developers }
         });
 
-        dialogRef.afterClosed().subscribe((payload?: TareaFormulario) => {
-          if (!payload) return;
-
-          this.tareasService.actualizar(row.id, payload).subscribe({
-            next: () => {
-              this.snackBar.open('La tarea se actualizó correctamente', 'Cerrar', { duration: 3000 });
-              this.cargarDatos();
-            },
-            error: (error) => this.snackBar.open(error?.error?.message ?? 'Ocurrió un error al guardar', 'Cerrar', { duration: 3500 })
-          });
+        dialogRef.afterClosed().subscribe((changed?: boolean) => {
+          if (changed) this.cargarDatos();
         });
       },
       error: () => this.snackBar.open('No se pudo cargar la tarea para editar', 'Cerrar', { duration: 3500 })
@@ -216,6 +211,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   cambiarEstado(id: string, actual: EstadoTarea): void {
+    if (!this.canWrite) return;
     const dialogRef = this.dialog.open(TareaStatusDialogComponent, {
       width: '420px',
       data: { statusActual: actual }
@@ -224,7 +220,8 @@ export class TareasPageComponent implements OnInit {
     dialogRef.afterClosed().subscribe((estado?: EstadoTarea) => {
       if (!estado) return;
 
-      this.tareasService.actualizarEstado(id, estado).subscribe({
+      const order = this.tareas.find(t => t.id === id)?.kanbanOrder ?? 0;
+      this.tareasService.actualizarEstado(id, estado, order).subscribe({
         next: () => {
           this.snackBar.open('El estado de la tarea se actualizó correctamente', 'Cerrar', { duration: 3000 });
           this.cargarDatos();
@@ -251,6 +248,31 @@ export class TareasPageComponent implements OnInit {
       dueDateFrom: formatDateToIso(this.filtrosForm.value.dueDateFrom) || undefined,
       dueDateTo: formatDateToIso(this.filtrosForm.value.dueDateTo) || undefined
     };
+  }
+
+  moverTarjeta(event: CdkDragDrop<KanbanColumn>): void {
+    if (!event.isPointerOverContainer || event.previousContainer === event.container || !this.canWrite || this.movingId) return;
+    const source = event.previousContainer.data;
+    const target = event.container.data;
+    const item = event.item.data as KanbanColumn['items'][number];
+    const sourceIndex = source.items.findIndex(t => t.id === item.id);
+    if (sourceIndex < 0) return;
+    source.items.splice(sourceIndex, 1);
+    target.items.push(item);
+    this.movingId = item.id;
+    this.tareasService.actualizarEstado(item.id, target.status, item.kanbanOrder).subscribe({
+      next: () => {
+        this.movingId = null;
+        this.snackBar.open(`Tarea movida a ${this.mostrarEstado(target.status)}`, 'Cerrar', { duration: 3000 });
+        this.cargarDatos();
+      },
+      error: () => {
+        target.items.splice(target.items.findIndex(t => t.id === item.id), 1);
+        source.items.splice(sourceIndex, 0, item);
+        this.movingId = null;
+        this.snackBar.open('No se pudo mover la tarea. Se restauró su posición anterior.', 'Cerrar', { duration: 4500 });
+      }
+    });
   }
 
   private rangoFechasValido(): boolean {

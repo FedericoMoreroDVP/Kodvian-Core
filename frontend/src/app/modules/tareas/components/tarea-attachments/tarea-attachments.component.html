@@ -1,0 +1,47 @@
+<section class="attachments" aria-label="Adjuntos y evidencias" (paste)="paste($event)">
+  <h3>Adjuntos y evidencias</h3>
+  @if (canWrite) {
+    <div class="dropzone" [class.dragging]="dragging" tabindex="0"
+      (dragover)="$event.preventDefault(); dragging = true" (dragleave)="dragging = false" (drop)="drop($event)">
+      <p>Arrastra archivos aquí o enfoca esta zona y pega una captura con Ctrl+V.</p>
+      <input #fileInput type="file" hidden multiple [accept]="accept" (change)="select($event)" />
+      <button mat-stroked-button type="button" [disabled]="busy || disabled" (click)="fileInput.click()">Seleccionar archivos</button>
+      <small>PNG, JPG, WebP, PDF, Word, Excel, TXT, CSV y ZIP · Máximo 10 MB por archivo.</small>
+      @if (deferUploads) { <small>Los archivos pendientes se subirán al guardar la tarea.</small> }
+    </div>
+  }
+  @if (error) { <p role="alert" class="error">{{ error }} <button mat-button type="button" (click)="load()" [disabled]="busy || loading">Actualizar adjuntos</button></p> }
+  @if (loading) { <p role="status">Cargando adjuntos…</p> }
+  @for (item of pending; track item.uploadId) {
+    <div class="file-row">
+      <div><strong>{{ item.file.name }}</strong><small>{{ size(item.file.size) }} · {{ item.uploading ? 'Subiendo…' : 'Pendiente de subida' }}</small>
+        @if (item.error) { <small role="alert" class="error">{{ item.error }}</small> }
+      </div>
+      @if (item.error && taskId) { <button mat-button type="button" [disabled]="busy || disabled" (click)="retry(item)">Reintentar</button> }
+      <button mat-button type="button" [disabled]="busy || disabled" (click)="removePending(item)">Quitar</button>
+    </div>
+  }
+  @if (pending.length && taskId && !deferUploads) {
+    <button mat-stroked-button type="button" [disabled]="busy || disabled" (click)="retry()">Subir / reintentar pendientes</button>
+  }
+  @for (item of attachments; track item.id) {
+    <div class="file-row">
+      @if (previews.get(item.id); as preview) {
+        <button type="button" class="thumbnail" (click)="expanded = item" [attr.aria-label]="'Ampliar ' + item.fileName"><img [src]="preview" [alt]="item.fileName" /></button>
+      }
+      <div class="file-info"><strong>{{ item.fileName }}</strong><small>{{ size(item.size) }} · {{ item.contentType }}</small>
+        <small>{{ item.uploadedByName }} · {{ item.createdAt | date:'dd/MM/yyyy HH:mm' }}</small>
+      </div>
+      <div class="actions">
+        <button mat-button type="button" (click)="download(item)">Descargar</button>
+        @if (canDelete(item)) { <button mat-button type="button" [disabled]="busy || disabled" (click)="remove(item)">Eliminar</button> }
+      </div>
+    </div>
+  } @empty { @if (!loading) { <p>No hay archivos adjuntos.</p> } }
+  @if (expanded; as image) {
+    <div class="expanded" role="region" aria-label="Imagen ampliada">
+      <button mat-button type="button" (click)="expanded = undefined">Cerrar imagen</button>
+      <img [src]="previews.get(image.id)" [alt]="image.fileName" />
+    </div>
+  }
+</section>

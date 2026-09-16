@@ -1,4 +1,7 @@
-import { Component, Inject, inject } from '@angular/core';
+import { Component, Inject, ViewChild, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { TareasService } from '../../services/tareas.service';
+import { TareaAttachmentsComponent } from '../tarea-attachments/tarea-attachments.component';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,13 +23,20 @@ interface TareaFormData {
 @Component({
   selector: 'app-tarea-form-dialog',
   standalone: true,
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
+  imports: [TareaAttachmentsComponent, ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
   templateUrl: './tarea-form-dialog.component.html',
   styleUrl: './tarea-form-dialog.component.scss'
 })
 export class TareaFormDialogComponent {
   private readonly fb = inject(FormBuilder);
   private readonly dialogRef = inject(MatDialogRef<TareaFormDialogComponent>);
+  private readonly tareasService = inject(TareasService);
+  @ViewChild(TareaAttachmentsComponent) attachments!: TareaAttachmentsComponent;
+  savedTaskId?: string;
+  saving = false;
+  attachmentsBusy = false;
+  error = '';
+  changed = false;
 
   readonly estados: { value: EstadoTarea; label: string }[] = [
     { value: 'Pendiente', label: 'Pendiente' },
@@ -55,6 +65,7 @@ export class TareaFormDialogComponent {
   }, { validators: [taskDateRangeValidator()] });
 
   constructor(@Inject(MAT_DIALOG_DATA) public readonly data: TareaFormData) {
+    this.savedTaskId = data.tarea?.id;
     if (data.tarea) {
       this.form.patchValue({
         projectId: data.tarea.projectId,
@@ -74,14 +85,15 @@ export class TareaFormDialogComponent {
     }
   }
 
-  guardar(): void {
+  async guardar(): Promise<void> {
+    if (this.saving || this.attachmentsBusy) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
 
     const raw = this.form.getRawValue();
-    this.dialogRef.close({
+    const payload = {
       projectId: raw.projectId,
       title: raw.title,
       description: raw.description || undefined,
@@ -96,8 +108,37 @@ export class TareaFormDialogComponent {
       realHours: raw.realHours,
       kanbanOrder: raw.kanbanOrder ?? 0,
       isActive: !!raw.isActive
-    } as TareaFormulario);
+    } as TareaFormulario;
+    this.saving = true;
+    this.dialogRef.disableClose = true;
+    this.error = '';
+    this.form.disable();
+    try {
+      const task = await firstValueFrom(this.savedTaskId
+        ? this.tareasService.actualizar(this.savedTaskId, payload)
+        : this.tareasService.crear(payload));
+      this.savedTaskId = task.id;
+      this.changed = true;
+      if (await this.attachments.uploadPending(task.id)) {
+        this.dialogRef.close(true);
+      } else {
+        this.error = 'La tarea se guardó, pero hay archivos pendientes. Vuelve a guardar para reintentar su subida.';
+      }
+    } catch (error: any) {
+      this.error = error?.error?.message ?? error?.error?.Message ?? 'No se pudo guardar la tarea. Tus datos se conservaron.';
+    } finally {
+      this.saving = false;
+      this.form.enable();
+      // After a partial save, close explicitly so the board always refreshes.
+      this.dialogRef.disableClose = this.changed || this.attachmentsBusy;
+    }
   }
+
+  setAttachmentsBusy(busy: boolean): void {
+    this.attachmentsBusy = busy;
+    this.dialogRef.disableClose = busy || this.saving || this.changed;
+  }
+  cerrar(): void { if (!this.saving && !this.attachmentsBusy) this.dialogRef.close(this.changed); }
 }
 
 function taskDateRangeValidator(): ValidatorFn {

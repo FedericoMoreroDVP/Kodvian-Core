@@ -1,5 +1,4 @@
-﻿using System.Text.Json;
-using Kodvian.Core.Application.Common.Models;
+﻿using Kodvian.Core.Application.Common.Models;
 
 namespace Kodvian.Core.Api.Middleware;
 
@@ -20,6 +19,21 @@ public class ErrorHandlingMiddleware
         {
             await _next(context);
         }
+        catch (UnauthorizedAccessException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (KeyNotFoundException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (FileNotFoundException)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail("Archivo no encontrado"));
+        }
         catch (ArgumentException exception)
         {
             _logger.LogWarning(exception, "Validation error while processing request.");
@@ -27,7 +41,7 @@ public class ErrorHandlingMiddleware
             context.Response.ContentType = "application/json";
 
             var response = ApiResponseDto<object>.Fail(exception.Message);
-            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+            await context.Response.WriteAsJsonAsync(response);
         }
         catch (Exception exception)
         {
@@ -36,7 +50,7 @@ public class ErrorHandlingMiddleware
             context.Response.ContentType = "application/json";
 
             var response = ApiResponseDto<object>.Fail("Ocurrió un error interno al procesar la solicitud");
-            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+            await context.Response.WriteAsJsonAsync(response);
         }
     }
 }

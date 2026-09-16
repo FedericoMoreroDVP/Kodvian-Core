@@ -3,6 +3,7 @@ using System;
 using Kodvian.Core.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Kodvian.Core.Infrastructure.Migrations
 {
     [DbContext(typeof(KodvianDbContext))]
-    partial class KodvianDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916183020_TaskAttachments")]
+    partial class TaskAttachments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

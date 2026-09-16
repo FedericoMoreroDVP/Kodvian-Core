@@ -105,8 +105,10 @@
       <mat-slide-toggle formControlName="isActive">Activo</mat-slide-toggle>
     </div>
   </form>
+  @if (error) { <p role="alert">{{ error }}</p> }
+  <app-tarea-attachments [taskId]="savedTaskId" [canWrite]="true" [deferUploads]="true" [disabled]="saving" (busyChange)="setAttachmentsBusy($event)" />
 </mat-dialog-content>
 <mat-dialog-actions align="end" class="dialog-actions">
-  <button mat-button mat-dialog-close class="action-cancel">Cancelar</button>
-  <button mat-flat-button color="primary" class="action-save" (click)="guardar()">Guardar</button>
+  <button mat-button class="action-cancel" [disabled]="saving || attachmentsBusy" (click)="cerrar()">{{ changed ? 'Cerrar' : 'Cancelar' }}</button>
+  <button mat-flat-button color="primary" class="action-save" [disabled]="saving || attachmentsBusy" (click)="guardar()">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
 </mat-dialog-actions>

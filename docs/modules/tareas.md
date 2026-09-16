@@ -12,7 +12,9 @@ El modulo de tareas organiza el trabajo operativo asociado a proyectos. Permite 
 - Editar tarea.
 - Cambiar estado.
 - Consultar detalle.
-- Visualizar kanban.
+- Visualizar kanban (vista inicial).
+- Mantener presionada una tarjeta y arrastrarla a otra columna para cambiar su estado.
+- Adjuntar evidencias mediante selección, arrastre de archivos o pegado de capturas.
 
 ## Pantallas frontend
 
@@ -31,6 +33,10 @@ El modulo de tareas organiza el trabajo operativo asociado a proyectos. Permite 
 - `POST /api/tasks`.
 - `PUT /api/tasks/{id}`.
 - `PATCH /api/tasks/{id}/status`.
+- `GET /api/tasks/{id}/attachments`.
+- `POST /api/tasks/{id}/attachments` (`multipart/form-data`: `file`, `uploadId` UUID estable por archivo/reintento).
+- `GET /api/tasks/{id}/attachments/{attachmentId}` (descarga autenticada).
+- `DELETE /api/tasks/{id}/attachments/{attachmentId}`.
 
 Archivos:
 
@@ -64,7 +70,10 @@ Prioridades:
 
 - `tasks.read` para consulta.
 - `tasks.write` para alta, edicion y cambio de estado.
-- El controller actualmente requiere autenticacion general.
+- El controller de tareas aplica policies de lectura/escritura.
+- Adjuntos: lectura general con `tasks.read`, gestión general con `tasks.read` y `tasks.write`.
+- Desde Mi trabajo: `developer.work.read` permite consultar adjuntos de tareas activas asignadas al desarrollador del token; `developer.tasks.status.write` permite subir y eliminar archivos propios en esas tareas.
+- La pertenencia a la tarea y la autoría se verifican en servidor en cada operación; los identificadores de desarrollador/autor no los elige el cliente.
 
 ## Estados de UI
 
@@ -80,6 +89,41 @@ Prioridades:
 - Estado y prioridad deben expresarse con etiquetas claras.
 - Las horas estimadas/reales usan precision decimal.
 - Kanban depende de estado y orden.
+
+## Tablero y guardado
+
+- La vista inicial siempre es tablero. Se conserva la opción de lista.
+- Las tarjetas ofrecen Ver detalle y Editar; el formulario permite cambiar el estado con teclado.
+- Arrastre con pulsación sostenida: 180 ms con mouse, 300 ms táctil. Los botones de la tarjeta no inician arrastre.
+- Soltar sobre otra columna, incluso vacía, persiste el estado usando el PATCH existente y conserva `kanbanOrder`.
+- Soltar fuera o dentro de la misma columna no escribe ni reordena.
+- Durante la escritura se bloquean nuevos movimientos; si falla se restaura la posición original.
+- El formulario guarda sin cerrarse previamente. Un error conserva los datos ingresados.
+
+## Adjuntos y evidencias
+
+- Componente compartido `tarea-attachments`, disponible en edición y detalle, incluido el detalle de Mi trabajo.
+- Formatos: PNG/JPG/JPEG/WebP, PDF, DOC/DOCX, XLS/XLSX, TXT/CSV y ZIP. Máximo 10 MiB por archivo (mostrado como 10 MB en la UI).
+- La API valida extensión, tamaño y firma básica del formato; determina el tipo de contenido sin confiar en el MIME enviado.
+- Imágenes con miniatura y ampliación; todos los archivos se pueden descargar. Se muestra autor, fecha y tamaño.
+- Al crear/editar, los archivos quedan en cola hasta guardar. Se guarda primero la tarea y luego se suben secuencialmente.
+- Si falla un archivo, se conserva en cola y puede reintentarse individualmente; no se vuelve a crear la tarea.
+- `UploadId` tiene índice único por tarea y permite repetir una subida cuya respuesta se perdió sin duplicar el archivo.
+- Los binarios usan `IFileStorageService` (local o S3 según configuración); PostgreSQL guarda solo metadatos en `TaskAttachments`.
+- El borrado conserva un registro marcado como eliminado y la ruta para permitir reintentos si falla el almacenamiento. Si el usuario cerró el diálogo tras ese fallo, la eliminación física puede reintentarse con el mismo endpoint/ID.
+- Una subida fallida intenta limpiar el archivo. Si no se puede determinar si hubo commit, se conserva y registra la ruta para reconciliación, evitando borrar archivos referenciados.
+
+### Migración
+
+`20260916183020_TaskAttachments` crea exclusivamente tabla, relaciones e índices de adjuntos.
+El snapshot también incorpora la definición omitida de `ProjectDeveloperAssignment`, ya creada por una migración anterior. No se recrea esa tabla.
+`KodvianDbContextFactory` permite generar/verificar migraciones sin ejecutar startup, migraciones automáticas ni seeding de la API.
+
+### Verificación de esta mejora
+
+- Backend: pruebas con EF InMemory y almacenamiento simulado para permisos, tareas ajenas/inactivas/reasignadas, autoría, descarga, reintentos idempotentes, límites y fallos de persistencia/almacenamiento. No sustituyen una prueba contra PostgreSQL/S3.
+- Frontend: pruebas en ChromeHeadless de movimiento/rollback, permisos, selección/pegado/arrastre de archivos, reintentos y conservación del formulario.
+- Antes del despliegue, probar con almacenamiento real la subida/descarga y con dispositivo táctil el gesto sostenido.
 
 ## Riesgos y cuidados
 
@@ -99,7 +143,6 @@ Prioridades:
 
 ## Mejoras futuras
 
-- Drag and drop kanban con persistencia de orden.
+- Reordenamiento manual dentro de una columna con persistencia de orden.
 - Historial de cambios.
 - Comentarios o actividad por tarea.
-- Permisos backend finos por `tasks.read/write`.

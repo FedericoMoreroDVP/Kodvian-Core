@@ -256,3 +256,10 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
+.kanban-card:not(.cdk-drag-disabled) { cursor: grab; }
+.kanban-card.cdk-drag-dragging { cursor: grabbing; }
+.kanban-card.saving { opacity: .65; }
+.kanban-col.cdk-drop-list-receiving, .kanban-col.cdk-drop-list-dragging { outline: 2px solid #18bd75; outline-offset: -2px; }
+.cdk-drag-placeholder { opacity: .25; }
+.cdk-drag-preview { box-sizing: border-box; box-shadow: 0 10px 25px #0006; }
+.drag-hint { font-size: 13px; opacity: .8; }

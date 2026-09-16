@@ -20,6 +20,7 @@ public class KodvianDbContext : DbContext
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+    public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<FinancialCategory> FinancialCategories => Set<FinancialCategory>();
     public DbSet<FinancialMovement> FinancialMovements => Set<FinancialMovement>();
     public DbSet<Provider> Providers => Set<Provider>();
@@ -36,6 +37,17 @@ public class KodvianDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<TaskAttachment>(entity =>
+        {
+            entity.ToTable("TaskAttachments");
+            entity.Property(a => a.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(a => a.ContentType).HasMaxLength(150).IsRequired();
+            entity.Property(a => a.StoragePath).HasMaxLength(1024).IsRequired();
+            entity.HasIndex(a => new { a.TaskId, a.UploadId }).IsUnique();
+            entity.HasOne(a => a.Task).WithMany().HasForeignKey(a => a.TaskId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(a => a.UploadedBy).WithMany().HasForeignKey(a => a.UploadedById).OnDelete(DeleteBehavior.Restrict);
+        });
 
         modelBuilder.Entity<Client>(entity =>
         {
