@@ -45,6 +45,76 @@ public class FinanceHistoryTests : IDisposable
         new() { Amount = amount, Currency = currency, AppliedAmount = applied, AppliedCurrency = appliedCurrency, PaymentDate = date, PeriodYear = 2025, PeriodMonth = 2, RequestId = Guid.NewGuid() };
 
     [Fact]
+    public async Task VisionDetailsReconcileOperationalResultAndCumulativeCashWithoutMixingCurrencies()
+    {
+        var partner = new Partner { FullName = "Socio" }; db.Partners.Add(partner); db.SaveChanges();
+        Add(100, "USD"); Add(35, "USD", false); Add(5, "USD", false, funding: "SocioAporte", partner: partner);
+        Add(100, "USD", nature: "AporteSocio", partner: partner); Add(8, "USD", false, nature: "RetiroSocio", partner: partner);
+        Add(50, "USD", nature: "CambioMoneda"); Add(99999, "ARS");
+        Add(999, "USD", status: FinancialMovementStatus.Anulado); Add(500, "USD", status: FinancialMovementStatus.Vencido);
+        var summary = (await Overview.GetAsync(null, null, default)).Currencies.Single(x => x.Currency == "USD");
+        var operating = await Movements.GetPagedAsync(new() { Currency = "USD", View = "OperationalResult", PageSize = 100 });
+        Assert.Equal(3, operating.TotalCount);
+        Assert.Equal(summary.Result, operating.Items.Sum(x => x.IndicatorAmount));
+        var cash = await Movements.GetPagedAsync(new() { Currency = "USD", View = "RecordedCash", PageSize = 100 });
+        Assert.Equal(summary.RecordedCashBalance, cash.Items.Sum(x => x.IndicatorAmount));
+        Assert.All(cash.Items, x => Assert.Equal("USD", x.Currency));
+        var pending = await Movements.GetPagedAsync(new() { Currency = "USD", View = "PendingIncome" });
+        Assert.Equal(summary.PendingIncome, pending.Items.Sum(x => x.IndicatorAmount));
+        Assert.Equal("Vencido", Assert.Single(pending.Items).Status);
+    }
+
+    [Fact]
+    public async Task CategoryDetailsUseStableIdsEvenWhenNamesAreRepeated()
+    {
+        Add(20, income: false);
+        var duplicate = new FinancialCategory { Name = expenseCategory.Name, MovementType = FinancialMovementType.Egreso };
+        db.FinancialCategories.Add(duplicate); db.SaveChanges();
+        var expense = Add(30, income: false); expense.Category = duplicate; db.SaveChanges();
+        var overview = await Overview.GetAsync(null, null, default);
+        Assert.Equal(2, overview.Expenses.Count);
+        foreach (var category in overview.Expenses)
+        {
+            var detail = await Movements.GetPagedAsync(new() { Currency = category.Currency, View = "OperationalExpense", CategoryId = category.CategoryId });
+            Assert.Equal(category.Amount, detail.Items.Sum(x => x.Amount));
+            Assert.Single(detail.Items);
+        }
+    }
+
+    [Fact]
+    public async Task PartnerDrilldownsUseTheSameContributionAndReimbursementRules()
+    {
+        var partner = new Partner { FullName = "Socio" }; db.Partners.Add(partner); db.SaveChanges();
+        Add(10, nature: "AporteSocio", partner: partner);
+        Add(50, income: false, funding: "SocioAporte", partner: partner);
+        Add(45, income: false, funding: "SocioReintegrable", partner: partner);
+        Add(15, income: false, nature: "ReintegroSocio", partner: partner);
+        var summary = Assert.Single((await Overview.GetAsync(null, null, default)).Partners);
+        var contributions = await Movements.GetPagedAsync(new() { Currency = "ARS", PartnerId = partner.Id, View = "PartnerContributions" });
+        Assert.Equal(summary.Contributions, contributions.Items.Sum(x => x.IndicatorAmount));
+        var outstanding = await Movements.GetPagedAsync(new() { Currency = "ARS", PartnerId = partner.Id, View = "PartnerOutstanding" });
+        Assert.Equal(summary.Outstanding, outstanding.Items.Sum(x => x.IndicatorAmount));
+        Assert.Contains(outstanding.Items, x => x.IndicatorAmount == -15);
+        var other = await Movements.GetPagedAsync(new() { Currency = "ARS", PartnerId = Guid.NewGuid(), View = "PartnerContributions" });
+        Assert.Empty(other.Items);
+    }
+
+    [Fact]
+    public async Task VisionDateFiltersUseSettlementForCashAndMovementDateForPending()
+    {
+        Add(100, settlementDate: new DateOnly(2025, 3, 5));
+        Add(20, status: FinancialMovementStatus.Pendiente);
+        var februaryCash = await Movements.GetPagedAsync(new() { Currency = "ARS", View = "OperationalIncome", DateFrom = new(2025, 2, 1), DateTo = new(2025, 2, 28) });
+        Assert.Empty(februaryCash.Items);
+        var marchCash = await Movements.GetPagedAsync(new() { Currency = "ARS", View = "OperationalIncome", DateFrom = new(2025, 3, 1), DateTo = new(2025, 3, 31) });
+        Assert.Equal(100, Assert.Single(marchCash.Items).IndicatorAmount);
+        var februaryPending = await Movements.GetPagedAsync(new() { Currency = "ARS", View = "PendingIncome", UseSettlementDate = true, DateFrom = new(2025, 2, 1), DateTo = new(2025, 2, 28) });
+        Assert.Equal(20, Assert.Single(februaryPending.Items).IndicatorAmount);
+        await Assert.ThrowsAsync<ArgumentException>(() => Movements.GetPagedAsync(new() { Currency = "ARS", View = "Unknown" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => Movements.GetPagedAsync(new() { View = "RecordedCash" }));
+    }
+
+    [Fact]
     public async Task ExistingReceiptsRemainInHistoryWithoutOpeningBalanceAndMonthlyViewStaysMonthly()
     {
         Add(1500000, settlementDate: new DateOnly(2025, 5, 7));

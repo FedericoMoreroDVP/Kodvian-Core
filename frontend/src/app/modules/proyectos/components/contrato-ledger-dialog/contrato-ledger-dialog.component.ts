@@ -17,7 +17,7 @@ import { LedgerContrato } from '../../models/proyectos.models';
 export class ContratoLedgerDialogComponent {
   private readonly api = inject(ProyectosService);
   year = new Date().getFullYear(); loading = false; error = '';
-  constructor(@Inject(MAT_DIALOG_DATA) public data: LedgerContrato) {}
+  constructor(@Inject(MAT_DIALOG_DATA) public data: LedgerContrato) { this.year = data.year ?? new Date().getFullYear(); }
   load(): void {
     if (this.year < 2000 || this.year > 2100) { this.error = 'Año inválido'; return; }
     this.loading = true; this.error = '';

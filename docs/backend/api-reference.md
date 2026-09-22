@@ -244,7 +244,7 @@ Los usuarios devueltos incluyen `roles`, `isActive`, `developerId` y `sessionVer
 
 Rutas exclusivas de administradores:
 
-- `GET /api/finance/overview?from=&to=`: histórico/período, configuración e indicadores ARS/USD. Incluye `recordedCashBalance` acumulado hasta el corte, independiente de la configuración inicial. Se consulta desde el modal histórico.
+- `GET /api/finance/overview?from=&to=`: histórico/período, configuración e indicadores ARS/USD. Incluye `recordedCashBalance` acumulado hasta el corte y `categoryId` en gastos por categoría. Se consulta desde Visión financiera.
 - `GET /api/financial-movements/monthly-summary`: indicadores reducidos por moneda; no carga el análisis histórico. El campo `finance` del dashboard utiliza `FinancePeriodSummaryDto` (from, to, currencies) para el mismo resumen mensual.
 - `PUT /api/finance/setup`: punto de partida opcional, saldos por moneda, historial completo y versión esperada.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios.
@@ -257,6 +257,12 @@ Los pagos agregan monedas real/aplicada, importe aplicado, requestId y existingM
 Los importes escalares antiguos de resúmenes representan solo ARS; usar `currencies` para la información completa.
 
 Detalles: [Finanzas](../modules/finanzas.md).
+
+Visión financiera utiliza `GET /api/financial-movements` con `view`, `currency`, `partnerId`,
+`categoryId` y fechas para consultar los movimientos de cada indicador. El listado añade
+`indicatorAmount` (impacto con signo) y mantiene paginación. Las vistas permitidas y sus
+reglas están en [Visión financiera](../modules/vision-financiera.md).
+El ledger de contratos devuelve `year` para mantener el contexto del detalle.
 
 ## Notas de seguridad (aplicables a todas las rutas)
 

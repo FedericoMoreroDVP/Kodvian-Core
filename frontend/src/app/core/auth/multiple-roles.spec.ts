@@ -26,6 +26,12 @@ describe('Navegación con múltiples roles', () => {
     expect(homeRoute(user(['Desarrollador'], ['developer.work.read']))).toBe('/mi-trabajo');
     expect(homeRoute(user(['Analista'], ['projects.read']))).toBe('/proyectos');
   });
+  it('agrega Visión financiera a administradores sin cambiar su destino inicial', () => {
+    const account = user(['Administrador'], ['dashboard.read', 'finances.read']);
+    expect(new NavigationService().getItems(account).map(x => x.route)).toContain('/vision-financiera');
+    expect(homeRoute(account)).toBe('/dashboard');
+    expect(new NavigationService().getItems(user(['Analista'], ['projects.read'])).map(x => x.route)).not.toContain('/vision-financiera');
+  });
   it('el guard bloquea Administración para un analista', async () => {
     const account = user(['Analista'], ['projects.read']);
     TestBed.configureTestingModule({ providers: [

@@ -19,7 +19,7 @@ import { CurrencyPeriod } from '../models/finance-overview.models';
         <article><span>Gastos pagados del mes</span><strong>{{ !loading && row ? (row.expense | currency:currency:'code':'1.2-2') : '—' }}</strong></article>
         <article><span>Resultado del mes</span><strong [class.negative]="!loading && row && row.result < 0">{{ !loading && row ? (row.result | currency:currency:'code':'1.2-2') : '—' }}</strong></article>
       </div>
-      <p>Los movimientos de meses anteriores se consultan en Histórico financiero. Los filtros del listado no modifican este resumen mensual.</p>
+      <p>Los movimientos de meses anteriores se consultan en Visión financiera. Los filtros del listado no modifican este resumen mensual.</p>
     </section>`,
   styles: [`
     header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }

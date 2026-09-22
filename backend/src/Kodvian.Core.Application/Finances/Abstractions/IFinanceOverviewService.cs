@@ -35,7 +35,7 @@ public class CurrencyOverviewDto : CurrencyPeriodDto
     public decimal? Balance { get; set; }
 }
 public class FinanceMonthDto : CurrencyOverviewDto { public int Year { get; set; } public int Month { get; set; } }
-public record ExpenseCategoryDto(string Currency, string Category, decimal Amount);
+public record ExpenseCategoryDto(string Currency, string Category, decimal Amount, Guid CategoryId);
 public record PartnerBalanceDto(Guid PartnerId, string PartnerName, string Currency, decimal Contributions, decimal Withdrawals, decimal ReimbursableExpenses, decimal Reimbursements)
 {
     public decimal Outstanding => ReimbursableExpenses - Reimbursements;

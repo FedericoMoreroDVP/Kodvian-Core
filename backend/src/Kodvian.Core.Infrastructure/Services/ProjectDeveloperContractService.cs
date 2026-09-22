@@ -103,6 +103,7 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
         var ars = currencies.Single(x => x.Currency == "ARS");
         return new ContractLedgerDto
         {
+            Year = year,
             ContractId = contractId, ProjectId = contract.ProjectId, ProjectName = contract.ProjectName, DeveloperId = contract.DeveloperId,
             DeveloperName = contract.DeveloperName, PaymentMode = contract.PaymentMode, Percentage = contract.Percentage, AgreedAmount = contract.AgreedAmount,
             Currency = contract.Currency, Currencies = currencies,

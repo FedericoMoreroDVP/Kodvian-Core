@@ -76,7 +76,7 @@
 
     @if (resumen.finance; as finance) {
       <app-finance-month-summary [rows]="finance.currencies" [loading]="cargando" />
-      <a mat-button routerLink="/finanzas" [queryParams]="{ accion: 'historico' }">Ver histórico financiero</a>
+      <a mat-button routerLink="/vision-financiera">Abrir Visión financiera</a>
     }
 
     @if (cargando) {

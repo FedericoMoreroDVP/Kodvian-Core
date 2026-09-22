@@ -15,6 +15,7 @@ export class NavigationService {
     { label: 'Proyectos', icon: 'folder_open', route: '/proyectos', permission: 'projects.read' },
     { label: 'Tareas', icon: 'task', route: '/tareas', permission: 'tasks.read' },
     { label: 'Finanzas', icon: 'payments', route: '/finanzas', permission: 'finances.read' },
+    { label: 'Visión financiera', icon: 'insights', route: '/vision-financiera', permission: 'finances.read' },
     { label: 'Administración', icon: 'admin_panel_settings', route: '/administracion', permission: 'administration.read' }
   ];
 

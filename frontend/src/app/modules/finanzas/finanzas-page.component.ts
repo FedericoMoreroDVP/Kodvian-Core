@@ -3,7 +3,6 @@ import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 import { FinanceMonthSummaryComponent } from './components/finance-month-summary.component';
-import type { FinanceHistoryDialogResult } from './components/finance-overview-dialog.component';
 import { FinanceOverviewService } from './services/finance-overview.service';
 import { FINANCE_NATURES } from './models/finance-overview.models';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
@@ -21,7 +20,7 @@ import { MatTableModule } from '@angular/material/table';
 
 import { CategoriaFormDialogComponent } from './components/categoria-form-dialog/categoria-form-dialog.component';
 import { MovimientoFormDialogComponent } from './components/movimiento-form-dialog/movimiento-form-dialog.component';
-import { compareDates, formatDateToIso, parseIsoDate } from '../../core/date.utils';
+import { compareDates, formatDateToIso } from '../../core/date.utils';
 import { CategoriaFinanciera, CategoriaFormulario, EstadoMovimiento, FinanzaFiltros, FinanzasLookups, MovimientoDetalle, MovimientoFormulario, MovimientoListado, ResumenMensual, TipoMovimiento } from './models/finanzas.models';
 import { FinanzasService } from './services/finanzas.service';
 
@@ -37,8 +36,6 @@ export class FinanzasPageComponent implements OnInit {
   private readonly finance = inject(FinanceOverviewService);
   private readonly destroyRef = inject(DestroyRef);
   private summaryRequest?: Subscription;
-  private destroyed = false;
-  historicoAbierto = false;
   filtrosAvanzados = false;
   cargandoResumen = false;
   errorResumen = '';
@@ -76,11 +73,10 @@ export class FinanzasPageComponent implements OnInit {
   total = 0;
   cargando = false;
 
-  constructor() { this.destroyRef.onDestroy(() => this.destroyed = true); }
-
   ngOnInit(): void {
     const accion = this.route.snapshot.queryParamMap.get('accion');
     const tipo = this.route.snapshot.queryParamMap.get('tipo')?.toLowerCase();
+    if (accion === 'historico') { void this.router.navigate(['/vision-financiera'], { replaceUrl: true }); return; }
 
     if (accion === 'nuevo') {
       if (tipo === 'egreso') {
@@ -91,10 +87,6 @@ export class FinanzasPageComponent implements OnInit {
     }
 
     this.cargarTodo();
-    if (accion === 'historico') {
-      void this.abrirHistorico();
-      void this.router.navigate([], { relativeTo: this.route, queryParams: { accion: null }, queryParamsHandling: 'merge', replaceUrl: true });
-    }
   }
 
   cargarTodo(): void {
@@ -144,33 +136,7 @@ export class FinanzasPageComponent implements OnInit {
     });
   }
 
-  async abrirHistorico(): Promise<void> {
-    if (this.historicoAbierto) return;
-    this.historicoAbierto = true;
-    try {
-      const { FinanceOverviewDialogComponent } = await import('./components/finance-overview-dialog.component');
-      if (this.destroyed) return;
-      this.dialog.open(FinanceOverviewDialogComponent, {
-        width: '1280px', maxWidth: '96vw', maxHeight: '94vh', autoFocus: 'dialog', ariaLabel: 'Histórico financiero'
-      }).afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result?: FinanceHistoryDialogResult) => {
-        this.historicoAbierto = false;
-        this.cargarResumen();
-        if (result?.detail) this.summaryDetail(result.detail);
-        else this.cargarMovimientos();
-      });
-    } catch {
-      this.historicoAbierto = false;
-      this.snackBar.open('No se pudo abrir el histórico financiero. Vuelve a intentar.', 'Cerrar', { duration: 4000 });
-    }
-  }
-
-  summaryDetail(event: { currency: string; movementType: 'Ingreso' | 'Egreso'; from: string; to: string }): void {
-    this.filtrosAvanzados = true;
-    this.filtrosForm.reset({ currency: event.currency, nature: 'Operacion', movementType: event.movementType,
-      useSettlementDate: true, dateFrom: parseIsoDate(event.from), dateTo: parseIsoDate(event.to),
-      status: event.movementType === 'Ingreso' ? 'Cobrado' : 'Pagado', categoryId: '', clientId: '', providerId: '' });
-    this.pageNumber = 1; this.cargarMovimientos();
-  }
+  abrirVisionFinanciera(): void { void this.router.navigate(['/vision-financiera']); }
   cancelExchange(row: MovimientoListado): void {
     if (!row.exchangeId || !confirm('¿Anular ambas partes de este cambio de moneda?')) return;
     this.finance.cancelExchange(row.exchangeId).subscribe({ next: () => { this.cargarMovimientos(); this.cargarResumen(); },

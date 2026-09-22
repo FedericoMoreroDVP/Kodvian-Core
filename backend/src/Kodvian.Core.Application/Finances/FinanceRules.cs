@@ -5,6 +5,8 @@ public static class FinanceRules
     public static readonly string[] Currencies = ["ARS", "USD"];
     public static readonly string[] Natures = ["Operacion", "AporteSocio", "RetiroSocio", "ReintegroSocio", "CambioMoneda"];
     public static readonly string[] FundingSources = ["Empresa", "SocioAporte", "SocioReintegrable"];
+    public static readonly string[] DetailViews = ["OperationalIncome", "OperationalExpense", "OperationalResult", "RecordedCash", "PendingIncome", "PendingExpense",
+        "PartnerContributions", "PartnerWithdrawals", "PartnerReimbursableExpenses", "PartnerReimbursements", "PartnerOutstanding"];
     public static string Currency(string? value) => Currencies.Contains(value) ? value! : throw new ArgumentException("Selecciona ARS o USD");
     public static decimal Money(decimal value)
     {

@@ -16,6 +16,7 @@ La aplicacion busca centralizar informacion operativa que normalmente queda dist
 - Gestion de clientes y estados comerciales.
 - Gestion de proyectos, analistas a cargo, estado, prioridad, avance y presupuesto.
 - Gestion de tareas con listado y vista kanban.
+- Visión financiera interactiva para socios: indicadores, gráficos, aportes y compromisos por moneda, con detalle bajo demanda.
 - Gestion de desarrolladores externos.
 - Contratos de desarrolladores por proyecto, pagos, comprobantes y ledger mensual.
 - Gestion financiera de ingresos, egresos, categorias, proveedores, comprobantes y resumen mensual.

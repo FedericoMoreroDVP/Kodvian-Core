@@ -120,7 +120,7 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
                     months.Add(result);
                 }
         var expenses = await period.Where(x => x.Nature == "Operacion" && x.MovementType == FinancialMovementType.Egreso)
-            .GroupBy(x => new { x.Currency, Category = x.Category!.Name }).Select(g => new ExpenseCategoryDto(g.Key.Currency, g.Key.Category, g.Sum(x => x.Amount))).ToListAsync(ct);
+            .GroupBy(x => new { x.Currency, x.CategoryId, Category = x.Category!.Name }).Select(g => new ExpenseCategoryDto(g.Key.Currency, g.Key.Category, g.Sum(x => x.Amount), g.Key.CategoryId)).ToListAsync(ct);
         var partners = await settled.Where(x => x.PartnerId != null)
             .GroupBy(x => new { x.PartnerId, Name = x.Partner!.FullName, x.Currency })
             .Select(g => new PartnerBalanceDto(g.Key.PartnerId!.Value, g.Key.Name, g.Key.Currency,

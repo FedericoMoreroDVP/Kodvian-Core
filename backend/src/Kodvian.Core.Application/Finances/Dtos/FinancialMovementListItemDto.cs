@@ -7,6 +7,7 @@ public class FinancialMovementListItemDto
     public string CategoryName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+    public decimal? IndicatorAmount { get; set; }
     public string Currency { get; set; } = "ARS";
     public string Nature { get; set; } = "Operacion";
     public Guid? ExchangeId { get; set; }

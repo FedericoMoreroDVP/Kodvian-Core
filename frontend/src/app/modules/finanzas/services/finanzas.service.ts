@@ -23,6 +23,8 @@ export class FinanzasService {
 
   obtenerMovimientos(filtros: FinanzaFiltros): Observable<PagedResult<MovimientoListado>> {
     let params = new HttpParams().set('pageNumber', filtros.pageNumber).set('pageSize', filtros.pageSize);
+    if (filtros.view) params = params.set('view', filtros.view);
+    if (filtros.partnerId) params = params.set('partnerId', filtros.partnerId);
     if (filtros.currency) params = params.set('currency', filtros.currency);
     if (filtros.nature) params = params.set('nature', filtros.nature);
     if (filtros.projectId) params = params.set('projectId', filtros.projectId);

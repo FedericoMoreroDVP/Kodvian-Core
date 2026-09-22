@@ -4,6 +4,8 @@ namespace Kodvian.Core.Application.Finances.Requests;
 
 public class FinancialMovementListRequestDto : PagedRequestDto
 {
+    public string? View { get; set; }
+    public Guid? PartnerId { get; set; }
     public string? Currency { get; set; }
     public string? Nature { get; set; }
     public Guid? ProjectId { get; set; }

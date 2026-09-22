@@ -1,0 +1,49 @@
+<h2 mat-dialog-title>{{ title }}</h2>
+<mat-dialog-content>
+  @if (error) { <p role="alert" class="error">{{ error }}</p> }
+  @switch (data.mode) {
+    @case ('setup') {
+      <p>Configuración opcional para calcular un saldo ajustado. Los cobros y gastos registrados ya están incluidos en el neto de la empresa.</p>
+      <div class="grid">
+        <label class="wide">Fecha de referencia<input type="date" [(ngModel)]="setup.startDate" [disabled]="saving" /></label>
+        <label>Saldo inicial ARS<input type="number" step="0.01" [(ngModel)]="setup.openingArs" [disabled]="saving" placeholder="Sin confirmar" /></label>
+        <label>Saldo inicial USD<input type="number" step="0.01" [(ngModel)]="setup.openingUsd" [disabled]="saving" placeholder="Sin confirmar" /></label>
+        <label class="wide check"><input type="checkbox" [(ngModel)]="setup.historyComplete" [disabled]="saving" /> Terminé de registrar y revisar el historial</label>
+      </div>
+      <details><summary>¿Qué importe debo ingresar?</summary><p>El saldo conocido al inicio de la fecha elegida, antes de sus movimientos. El saldo ajustado suma solamente movimientos desde esa fecha. No vuelvas a registrar los cobros anteriores como movimientos nuevos.</p><p>Deja en blanco lo que no sepas. Cero significa un saldo confirmado en cero. Esta configuración no oculta el historial ni modifica el neto registrado.</p></details>
+      @for (row of data.overview.currencies; track row.currency) { @if (row.balance !== null) { <p>Saldo ajustado guardado · {{ row.currency }}: <strong>{{ money(row.balance, row.currency) }}</strong></p> } }
+    }
+    @case ('partners') {
+      <p>Los socios son personas de la empresa, independientemente de sus permisos de acceso.</p>
+      <form class="grid" (ngSubmit)="savePartner()"><label>Nombre del socio<input name="partnerName" [(ngModel)]="partnerName" maxlength="160" required [disabled]="saving" /></label><button mat-stroked-button type="submit" [disabled]="saving || !partnerName.trim()">Agregar socio</button></form>
+      @if (loading) { <p role="status">Cargando socios…</p> }
+      @for (partner of partners; track partner.id) {
+        <div class="partner"><label>Nombre<input [(ngModel)]="partner.fullName" maxlength="160" [disabled]="saving" /></label><label class="check"><input type="checkbox" [(ngModel)]="partner.isActive" [disabled]="saving" /> Activo</label><button mat-button [disabled]="saving" (click)="savePartner(partner)">Guardar socio</button></div>
+      }
+      @if (!loading && error) { <button mat-button (click)="loadPartners()">Reintentar carga</button> }
+    }
+    @case ('exchange') {
+      <p>Registra la salida y entrada reales. Un cambio de moneda no es un cobro comercial ni un gasto operativo.</p>
+      <div class="grid">
+        <label>Moneda entregada<select [(ngModel)]="exchange.fromCurrency" [disabled]="saving"><option>ARS</option><option>USD</option></select></label>
+        <label>Importe entregado<input type="number" step="0.01" min="0.01" [(ngModel)]="exchange.fromAmount" [disabled]="saving" /></label>
+        <label>Moneda recibida<select [(ngModel)]="exchange.toCurrency" [disabled]="saving"><option>USD</option><option>ARS</option></select></label>
+        <label>Importe recibido<input type="number" step="0.01" min="0.01" [(ngModel)]="exchange.toAmount" [disabled]="saving" /></label>
+        <label>Fecha efectiva<input type="date" [(ngModel)]="exchange.date" [disabled]="saving" /></label>
+        <label>Observaciones<input [(ngModel)]="exchange.notes" maxlength="1000" [disabled]="saving" /></label>
+      </div><p>Las comisiones se registran como gastos separados en Finanzas.</p>
+    }
+    @case ('review') {
+      <p>Los indicadores se calculan con los registros disponibles. Estos puntos explican por qué el historial puede ser provisional:</p>
+      <ul>
+        @if (!data.overview.setup.historyComplete) { <li>La carga histórica todavía no fue confirmada como completa.</li> }
+        @if (data.overview.estimatedDateCount) { <li><strong>{{ data.overview.estimatedDateCount }} movimientos</strong> usan una fecha efectiva histórica provisional. Revísala al editar el movimiento en Finanzas.</li> }
+        @if (data.overview.unclassifiedPayments) { <li><strong>{{ data.overview.unclassifiedPayments }} pagos del equipo</strong> requieren confirmar moneda o vincular su egreso. Se revisan desde los pagos del proyecto.</li> }
+      </ul><p>El neto registrado incluye los cobros anteriores aunque no hayas configurado un saldo inicial. No equivale a un saldo bancario confirmado.</p>
+    }
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button [disabled]="saving" (click)="close()">{{ data.mode === 'review' || data.mode === 'partners' ? 'Cerrar' : 'Cancelar' }}</button>
+  @if (data.mode === 'setup' || data.mode === 'exchange') { <button mat-flat-button [disabled]="saving || (data.mode === 'exchange' && (exchange.fromCurrency === exchange.toCurrency || exchange.fromAmount <= 0 || exchange.toAmount <= 0))" (click)="save()">{{ saving ? 'Guardando…' : 'Guardar' }}</button> }
+</mat-dialog-actions>

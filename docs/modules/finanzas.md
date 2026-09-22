@@ -7,18 +7,17 @@ cobrados, gastos pagados y resultado del mes, con selector ARS/USD. Finanzas pri
 el listado de movimientos; clasificación, categoría, cliente, proveedor y base de
 fechas están disponibles en **Más filtros**.
 
-El botón **Histórico financiero** abre un modal cargado bajo demanda. Dentro están
-el histórico completo, los períodos personalizados, el punto de partida, los socios,
-los cambios de moneda, la evolución mensual y los saldos del equipo. El enlace de
-Inicio navega a `/finanzas?accion=historico` y abre el modal; después se limpia el
-parámetro para que una recarga no lo abra de nuevo.
+El botón **Visión financiera** abre el módulo `/vision-financiera`, con Resumen,
+Socios y Compromisos. Allí se consultan el histórico y los gráficos, y se accede a
+la configuración del punto de partida. Reemplaza al modal histórico anterior.
+Los enlaces antiguos `/finanzas?accion=historico` redirigen al nuevo módulo.
 
 Los indicadores diarios usan una consulta reducida compartida que no calcula ni
 devuelve socios, categorías, saldos iniciales o evolución histórica. La consulta
-completa se realiza al abrir el modal. **Ver cobros / Ver gastos** cierra el modal
-y aplica los filtros correspondientes al listado, usando la fecha efectiva.
+completa se realiza al entrar a Visión financiera. Los indicadores y gráficos abren
+diálogos de movimientos paginados, preservando período, moneda y sección.
 
-1. Abrir **Histórico financiero** y registrar los socios desde **Socios**; su condición es independiente del rol de usuario.
+1. Abrir **Visión financiera** y registrar los socios desde **Configurar → Gestionar socios**; su condición es independiente del rol de usuario.
 2. Cargar los gastos anteriores con moneda, fecha original y fecha efectiva de pago.
 3. Revisar fechas históricas y las monedas de contratos/pagos.
 4. Vincular pagos históricos con los egresos ya cargados desde Equipo del proyecto → Pagos → Revisar y vincular.
@@ -109,7 +108,7 @@ que permita consolidarlos automáticamente sin duplicación.
 
 Todas las rutas financieras requieren Administrador; las escrituras además usan FinancesWrite.
 
-- `GET /api/finance/overview?from=&to=`: configuración, indicadores por moneda con recordedCashBalance, evolución mensual, categorías y saldos de socios; consumido por el modal.
+- `GET /api/finance/overview?from=&to=`: configuración, indicadores por moneda con recordedCashBalance, evolución mensual, categorías con identificador y saldos de socios; consumido por Visión financiera.
 - `GET /api/financial-movements/monthly-summary`: totales mensuales por moneda sin el análisis histórico completo. Inicio utiliza la misma operación de servicio y devuelve ese resumen reducido en `finance`.
 - `PUT /api/finance/setup`: startDate, openingArs, openingUsd, historyComplete, version.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios y actividad.
@@ -147,6 +146,6 @@ protegen el vínculo pago/egreso y la identidad de cada pago.
 
 - `FinanceHistoryTests`: monedas, caja/pendientes, fechas, carga retroactiva, saldos iniciales, socios, reintegros, cambios, porcentajes, pagos cruzados, vinculación histórica, correcciones, anulaciones y reintentos. Usa EF InMemory.
 - Frontend: pruebas de vista histórica, estados desconocidos, filtros, clasificación de pagos históricos, fechas efectivas, moneda e identificación estable al reintentar.
-- Regresiones: cobros históricos sin saldo inicial, punto de partida posterior a los cobros, equivalencia de totales mensuales, modal bajo demanda, cierre al consultar movimientos y bloqueo de cierre durante el guardado.
+- Regresiones: cobros históricos sin saldo inicial, punto de partida posterior a los cobros, equivalencia de totales mensuales y navegación al módulo [Visión financiera](vision-financiera.md).
 - Compilar backend/frontend, ejecutar las suites y comprobar las diferencias del modelo EF.
 - Revisar/aplicar la migración en PostgreSQL de prueba y verificar allí transacciones, bloqueos y recuperación ante fallos; InMemory no verifica esos comportamientos relacionales.

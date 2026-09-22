@@ -223,6 +223,7 @@ export interface LedgerContratoMes {
 }
 
 export interface LedgerContrato {
+  year?: number;
   currency?: string | null;
   needsReview: boolean;
   currencies: ContractCurrencyLedger[];

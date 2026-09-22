@@ -1,0 +1,148 @@
+<main class="vision-shell">
+  <header class="vision-header">
+    <div><p class="eyebrow">KODVIAN · EMPRESA</p><h1>Visión financiera</h1><p class="intro">Los números de la empresa, con perspectiva.</p></div>
+    <div class="header-actions">
+      <a mat-stroked-button routerLink="/finanzas"><mat-icon>receipt_long</mat-icon> Ir a movimientos</a>
+      <button mat-button [matMenuTriggerFor]="settingsMenu" [disabled]="!data || loading"><mat-icon>tune</mat-icon> Configurar</button>
+      <mat-menu #settingsMenu="matMenu">
+        <button mat-menu-item (click)="configure('setup')"><mat-icon>account_balance_wallet</mat-icon> Punto de partida</button>
+        <button mat-menu-item (click)="configure('partners')"><mat-icon>groups</mat-icon> Gestionar socios</button>
+        <button mat-menu-item (click)="configure('exchange')"><mat-icon>currency_exchange</mat-icon> Cambio de moneda</button>
+      </mat-menu>
+    </div>
+  </header>
+
+  <section class="filter-bar" aria-label="Filtros de Visión financiera">
+    <label class="period-select"><span>Período</span><select [(ngModel)]="draftPeriod" (change)="selectPeriod()"><option value="historico">Histórico registrado</option><option value="mes">Este mes</option><option value="anio">Este año</option><option value="personalizado">Personalizado</option></select></label>
+    @if (draftPeriod === 'personalizado') {
+      <label><span>Desde</span><input type="date" [(ngModel)]="draftFrom" /></label><label><span>Hasta</span><input type="date" [(ngModel)]="draftTo" /></label><button mat-stroked-button (click)="applyCustom()">Aplicar</button>
+    }
+    <div class="currency-switch" role="group" aria-label="Moneda de todos los indicadores y gráficos">
+      <button type="button" [class.active]="state.currency === 'ARS'" [attr.aria-pressed]="state.currency === 'ARS'" (click)="selectCurrency('ARS')">ARS <span>Pesos</span></button>
+      <button type="button" [class.active]="state.currency === 'USD'" [attr.aria-pressed]="state.currency === 'USD'" (click)="selectCurrency('USD')">USD <span>Dólares</span></button>
+    </div>
+    <button mat-icon-button [disabled]="loading" (click)="reload()" aria-label="Actualizar números" matTooltip="Actualizar números"><mat-icon>refresh</mat-icon></button>
+    @if (loadedAt && !loading) { <span class="updated">Actualizado {{ loadedAt }}</span> }
+  </section>
+  @if (filterError) { <p role="alert" class="error">{{ filterError }}</p> }
+
+  <nav class="section-nav" aria-label="Secciones financieras">
+    @for (section of sections; track section.value) {
+      <button type="button" [class.active]="state.section === section.value" [attr.aria-current]="state.section === section.value ? 'page' : null" (click)="selectSection(section.value)"><mat-icon>{{ section.icon }}</mat-icon>{{ section.label }}</button>
+    }
+  </nav>
+
+  @if (loading) {
+    <section class="loading-state" role="status" aria-label="Cargando números de la empresa"><div class="skeleton-cards">@for (i of [1,2,3,4]; track i) { <div></div> }</div><div class="skeleton-chart"></div><span>Cargando números de la empresa…</span></section>
+  } @else if (error) {
+    <section class="empty-state error-panel" role="alert"><mat-icon>cloud_off</mat-icon><h2>No pudimos cargar los números</h2><p>{{ error }}</p><button mat-stroked-button (click)="reload()">Reintentar</button></section>
+  } @else if (data) {
+    <div class="context-row"><span>{{ periodLabel }} <span class="separator">/</span> {{ state.currency }} <span class="separator">/</span> Corte de caja {{ dateLabel(data.to) }}</span>
+      @if (provisional) { <button class="review-pill" type="button" (click)="configure('review')"><mat-icon>info_outline</mat-icon> Historial en revisión <mat-icon>chevron_right</mat-icon></button> }
+      @else { <span class="confirmed"><mat-icon>check_circle</mat-icon> Historial confirmado</span> }
+    </div>
+
+    @if (state.section === 'resumen') {
+      @if (row; as totals) {
+        <section class="metric-grid" aria-label="Indicadores principales">
+          <button type="button" class="metric-card income" [disabled]="!totals.income" (click)="openDetail('Cobros del período', totals.income, 'OperationalIncome')" matTooltip="Ingresos operativos efectivamente cobrados en el período. Selecciona para ver los movimientos.">
+            <span class="metric-top"><span>Cobrado</span><mat-icon>south_west</mat-icon></span><strong [title]="money(totals.income, state.currency)">{{ money(totals.income, state.currency, true) }}</strong><span class="metric-bottom">En el período <mat-icon>arrow_forward</mat-icon></span>
+          </button>
+          <button type="button" class="metric-card expense" [disabled]="!totals.expense" (click)="openDetail('Gastos del período', totals.expense, 'OperationalExpense')" matTooltip="Gastos operativos pagados, incluidos los afrontados por socios. No incluye retiros ni cambios de moneda.">
+            <span class="metric-top"><span>Gastado</span><mat-icon>north_east</mat-icon></span><strong [title]="money(totals.expense, state.currency)">{{ money(totals.expense, state.currency, true) }}</strong><span class="metric-bottom">En el período <mat-icon>arrow_forward</mat-icon></span>
+          </button>
+          <button type="button" class="metric-card result" [class.loss]="totals.result < 0" [disabled]="!totals.income && !totals.expense" (click)="openDetail('Resultado operativo del período', totals.result, 'OperationalResult')" matTooltip="Cobrado menos gastos operativos pagados. Es un resultado de caja, no una ganancia contable completa.">
+            <span class="metric-top"><span>Resultado operativo</span><mat-icon>query_stats</mat-icon></span><strong [title]="money(totals.result, state.currency)">{{ money(totals.result, state.currency, true) }}</strong><span class="metric-bottom">Cobrado − gastado <mat-icon>arrow_forward</mat-icon></span>
+          </button>
+          <button type="button" class="metric-card net" [class.loss]="totals.recordedCashBalance < 0" [disabled]="!totals.recordedCashBalance && !buckets.length" (click)="openDetail('Neto registrado al corte', totals.recordedCashBalance, 'RecordedCash', { cumulative: true })" matTooltip="Entradas menos salidas registradas de la empresa desde el inicio hasta el corte. Incluye aportes, retiros y cambios de moneda. No equivale a saldo bancario confirmado.">
+            <span class="metric-top"><span>Neto registrado</span><mat-icon>account_balance_wallet</mat-icon></span><strong [title]="money(totals.recordedCashBalance, state.currency)">{{ money(totals.recordedCashBalance, state.currency, true) }}</strong><span class="metric-bottom">Acumulado al corte <mat-icon>arrow_forward</mat-icon></span>
+          </button>
+        </section>
+        <p class="narrative" [class.negative]="totals.result < 0"><mat-icon>{{ totals.result < 0 ? 'trending_down' : 'insights' }}</mat-icon>{{ narrative }}</p>
+
+        <div class="charts-grid">
+          <section class="visual-panel flow-panel">
+            <header class="panel-heading"><div><span class="eyebrow">EVOLUCIÓN</span><h2>Cobros y gastos</h2></div><span class="subtle-tag">{{ grouping }} · {{ state.currency }}</span></header>
+            @if (totals.income || totals.expense) { <app-finance-chart [model]="flowChart" (selected)="flowSelected($event)" /><p class="chart-hint">Selecciona una barra para consultar sus movimientos.</p> }
+            @else { <div class="empty-state"><mat-icon>bar_chart</mat-icon><h3>Sin actividad operativa en este período</h3><p>Los cobros y gastos aparecerán aquí cuando estén registrados.</p><a mat-button routerLink="/finanzas">Ir a Finanzas</a></div> }
+            @if (buckets.length) {
+              <details class="data-table"><summary>Ver datos y movimientos</summary><div class="table-scroll"><table><caption class="sr-only">Cobros, gastos y resultado por período en {{ state.currency }}</caption><thead><tr><th>Período</th><th>Cobrado</th><th>Gastado</th><th>Resultado</th></tr></thead><tbody>
+                @for (bucket of buckets; track bucket.key) { <tr><td>{{ bucket.label }}</td><td><button type="button" class="amount-link" (click)="openMonth(bucket, 'income')">{{ money(bucket.income, state.currency) }}</button></td><td><button type="button" class="amount-link" (click)="openMonth(bucket, 'expense')">{{ money(bucket.expense, state.currency) }}</button></td><td><button type="button" class="amount-link" [class.negative]="bucket.result < 0" (click)="openMonth(bucket, 'result')">{{ money(bucket.result, state.currency) }}</button></td></tr> }
+              </tbody></table></div></details>
+            }
+          </section>
+          <section class="visual-panel categories-panel">
+            <header class="panel-heading"><div><span class="eyebrow">DISTRIBUCIÓN</span><h2>¿En qué gastamos?</h2></div></header>
+            @if (expenses.length) {
+              <app-finance-chart [model]="expenseChart" (selected)="expenseSelected($event)" />
+              <p class="chart-hint">Principales {{ expenses.length > 5 ? '5 categorías' : 'categorías' }} · participación sobre gastos pagados.</p>
+              <div class="category-list">@for (category of visibleExpenses; track category.categoryId) {
+                <button type="button" (click)="openCategory(category)"><span class="category-name"><i></i>{{ category.category }}</span><span class="category-values"><strong>{{ money(category.amount, state.currency) }}</strong><small>{{ share(category.amount) }}</small></span><mat-icon>chevron_right</mat-icon></button>
+              }</div>
+              @if (expenses.length > 5) { <button mat-button (click)="showAllCategories = !showAllCategories">{{ showAllCategories ? 'Mostrar principales' : 'Ver todas las categorías' }}</button> }
+            } @else { <div class="empty-state"><mat-icon>donut_small</mat-icon><h3>Sin gastos para distribuir</h3><p>Selecciona otro período o registra un gasto.</p></div> }
+          </section>
+        </div>
+
+        <div class="balance-grid">
+          <section class="visual-panel">
+            <header class="panel-heading"><div><span class="eyebrow">PERSPECTIVA</span><h2>Cómo evoluciona el acumulado</h2></div><span class="subtle-tag">{{ state.currency }}</span></header>
+            <p class="panel-description">Neto registrado al cierre de cada período, incluidos los movimientos anteriores a la selección.</p>
+            @if (buckets.length) {
+              <app-finance-chart [model]="balanceChart" (selected)="balanceSelected($event)" />
+              <details class="data-table"><summary>Ver acumulados y movimientos</summary><div class="table-scroll"><table><thead><tr><th>Período</th><th>Neto registrado al cierre</th></tr></thead><tbody>@for (bucket of buckets; track bucket.key) { <tr><td>{{ bucket.label }}</td><td><button type="button" class="amount-link" (click)="openMonth(bucket, 'balance')">{{ money(bucket.balance, state.currency) }}</button></td></tr> }</tbody></table></div></details>
+            } @else { <div class="empty-state"><mat-icon>show_chart</mat-icon><h3>Todavía no hay una evolución para mostrar</h3><p>El gráfico se construye con los movimientos efectivos registrados.</p></div> }
+          </section>
+          <aside class="visual-panel pending-panel">
+            <span class="eyebrow">PRÓXIMOS PASOS</span><h2>Lo que queda pendiente</h2><p class="panel-description">Incluye vencidos. Estos importes todavía no forman parte de la caja.</p>
+            <button type="button" class="pending-item" (click)="openDetail('Ingresos pendientes de cobro', totals.pendingIncome, 'PendingIncome')"><span><mat-icon>south_west</mat-icon> Por cobrar</span><strong>{{ money(totals.pendingIncome, state.currency) }}</strong><mat-icon>arrow_forward</mat-icon></button>
+            <button type="button" class="pending-item" (click)="openDetail('Egresos pendientes de pago', totals.pendingExpense, 'PendingExpense')"><span><mat-icon>north_east</mat-icon> Por pagar registrado</span><strong>{{ money(totals.pendingExpense, state.currency) }}</strong><mat-icon>arrow_forward</mat-icon></button>
+            <button mat-stroked-button (click)="selectSection('compromisos')">Explorar compromisos</button>
+          </aside>
+        </div>
+      }
+    }
+
+    @if (state.section === 'socios') {
+      <section class="section-heading"><div><h2>Los socios y la empresa</h2><p>Acumulado en {{ state.currency }} hasta {{ dateLabel(data.to) }}. Los aportes no son ingresos comerciales.</p></div><button mat-stroked-button (click)="configure('partners')"><mat-icon>person_add</mat-icon> Gestionar socios</button></section>
+      @if (partnersError) { <p class="error" role="alert">{{ partnersError }} <button mat-button (click)="loadPartners()">Reintentar</button></p> }
+      @if (partnersLoading) { <p role="status">Cargando socios…</p> }
+      @if (partnerCards.length) {
+        <div class="partner-summary"><article><span>Aportes registrados</span><strong>{{ money(partnerContributions, state.currency) }}</strong></article><article><span>Retiros registrados</span><strong>{{ money(partnerWithdrawals, state.currency) }}</strong></article><article><span>Pendiente de reintegro</span><strong>{{ money(partnerOutstanding, state.currency) }}</strong></article></div>
+        <div class="partner-grid">@for (partner of partnerCards; track partner.partnerId) {
+          <article class="visual-panel partner-card"><header><span class="avatar">{{ partner.partnerName.slice(0, 1).toUpperCase() }}</span><div><h3>{{ partner.partnerName }}</h3><span class="panel-description">{{ state.currency }} · acumulado al corte</span></div></header>
+            <button type="button" (click)="partnerDetail(partner, 'contributions')"><span>Aportes</span><strong>{{ money(partner.contributions, state.currency) }}</strong><mat-icon>chevron_right</mat-icon></button>
+            <button type="button" (click)="partnerDetail(partner, 'withdrawals')"><span>Retiros</span><strong>{{ money(partner.withdrawals, state.currency) }}</strong><mat-icon>chevron_right</mat-icon></button>
+            <button type="button" (click)="partnerDetail(partner, 'reimbursableExpenses')"><span>Gastos a reintegrar</span><strong>{{ money(partner.reimbursableExpenses, state.currency) }}</strong><mat-icon>chevron_right</mat-icon></button>
+            <button type="button" (click)="partnerDetail(partner, 'reimbursements')"><span>Ya reintegrado</span><strong>{{ money(partner.reimbursements, state.currency) }}</strong><mat-icon>chevron_right</mat-icon></button>
+            <button type="button" class="partner-outstanding" (click)="partnerDetail(partner, 'outstanding')"><span>Pendiente de reintegro</span><strong>{{ money(partner.outstanding, state.currency) }}</strong><mat-icon>chevron_right</mat-icon></button>
+          </article>
+        }</div>
+        <p class="footnote">Los aportes incluyen gastos afrontados por socios como aporte. Los gastos reintegrables y sus devoluciones se consultan por separado para no contar dos veces el gasto.</p>
+      } @else if (!partnersLoading && !partnersError) { <section class="empty-state visual-panel"><mat-icon>groups</mat-icon><h2>Un lugar para ver el aporte de cada socio</h2><p>Agrega los socios y registra sus movimientos desde Finanzas.</p><button mat-stroked-button (click)="configure('partners')">Agregar socios</button></section> }
+    }
+
+    @if (state.section === 'compromisos') {
+      <section class="section-heading"><div><h2>Cobros, pagos y acuerdos</h2><p>Para anticipar compromisos sin mezclarlos con el dinero que ya se movió.</p></div></section>
+      @if (row; as totals) {
+        <div class="commitment-grid">
+          <button type="button" class="visual-panel commitment-card" (click)="openDetail('Ingresos pendientes de cobro', totals.pendingIncome, 'PendingIncome')"><span class="eyebrow">CLIENTES Y COBROS</span><h3>Por cobrar</h3><strong>{{ money(totals.pendingIncome, state.currency) }}</strong><span>Pendientes y vencidos del período <mat-icon>arrow_forward</mat-icon></span></button>
+          <button type="button" class="visual-panel commitment-card" (click)="openDetail('Egresos pendientes de pago', totals.pendingExpense, 'PendingExpense')"><span class="eyebrow">EGRESOS REGISTRADOS</span><h3>Por pagar</h3><strong>{{ money(totals.pendingExpense, state.currency) }}</strong><span>Pendientes y vencidos del período <mat-icon>arrow_forward</mat-icon></span></button>
+        </div>
+      }
+      <section class="visual-panel agreements-panel">
+        <header class="panel-heading"><div><span class="eyebrow">EQUIPO</span><h2>Saldos de acuerdos</h2></div><div class="year-controls"><label>Año de liquidación<input type="number" min="2000" max="2100" [(ngModel)]="obligationsYear" /></label><button mat-stroked-button [disabled]="obligationsLoading" (click)="loadObligations()">Consultar</button></div></header>
+        <p class="panel-description">Los porcentajes corresponden al año consultado. Los montos fijos abarcan todo el acuerdo. Se muestran separados de los egresos pendientes porque pueden representar la misma obligación.</p>
+        @if (obligationsError) { <p role="alert" class="error">{{ obligationsError }} <button mat-button (click)="loadObligations()">Reintentar</button></p> }
+        @if (obligationsLoading) { <p role="status">Consultando acuerdos…</p> }
+        <div class="table-scroll"><table><thead><tr><th>Persona / proyecto</th><th>Obligación</th><th>Cancelado</th><th>Saldo</th><th></th></tr></thead><tbody>
+          @for (contract of obligations; track contract.contractId) { @if (obligationRow(contract); as balance) {
+            <tr><td><strong>{{ contract.developerName }}</strong><small>{{ contract.projectName }}</small>@if (contract.needsReview) { <span class="partial">Datos por revisar</span> } @if (!applicable(contract)) { <small>Acuerdo en {{ contract.currency }}</small> }</td>
+              <td>{{ applicable(contract) ? money(balance.totalDue, state.currency) : 'No aplica en ' + state.currency }}</td><td>{{ applicable(contract) ? money(balance.totalPaid, state.currency) : '—' }}</td><td><strong>{{ applicable(contract) ? money(balance.totalBalance, state.currency) : '—' }}</strong></td><td><button mat-button [disabled]="obligationsLoading" (click)="openContract(contract)">Ver detalle</button></td></tr>
+          } } @empty { @if (!obligationsLoading && !obligationsError) { <tr><td colspan="5">No hay acuerdos registrados.</td></tr> } }
+        </tbody></table></div>
+        @if (obligationsLoaded) { <footer class="pagination"><span>{{ obligationsTotal }} acuerdos · página {{ obligationsPage }}</span><button mat-button [disabled]="obligationsLoading || obligationsPage <= 1" (click)="loadObligations(obligationsPage - 1)">Anterior</button><button mat-button [disabled]="obligationsLoading || obligationsPage * 10 >= obligationsTotal" (click)="loadObligations(obligationsPage + 1)">Siguiente</button></footer> }
+      </section>
+    }
+  }
+</main>

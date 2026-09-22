@@ -20,6 +20,7 @@ export interface Proveedor {
 }
 
 export interface MovimientoListado {
+  indicatorAmount?: number | null;
   currency: string;
   nature: string;
   settlementDate?: string;
@@ -107,6 +108,8 @@ export interface ComprobanteArchivo {
 }
 
 export interface FinanzaFiltros {
+  view?: string;
+  partnerId?: string;
   currency?: string;
   nature?: string;
   projectId?: string;

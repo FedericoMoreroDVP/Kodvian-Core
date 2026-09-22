@@ -42,6 +42,7 @@ public class FinancialMovementService : IFinancialMovementService
         var items = await query
             .OrderByDescending(x => x.MovementDate)
             .ThenByDescending(x => x.FechaCreacion)
+            .ThenBy(x => x.Id)
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(x => new FinancialMovementListItemDto
@@ -51,6 +52,9 @@ public class FinancialMovementService : IFinancialMovementService
                 CategoryName = x.Category != null ? x.Category.Name : string.Empty,
                 Description = x.Description,
                 Amount = x.Amount,
+                IndicatorAmount = request.View == null ? (decimal?)null : request.View == "OperationalResult" || request.View == "RecordedCash"
+                    ? (x.MovementType == FinancialMovementType.Ingreso ? x.Amount : -x.Amount)
+                    : request.View == "PartnerOutstanding" && x.Nature == "ReintegroSocio" ? -x.Amount : x.Amount,
                 Currency = x.Currency, Nature = x.Nature, SettlementDate = x.SettlementDate, ExchangeId = x.ExchangeId,
                 DeveloperPaymentId = x.DeveloperPayment != null ? x.DeveloperPayment.Id : null,
                 MovementDate = x.MovementDate,
@@ -317,6 +321,39 @@ public class FinancialMovementService : IFinancialMovementService
             .AsNoTracking()
             .Where(x => x.Activo)
             .AsQueryable();
+        if (request.PartnerId.HasValue) query = query.Where(x => x.PartnerId == request.PartnerId);
+        var useSettlementDate = request.UseSettlementDate;
+        if (!string.IsNullOrEmpty(request.View))
+        {
+            if (!FinanceRules.DetailViews.Contains(request.View)) throw new ArgumentException("Vista financiera inválida");
+            FinanceRules.Currency(request.Currency);
+            var pendingView = request.View is "PendingIncome" or "PendingExpense";
+            useSettlementDate = !pendingView;
+            if (pendingView)
+                query = query.Where(x => x.Status == FinancialMovementStatus.Pendiente || x.Status == FinancialMovementStatus.Vencido);
+            else
+            {
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                query = query.Where(x => x.SettlementDate.HasValue && x.SettlementDate <= today
+                    && (x.MovementType == FinancialMovementType.Ingreso && x.Status == FinancialMovementStatus.Cobrado
+                        || x.MovementType == FinancialMovementType.Egreso && x.Status == FinancialMovementStatus.Pagado));
+            }
+            query = request.View switch
+            {
+                "OperationalIncome" => query.Where(x => x.Nature == "Operacion" && x.MovementType == FinancialMovementType.Ingreso),
+                "OperationalExpense" => query.Where(x => x.Nature == "Operacion" && x.MovementType == FinancialMovementType.Egreso),
+                "OperationalResult" => query.Where(x => x.Nature == "Operacion"),
+                "RecordedCash" => query.Where(x => x.Funding == "Empresa"),
+                "PendingIncome" => query.Where(x => x.MovementType == FinancialMovementType.Ingreso),
+                "PendingExpense" => query.Where(x => x.MovementType == FinancialMovementType.Egreso),
+                "PartnerContributions" => query.Where(x => x.Nature == "AporteSocio" || x.Funding == "SocioAporte"),
+                "PartnerWithdrawals" => query.Where(x => x.Nature == "RetiroSocio"),
+                "PartnerReimbursableExpenses" => query.Where(x => x.Funding == "SocioReintegrable"),
+                "PartnerReimbursements" => query.Where(x => x.Nature == "ReintegroSocio"),
+                "PartnerOutstanding" => query.Where(x => x.Funding == "SocioReintegrable" || x.Nature == "ReintegroSocio"),
+                _ => query
+            };
+        }
         if (!string.IsNullOrEmpty(request.Currency)) query = query.Where(x => x.Currency == request.Currency);
         if (!string.IsNullOrEmpty(request.Nature)) query = query.Where(x => x.Nature == request.Nature);
         if (request.ProjectId.HasValue) query = query.Where(x => x.ProjectId == request.ProjectId);
@@ -326,12 +363,12 @@ public class FinancialMovementService : IFinancialMovementService
 
         if (request.DateFrom.HasValue)
         {
-            query = request.UseSettlementDate ? query.Where(x => x.SettlementDate >= request.DateFrom.Value) : query.Where(x => x.MovementDate >= request.DateFrom.Value);
+            query = useSettlementDate ? query.Where(x => x.SettlementDate >= request.DateFrom.Value) : query.Where(x => x.MovementDate >= request.DateFrom.Value);
         }
 
         if (request.DateTo.HasValue)
         {
-            query = request.UseSettlementDate ? query.Where(x => x.SettlementDate <= request.DateTo.Value) : query.Where(x => x.MovementDate <= request.DateTo.Value);
+            query = useSettlementDate ? query.Where(x => x.SettlementDate <= request.DateTo.Value) : query.Where(x => x.MovementDate <= request.DateTo.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(request.MovementType) && Enum.TryParse<FinancialMovementType>(request.MovementType, true, out var type))

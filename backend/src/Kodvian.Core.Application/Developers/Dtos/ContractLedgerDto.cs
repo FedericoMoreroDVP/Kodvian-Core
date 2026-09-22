@@ -2,6 +2,7 @@ namespace Kodvian.Core.Application.Developers.Dtos;
 
 public class ContractLedgerDto
 {
+    public int Year { get; set; }
     public Guid ContractId { get; set; }
     public Guid ProjectId { get; set; }
     public string ProjectName { get; set; } = string.Empty;

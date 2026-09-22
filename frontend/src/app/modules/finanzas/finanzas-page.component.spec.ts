@@ -43,20 +43,17 @@ describe('Finanzas: histórico bajo demanda', () => {
     http.expectNone(r => r.url.startsWith('/api/finance/'));
     expect(fixture.componentInstance.filtrosAvanzados).toBeFalse(); fixture.destroy();
   });
-  it('abre el modal por acción explícita y aplica sus filtros de cobros al cerrarse', async () => {
+  it('navega al nuevo módulo por acción explícita, sin abrir el modal retirado', () => {
     const fixture = initialize();
-    await fixture.componentInstance.abrirHistorico();
-    expect(dialog.open).toHaveBeenCalledTimes(1);
-    await fixture.componentInstance.abrirHistorico();
-    expect(dialog.open).toHaveBeenCalledTimes(1);
-    closed.next({ detail: { currency: 'ARS', movementType: 'Ingreso', from: '', to: '2025-09-22' } }); closed.complete();
-    http.expectOne('/api/financial-movements/monthly-summary').flush({ data: monthly });
-    const request = http.expectOne(r => r.url === '/api/financial-movements');
-    expect(request.request.params.get('status')).toBe('Cobrado');
-    expect(request.request.params.get('useSettlementDate')).toBe('true');
-    expect(request.request.params.has('dateFrom')).toBeFalse();
-    request.flush({ data: { items: [], totalCount: 0 } });
-    expect(fixture.componentInstance.historicoAbierto).toBeFalse();
-    expect(fixture.componentInstance.filtrosAvanzados).toBeTrue(); fixture.destroy();
+    fixture.componentInstance.abrirVisionFinanciera();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/vision-financiera']);
+    expect(dialog.open).not.toHaveBeenCalled();
+    http.expectNone(r => r.url === '/api/finance/overview'); fixture.destroy();
+  });
+  it('redirige los enlaces históricos antiguos sin cargar la pantalla operativa', () => {
+    spyOn(TestBed.inject(ActivatedRoute).snapshot.queryParamMap, 'get').and.callFake(name => name === 'accion' ? 'historico' : null);
+    const fixture = TestBed.createComponent(FinanzasPageComponent); fixture.detectChanges();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/vision-financiera'], { replaceUrl: true });
+    http.expectNone(() => true); expect(dialog.open).not.toHaveBeenCalled(); fixture.destroy();
   });
 });
