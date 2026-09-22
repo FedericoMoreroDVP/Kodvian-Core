@@ -1,6 +1,7 @@
 ﻿using Kodvian.Core.Application.Dashboard.Abstractions;
 using Kodvian.Core.Application.Dashboard.Dtos;
 using Kodvian.Core.Application.Dashboard.Requests;
+using Kodvian.Core.Application.Finances.Abstractions;
 using Kodvian.Core.Domain.Enums;
 using Kodvian.Core.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -11,10 +12,12 @@ namespace Kodvian.Core.Infrastructure.Services;
 public class DashboardService : IDashboardService
 {
     private readonly KodvianDbContext _dbContext;
+    private readonly IFinanceOverviewService _finance;
 
-    public DashboardService(KodvianDbContext dbContext)
+    public DashboardService(KodvianDbContext dbContext, IFinanceOverviewService finance)
     {
         _dbContext = dbContext;
+        _finance = finance;
     }
 
     public async Task<DashboardOverviewDto> GetOverviewAsync(DashboardOverviewRequestDto request, CancellationToken cancellationToken = default)
@@ -47,21 +50,7 @@ public class DashboardService : IDashboardService
             .AsNoTracking()
             .CountAsync(x => x.Activo && x.FechaVencimiento == today, cancellationToken);
 
-        var monthlyTotals = await _dbContext.FinancialMovements
-            .AsNoTracking()
-            .Where(x => x.MovementDate >= monthStart
-                        && x.MovementDate <= monthEnd
-                        && x.Status != FinancialMovementStatus.Anulado)
-            .GroupBy(x => x.MovementType)
-            .Select(g => new { MovementType = g.Key, Total = g.Sum(x => x.Amount) })
-            .ToListAsync(cancellationToken);
-
-        var pendingTotals = await _dbContext.FinancialMovements
-            .AsNoTracking()
-            .Where(x => x.Status == FinancialMovementStatus.Pendiente)
-            .GroupBy(x => x.MovementType)
-            .Select(g => new { MovementType = g.Key, Total = g.Sum(x => x.Amount) })
-            .ToListAsync(cancellationToken);
+        var finance = await _finance.GetAsync(monthStart, monthEnd, cancellationToken);
 
         var priorityTasks = await _dbContext.Tasks
             .AsNoTracking()
@@ -99,6 +88,7 @@ public class DashboardService : IDashboardService
                 CategoryName = x.Category != null ? x.Category.Name : string.Empty,
                 ClientName = x.Client != null ? x.Client.CommercialName : null,
                 Amount = x.Amount,
+                Currency = x.Currency,
                 DueDate = x.DueDate,
                 Status = x.Status.ToString()
             })
@@ -116,44 +106,28 @@ public class DashboardService : IDashboardService
                 Description = x.Description,
                 CategoryName = x.Category != null ? x.Category.Name : string.Empty,
                 Amount = x.Amount,
+                Currency = x.Currency,
                 MovementDate = x.MovementDate,
                 Status = x.Status.ToString()
             })
             .ToListAsync(cancellationToken);
 
-        var monthlyIncome = monthlyTotals
-            .Where(x => x.MovementType == FinancialMovementType.Ingreso)
-            .Select(x => x.Total)
-            .FirstOrDefault();
-
-        var monthlyExpense = monthlyTotals
-            .Where(x => x.MovementType == FinancialMovementType.Egreso)
-            .Select(x => x.Total)
-            .FirstOrDefault();
-
-        var pendingIncome = pendingTotals
-            .Where(x => x.MovementType == FinancialMovementType.Ingreso)
-            .Select(x => x.Total)
-            .FirstOrDefault();
-
-        var pendingExpense = pendingTotals
-            .Where(x => x.MovementType == FinancialMovementType.Egreso)
-            .Select(x => x.Total)
-            .FirstOrDefault();
+        var ars = finance.Currencies.Single(x => x.Currency == "ARS");
 
         return new DashboardOverviewDto
         {
+            Finance = finance,
             Kpis = new DashboardKpisDto
             {
                 ActiveClients = activeClients,
                 ProjectsInProgress = projectsInProgress,
                 OverdueTasks = overdueTasks,
                 TasksForToday = tasksForToday,
-                MonthlyIncome = monthlyIncome,
-                MonthlyExpense = monthlyExpense,
-                MonthlyResult = monthlyIncome - monthlyExpense,
-                PendingCollections = pendingIncome,
-                PendingPayments = pendingExpense
+                MonthlyIncome = ars.Income,
+                MonthlyExpense = ars.Expense,
+                MonthlyResult = ars.Result,
+                PendingCollections = ars.PendingIncome,
+                PendingPayments = ars.PendingExpense
             },
             PriorityTasks = priorityTasks.AsReadOnly(),
             UpcomingCollections = upcomingCollections.AsReadOnly(),

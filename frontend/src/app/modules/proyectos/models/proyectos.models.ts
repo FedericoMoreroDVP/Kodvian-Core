@@ -86,6 +86,7 @@ export interface DesarrolladorExterno {
 }
 
 export interface ContratoDesarrollador {
+  currency?: string | null;
   id: string;
   projectId: string;
   projectName: string;
@@ -117,6 +118,13 @@ export interface AsignacionDesarrolladorFormulario {
 }
 
 export interface PagoDesarrollador {
+  currency?: string | null;
+  appliedCurrency?: string | null;
+  appliedAmount?: number | null;
+  exchangeRate?: number | null;
+  financialMovementId?: string | null;
+  version: string;
+  isActive: boolean;
   id: string;
   contractId: string;
   paymentDate: string;
@@ -179,6 +187,7 @@ export interface DesarrolladorFormulario {
 }
 
 export interface ContratoDesarrolladorFormulario {
+  currency?: string | null;
   developerId: string;
   paymentMode: ModoPagoContrato;
   percentage?: number | null;
@@ -190,6 +199,12 @@ export interface ContratoDesarrolladorFormulario {
 }
 
 export interface PagoDesarrolladorFormulario {
+  currency: string;
+  appliedCurrency: string;
+  appliedAmount: number;
+  existingMovementId?: string | null;
+  expectedVersion?: string;
+  requestId: string;
   paymentDate: string;
   amount: number;
   periodYear: number;
@@ -208,6 +223,9 @@ export interface LedgerContratoMes {
 }
 
 export interface LedgerContrato {
+  currency?: string | null;
+  needsReview: boolean;
+  currencies: ContractCurrencyLedger[];
   contractId: string;
   projectId: string;
   projectName: string;
@@ -216,6 +234,14 @@ export interface LedgerContrato {
   paymentMode: ModoPagoContrato;
   percentage?: number;
   agreedAmount?: number;
+  totalDue: number;
+  totalPaid: number;
+  totalBalance: number;
+  months: LedgerContratoMes[];
+}
+
+export interface ContractCurrencyLedger {
+  currency: string;
   totalDue: number;
   totalPaid: number;
   totalBalance: number;

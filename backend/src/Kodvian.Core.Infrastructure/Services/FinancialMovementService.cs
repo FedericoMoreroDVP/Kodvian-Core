@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Kodvian.Core.Application.Common.Files;
 using Kodvian.Core.Application.Common.Models;
 using Kodvian.Core.Application.Finances.Abstractions;
+using Kodvian.Core.Application.Finances;
 using Kodvian.Core.Application.Finances.Dtos;
 using Kodvian.Core.Application.Finances.Requests;
 using Kodvian.Core.Domain.Entities;
@@ -19,15 +20,17 @@ public class FinancialMovementService : IFinancialMovementService
     private readonly KodvianDbContext _dbContext;
     private readonly IFileStorageService _fileStorageService;
     private readonly StorageOptions _storageOptions;
+    private readonly IFinanceOverviewService _overview;
 
     public FinancialMovementService(
         KodvianDbContext dbContext,
         IFileStorageService fileStorageService,
-        IOptions<StorageOptions> storageOptions)
+        IOptions<StorageOptions> storageOptions, IFinanceOverviewService overview)
     {
         _dbContext = dbContext;
         _fileStorageService = fileStorageService;
         _storageOptions = storageOptions.Value;
+        _overview = overview;
     }
 
     public async Task<PagedResultDto<FinancialMovementListItemDto>> GetPagedAsync(FinancialMovementListRequestDto request, CancellationToken cancellationToken = default)
@@ -48,6 +51,8 @@ public class FinancialMovementService : IFinancialMovementService
                 CategoryName = x.Category != null ? x.Category.Name : string.Empty,
                 Description = x.Description,
                 Amount = x.Amount,
+                Currency = x.Currency, Nature = x.Nature, SettlementDate = x.SettlementDate, ExchangeId = x.ExchangeId,
+                DeveloperPaymentId = x.DeveloperPayment != null ? x.DeveloperPayment.Id : null,
                 MovementDate = x.MovementDate,
                 DueDate = x.DueDate,
                 Status = x.Status.ToString(),
@@ -77,10 +82,26 @@ public class FinancialMovementService : IFinancialMovementService
 
     public async Task<FinancialMovementDetailDto> CreateAsync(Guid createdById, FinancialMovementUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
+        await using var tx = await FinanceWriteScope.BeginAsync(_dbContext, cancellationToken);
+        if (request.RequestId == Guid.Empty) throw new ArgumentException("Identificador de operación requerido");
+        var previous = await _dbContext.FinancialMovements.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.RequestId, cancellationToken);
+        if (previous != null)
+        {
+            if (previous.CreatedById != createdById || previous.Amount != request.Amount || previous.Currency != request.Currency
+                || previous.Nature != request.Nature || previous.Funding != request.Funding || previous.PartnerId != request.PartnerId
+                || previous.CategoryId != request.CategoryId || previous.ProjectId != request.ProjectId || previous.ClientId != request.ClientId || previous.ProviderId != request.ProviderId
+                || previous.MovementDate != request.MovementDate || previous.SettlementDate != request.SettlementDate || previous.Status.ToString() != request.Status
+                || previous.MovementType.ToString() != request.MovementType || previous.Description != request.Description.Trim()
+                || previous.Notes != Normalize(request.Notes) || previous.ReceiptNumber != Normalize(request.ReceiptNumber) || previous.PaymentMethod != Normalize(request.PaymentMethod))
+                throw new ArgumentException("La operación ya se utilizó. Consulta el movimiento existente antes de volver a guardar.");
+            return (await GetByIdAsync(previous.Id, cancellationToken))!;
+        }
         await ValidateReferencesAsync(createdById, request, cancellationToken);
+        await ValidateFinanceAsync(request, null, cancellationToken);
 
         var movement = new FinancialMovement
         {
+            Id = request.RequestId,
             CreatedById = createdById
         };
 
@@ -88,6 +109,7 @@ public class FinancialMovementService : IFinancialMovementService
 
         _dbContext.FinancialMovements.Add(movement);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
 
         return await _dbContext.FinancialMovements
             .AsNoTracking()
@@ -98,6 +120,7 @@ public class FinancialMovementService : IFinancialMovementService
 
     public async Task<FinancialMovementDetailDto?> UpdateAsync(Guid id, FinancialMovementUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
+        await using var tx = await FinanceWriteScope.BeginAsync(_dbContext, cancellationToken);
         await ValidateReferencesAsync(null, request, cancellationToken);
 
         var movement = await _dbContext.FinancialMovements.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -106,10 +129,17 @@ public class FinancialMovementService : IFinancialMovementService
             return null;
         }
 
+        if (movement.Version != request.ExpectedVersion) throw new ArgumentException("El movimiento cambió. Actualiza y vuelve a intentar.");
+        if (movement.ExchangeId != null) throw new ArgumentException("Anula el cambio de moneda completo y registra la corrección");
+        if (await _dbContext.DeveloperPayments.AnyAsync(x => x.FinancialMovementId == id, cancellationToken))
+            throw new ArgumentException("Este egreso está vinculado a un pago. Edítalo o anúlalo desde el proyecto.");
+        await ValidateFinanceAsync(request, movement, cancellationToken);
         ApplyRequest(movement, request);
+        movement.Version = Guid.NewGuid();
         movement.FechaActualizacion = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
 
         return await _dbContext.FinancialMovements
             .AsNoTracking()
@@ -126,32 +156,14 @@ public class FinancialMovementService : IFinancialMovementService
         var monthStart = new DateOnly(y, m, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
-        var monthlyTotals = await _dbContext.FinancialMovements
-            .AsNoTracking()
-            .Where(x => x.MovementDate >= monthStart && x.MovementDate <= monthEnd && x.Status != FinancialMovementStatus.Anulado)
-            .GroupBy(x => x.MovementType)
-            .Select(g => new { MovementType = g.Key, Total = g.Sum(x => x.Amount) })
-            .ToListAsync(cancellationToken);
-
-        var pendingTotals = await _dbContext.FinancialMovements
-            .AsNoTracking()
-            .Where(x => x.Status == FinancialMovementStatus.Pendiente)
-            .GroupBy(x => x.MovementType)
-            .Select(g => new { MovementType = g.Key, Total = g.Sum(x => x.Amount) })
-            .ToListAsync(cancellationToken);
-
-        var income = monthlyTotals.Where(x => x.MovementType == FinancialMovementType.Ingreso).Select(x => x.Total).FirstOrDefault();
-        var expense = monthlyTotals.Where(x => x.MovementType == FinancialMovementType.Egreso).Select(x => x.Total).FirstOrDefault();
-        var pendingIncome = pendingTotals.Where(x => x.MovementType == FinancialMovementType.Ingreso).Select(x => x.Total).FirstOrDefault();
-        var pendingExpense = pendingTotals.Where(x => x.MovementType == FinancialMovementType.Egreso).Select(x => x.Total).FirstOrDefault();
+        var summary = await _overview.GetAsync(monthStart, monthEnd, cancellationToken);
+        var ars = summary.Currencies.Single(x => x.Currency == "ARS");
 
         return new FinanceMonthlySummaryDto
         {
-            MonthlyIncome = income,
-            MonthlyExpense = expense,
-            MonthlyResult = income - expense,
-            PendingIncome = pendingIncome,
-            PendingExpense = pendingExpense
+            Currencies = summary.Currencies,
+            MonthlyIncome = ars.Income, MonthlyExpense = ars.Expense, MonthlyResult = ars.Result,
+            PendingIncome = ars.PendingIncome, PendingExpense = ars.PendingExpense
         };
     }
 
@@ -303,16 +315,23 @@ public class FinancialMovementService : IFinancialMovementService
     {
         var query = _dbContext.FinancialMovements
             .AsNoTracking()
+            .Where(x => x.Activo)
             .AsQueryable();
+        if (!string.IsNullOrEmpty(request.Currency)) query = query.Where(x => x.Currency == request.Currency);
+        if (!string.IsNullOrEmpty(request.Nature)) query = query.Where(x => x.Nature == request.Nature);
+        if (request.ProjectId.HasValue) query = query.Where(x => x.ProjectId == request.ProjectId);
+        if (request.ExactAmount.HasValue) query = query.Where(x => x.Amount == request.ExactAmount);
+        if (request.UnlinkedOnly) query = query.Where(x => x.DeveloperPayment == null && x.ExchangeId == null && x.Activo && x.Nature == "Operacion" && x.Funding == "Empresa"
+            && (x.Status == FinancialMovementStatus.Pendiente || x.Status == FinancialMovementStatus.Vencido || x.Status == FinancialMovementStatus.Pagado));
 
         if (request.DateFrom.HasValue)
         {
-            query = query.Where(x => x.MovementDate >= request.DateFrom.Value);
+            query = request.UseSettlementDate ? query.Where(x => x.SettlementDate >= request.DateFrom.Value) : query.Where(x => x.MovementDate >= request.DateFrom.Value);
         }
 
         if (request.DateTo.HasValue)
         {
-            query = query.Where(x => x.MovementDate <= request.DateTo.Value);
+            query = request.UseSettlementDate ? query.Where(x => x.SettlementDate <= request.DateTo.Value) : query.Where(x => x.MovementDate <= request.DateTo.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(request.MovementType) && Enum.TryParse<FinancialMovementType>(request.MovementType, true, out var type))
@@ -352,6 +371,8 @@ public class FinancialMovementService : IFinancialMovementService
         movement.ProjectId = request.ProjectId;
         movement.Description = request.Description.Trim();
         movement.Amount = request.Amount;
+        movement.Currency = request.Currency; movement.Nature = request.Nature; movement.Funding = request.Funding;
+        movement.PartnerId = request.PartnerId; movement.SettlementDate = request.SettlementDate; movement.SettlementDateEstimated = request.SettlementDateEstimated;
         movement.MovementDate = request.MovementDate;
         movement.DueDate = request.DueDate;
         movement.Status = ParseStatus(request.Status);
@@ -396,6 +417,9 @@ public class FinancialMovementService : IFinancialMovementService
             ProjectName = x.Project != null ? x.Project.Nombre : null,
             Description = x.Description,
             Amount = x.Amount,
+            Currency = x.Currency, Nature = x.Nature, Funding = x.Funding, PartnerId = x.PartnerId,
+            SettlementDate = x.SettlementDate, SettlementDateEstimated = x.SettlementDateEstimated, Version = x.Version, ExchangeId = x.ExchangeId,
+            DeveloperPaymentId = x.DeveloperPayment != null ? x.DeveloperPayment.Id : null,
             MovementDate = x.MovementDate,
             DueDate = x.DueDate,
             Status = x.Status.ToString(),
@@ -445,12 +469,50 @@ public class FinancialMovementService : IFinancialMovementService
         }
     }
 
+    private async Task ValidateFinanceAsync(FinancialMovementUpsertRequestDto request, FinancialMovement? original, CancellationToken ct)
+    {
+        FinanceRules.Currency(request.Currency); FinanceRules.Money(request.Amount); FinanceRules.Date(request.MovementDate);
+        if (!FinanceRules.Natures.Contains(request.Nature) || request.Nature == "CambioMoneda" || !FinanceRules.FundingSources.Contains(request.Funding))
+            throw new ArgumentException("Clasificación inválida; usa la operación específica para cambios de moneda");
+        var income = request.MovementType == "Ingreso";
+        if (request.MovementType is not ("Ingreso" or "Egreso") || request.Status is not ("Pendiente" or "Cobrado" or "Pagado" or "Vencido" or "Anulado")
+            || (income && request.Status == "Pagado") || (!income && request.Status == "Cobrado")) throw new ArgumentException("Estado incompatible con el tipo de movimiento");
+        var settled = request.Status is "Cobrado" or "Pagado";
+        if (settled && !request.SettlementDate.HasValue) throw new ArgumentException("Indica la fecha efectiva del cobro o pago");
+        if (request.SettlementDate.HasValue)
+        {
+            FinanceRules.Date(request.SettlementDate.Value);
+            if (request.SettlementDate > DateOnly.FromDateTime(DateTime.UtcNow)) throw new ArgumentException("Un cobro o pago efectivo no puede tener fecha futura");
+        }
+        if (!settled && request.Status != "Anulado" && request.SettlementDate.HasValue) throw new ArgumentException("Un pendiente no tiene fecha de cobro o pago efectivo");
+        if (request.Nature != "Operacion" && request.Funding != "Empresa") throw new ArgumentException("Esta clasificación utiliza fondos de la empresa");
+        if (request.Nature == "AporteSocio" && !income || (request.Nature is "RetiroSocio" or "ReintegroSocio") && income)
+            throw new ArgumentException("Tipo incompatible con aporte, retiro o reintegro");
+        if (request.Nature != "Operacion" && !settled && request.Status != "Anulado") throw new ArgumentException("Registra aportes y retiros cuando se hacen efectivos");
+        if (request.Funding != "Empresa" && (income || request.Nature != "Operacion" || !settled && request.Status != "Anulado"))
+            throw new ArgumentException("Un gasto afrontado por un socio debe ser un egreso operativo pagado");
+        var needsPartner = request.Nature != "Operacion" || request.Funding != "Empresa";
+        if (needsPartner != request.PartnerId.HasValue) throw new ArgumentException(needsPartner ? "Selecciona el socio" : "Este movimiento no requiere un socio");
+        var previousPartnerId = original?.PartnerId;
+        if (request.PartnerId.HasValue && !await _dbContext.Partners.AnyAsync(x => x.Id == request.PartnerId && (x.Activo || x.Id == previousPartnerId), ct)) throw new ArgumentException("Socio no disponible");
+        var keys = new[] { (request.PartnerId, request.Currency), (original?.PartnerId, original?.Currency ?? request.Currency) }.Distinct();
+        foreach (var (partnerId, currency) in keys.Where(x => x.Item1.HasValue))
+        {
+            var originalId = original?.Id;
+            var debt = await _dbContext.FinancialMovements.Where(x => x.Id != originalId && x.Activo && x.PartnerId == partnerId && x.Currency == currency && x.Status == FinancialMovementStatus.Pagado)
+                .SumAsync(x => x.Funding == "SocioReintegrable" ? x.Amount : x.Nature == "ReintegroSocio" ? -x.Amount : 0, ct);
+            if (request.PartnerId == partnerId && request.Currency == currency && request.Status == "Pagado") debt += request.Funding == "SocioReintegrable" ? request.Amount : request.Nature == "ReintegroSocio" ? -request.Amount : 0;
+            if (debt < 0) throw new ArgumentException("El reintegro supera los gastos registrados a devolver al socio");
+        }
+    }
+
     private async Task ValidateReferencesAsync(Guid? createdById, FinancialMovementUpsertRequestDto request, CancellationToken cancellationToken)
     {
-        var categoryExists = await _dbContext.FinancialCategories.AnyAsync(x => x.Id == request.CategoryId, cancellationToken);
+        var type = ParseMovementType(request.MovementType);
+        var categoryExists = await _dbContext.FinancialCategories.AnyAsync(x => x.Id == request.CategoryId && x.MovementType == type, cancellationToken);
         if (!categoryExists)
         {
-            throw new ArgumentException("La categoria seleccionada no existe");
+            throw new ArgumentException("La categoría no existe o no corresponde al tipo de movimiento");
         }
 
         if (request.ClientId.HasValue)

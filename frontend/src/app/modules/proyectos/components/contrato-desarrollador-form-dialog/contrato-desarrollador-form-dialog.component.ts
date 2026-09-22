@@ -38,6 +38,7 @@ export class ContratoDesarrolladorFormDialogComponent {
     paymentMode: ['Percentage' as ModoPagoContrato, [Validators.required]],
     percentage: [null as number | null],
     agreedAmount: [null as number | null],
+    currency: [''],
     startDate: [null as Date | null, [Validators.required]],
     endDate: [null as Date | null],
     isActive: [true],
@@ -51,6 +52,7 @@ export class ContratoDesarrolladorFormDialogComponent {
         paymentMode: data.contract.paymentMode,
         percentage: data.contract.percentage ?? null,
         agreedAmount: data.contract.agreedAmount ?? null,
+        currency: data.contract.currency ?? '',
         startDate: parseIsoDate(data.contract.startDate),
         endDate: parseIsoDate(data.contract.endDate),
         isActive: data.contract.isActive,
@@ -68,11 +70,13 @@ export class ContratoDesarrolladorFormDialogComponent {
     }
 
     const raw = this.form.getRawValue();
+    if (raw.paymentMode === 'FixedAmount' && !raw.currency) { this.form.controls.currency.setErrors({ required: true }); return; }
     const payload: ContratoDesarrolladorFormulario = {
       developerId: raw.developerId ?? '',
       paymentMode: (raw.paymentMode ?? 'Percentage') as ModoPagoContrato,
       percentage: raw.paymentMode === 'Percentage' ? Number(raw.percentage) : null,
       agreedAmount: raw.paymentMode === 'FixedAmount' ? Number(raw.agreedAmount) : null,
+      currency: raw.paymentMode === 'FixedAmount' ? raw.currency : null,
       startDate: formatDateToIso(raw.startDate) ?? '',
       endDate: formatDateToIso(raw.endDate),
       isActive: raw.isActive ?? true,

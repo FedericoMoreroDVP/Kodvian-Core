@@ -10,6 +10,7 @@ public class ProjectDeveloperContractDto
     public string PaymentMode { get; set; } = string.Empty;
     public decimal? Percentage { get; set; }
     public decimal? AgreedAmount { get; set; }
+    public string? Currency { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public bool IsActive { get; set; }

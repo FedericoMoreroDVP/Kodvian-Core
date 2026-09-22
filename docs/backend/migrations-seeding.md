@@ -54,6 +54,8 @@ Tambien requiere JWT productivo valido:
 
 ## Cuidados
 
+La migración `20260922161932_FinanceHistoryCurrencies` agrega historial financiero multimoneda y vinculación de pagos. Los movimientos históricos se conservan como ARS; las fechas efectivas copiadas quedan marcadas como provisionales. Los acuerdos y pagos antiguos conservan moneda nula hasta revisión y no se generan egresos retroactivos. El punto de partida queda sin configurar. Ver [Finanzas](../modules/finanzas.md).
+
 - Revisar migrations antes de deployar si modifican datos o constraints.
 - Evitar cambios destructivos sin plan de migracion.
 - Cuidar startups concurrentes si en el futuro hay multiples replicas.

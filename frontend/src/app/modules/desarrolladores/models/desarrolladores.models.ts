@@ -44,6 +44,9 @@ export interface TeamUserFormulario {
 }
 
 export interface ResumenContratoDesarrollador {
+  currency?: string | null;
+  needsReview: boolean;
+  currencies: import('../../proyectos/models/proyectos.models').ContractCurrencyLedger[];
   contractId: string;
   projectId: string;
   projectName: string;

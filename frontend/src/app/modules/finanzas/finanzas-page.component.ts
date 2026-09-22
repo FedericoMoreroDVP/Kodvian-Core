@@ -1,5 +1,8 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, ViewChild, inject } from '@angular/core';
+import { FinanceOverviewComponent } from './components/finance-overview.component';
+import { FinanceOverviewService } from './services/finance-overview.service';
+import { FINANCE_NATURES } from './models/finance-overview.models';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,19 +18,22 @@ import { MatTableModule } from '@angular/material/table';
 
 import { CategoriaFormDialogComponent } from './components/categoria-form-dialog/categoria-form-dialog.component';
 import { MovimientoFormDialogComponent } from './components/movimiento-form-dialog/movimiento-form-dialog.component';
-import { compareDates, formatDateToIso } from '../../core/date.utils';
+import { compareDates, formatDateToIso, parseIsoDate } from '../../core/date.utils';
 import { CategoriaFinanciera, CategoriaFormulario, EstadoMovimiento, FinanzaFiltros, FinanzasLookups, MovimientoDetalle, MovimientoFormulario, MovimientoListado, ResumenMensual, TipoMovimiento } from './models/finanzas.models';
 import { FinanzasService } from './services/finanzas.service';
 
 @Component({
   selector: 'app-finanzas-page',
   standalone: true,
-  imports: [ReactiveFormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatSnackBarModule],
+  imports: [FinanceOverviewComponent, ReactiveFormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatSnackBarModule],
   templateUrl: './finanzas-page.component.html',
   styleUrl: './finanzas-page.component.scss'
 })
 export class FinanzasPageComponent implements OnInit {
   private readonly finanzasService = inject(FinanzasService);
+  private readonly finance = inject(FinanceOverviewService);
+  @ViewChild(FinanceOverviewComponent) overview?: FinanceOverviewComponent;
+  readonly natures = [...FINANCE_NATURES, { value: 'CambioMoneda', label: 'Cambio de moneda' }];
   private readonly fb = inject(FormBuilder);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -41,6 +47,7 @@ export class FinanzasPageComponent implements OnInit {
   readonly columnas = ['movementType', 'category', 'client', 'description', 'amount', 'movementDate', 'status', 'actions'];
 
   readonly filtrosForm = this.fb.group({
+    currency: [''], nature: [''], useSettlementDate: [false],
     dateFrom: [null as Date | null],
     dateTo: [null as Date | null],
     movementType: [''],
@@ -114,10 +121,19 @@ export class FinanzasPageComponent implements OnInit {
   }
 
   cargarResumen(): void {
-    this.finanzasService.obtenerResumenMensual().subscribe({
-      next: (data) => (this.resumen = data),
-      error: () => this.snackBar.open('No se pudo cargar el resumen mensual', 'Cerrar', { duration: 3500 })
-    });
+    this.overview?.reload();
+  }
+
+  summaryDetail(event: { currency: string; movementType: 'Ingreso' | 'Egreso'; from: string; to: string }): void {
+    this.filtrosForm.reset({ currency: event.currency, nature: 'Operacion', movementType: event.movementType,
+      useSettlementDate: true, dateFrom: parseIsoDate(event.from), dateTo: parseIsoDate(event.to),
+      status: event.movementType === 'Ingreso' ? 'Cobrado' : 'Pagado', categoryId: '', clientId: '', providerId: '' });
+    this.pageNumber = 1; this.cargarMovimientos();
+  }
+  cancelExchange(row: MovimientoListado): void {
+    if (!row.exchangeId || !confirm('¿Anular ambas partes de este cambio de moneda?')) return;
+    this.finance.cancelExchange(row.exchangeId).subscribe({ next: () => { this.cargarMovimientos(); this.cargarResumen(); },
+      error: e => this.snackBar.open(e?.error?.message ?? 'No se pudo anular', 'Cerrar', { duration: 4000 }) });
   }
 
   cargarMovimientos(): void {
@@ -148,7 +164,7 @@ export class FinanzasPageComponent implements OnInit {
   }
 
   limpiarFiltros(): void {
-    this.filtrosForm.reset({ dateFrom: null, dateTo: null, movementType: '', categoryId: '', clientId: '', providerId: '', status: '' });
+    this.filtrosForm.reset({ currency: '', nature: '', useSettlementDate: false, dateFrom: null, dateTo: null, movementType: '', categoryId: '', clientId: '', providerId: '', status: '' });
     this.pageNumber = 1;
     this.cargarMovimientos();
   }
@@ -223,37 +239,8 @@ export class FinanzasPageComponent implements OnInit {
       }
     });
 
-    dialogRef.afterClosed().subscribe((payload?: MovimientoFormulario) => {
-      if (!payload) return;
-
-      const request = movimiento
-        ? this.finanzasService.actualizarMovimiento(movimiento.id, payload)
-        : this.finanzasService.crearMovimiento(payload);
-
-      request.subscribe({
-        next: (savedMovement) => {
-          if (payload.receiptFile) {
-            this.finanzasService.subirComprobanteMovimiento(savedMovement.id, payload.receiptFile).subscribe({
-              next: () => {
-                this.snackBar.open('El movimiento y su comprobante se registraron correctamente', 'Cerrar', { duration: 3000 });
-                this.cargarResumen();
-                this.cargarMovimientos();
-              },
-              error: (error) => {
-                this.snackBar.open(error?.error?.message ?? 'El movimiento se guardó, pero falló la carga del comprobante', 'Cerrar', { duration: 4000 });
-                this.cargarResumen();
-                this.cargarMovimientos();
-              }
-            });
-            return;
-          }
-
-          this.snackBar.open('El movimiento se registró correctamente', 'Cerrar', { duration: 3000 });
-          this.cargarResumen();
-          this.cargarMovimientos();
-        },
-        error: (error) => this.snackBar.open(error?.error?.message ?? 'Ocurrió un error al guardar', 'Cerrar', { duration: 3500 })
-      });
+    dialogRef.afterClosed().subscribe((changed?: boolean) => {
+      if (changed) { this.cargarResumen(); this.cargarMovimientos(); }
     });
   }
 
@@ -261,6 +248,8 @@ export class FinanzasPageComponent implements OnInit {
     return {
       pageNumber: this.pageNumber,
       pageSize: this.pageSize,
+      currency: this.filtrosForm.value.currency || undefined, nature: this.filtrosForm.value.nature || undefined,
+      useSettlementDate: this.filtrosForm.value.useSettlementDate ?? false,
       dateFrom: formatDateToIso(this.filtrosForm.value.dateFrom) || undefined,
       dateTo: formatDateToIso(this.filtrosForm.value.dateTo) || undefined,
       movementType: (this.filtrosForm.value.movementType as TipoMovimiento | '') || undefined,

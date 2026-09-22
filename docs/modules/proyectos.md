@@ -53,6 +53,9 @@ API anterior de archivos (ya no utilizada por la pantalla de detalle):
 Contratos y pagos:
 
 - Solo administrador.
+- Acuerdos fijos con moneda explícita; porcentajes sobre ingresos operativos registrados, por separado en ARS y USD. Un porcentaje sin base de ingresos genera cero obligación.
+- Pagos con moneda real y moneda/importe cancelados. Los nuevos pagos crean o vinculan un egreso; los históricos se revisan y vinculan sin generar egresos duplicados.
+- Edición y anulación de pagos sincronizadas con Finanzas. El detalle y los resúmenes del equipo muestran importes por moneda y avisos de revisión. Ver [Finanzas](finanzas.md).
 
 - `GET /api/projects/{projectId}/developer-contracts`.
 - `POST /api/projects/{projectId}/developer-contracts`.
@@ -60,6 +63,8 @@ Contratos y pagos:
 - `GET /api/developer-contracts/{id}/ledger`.
 - `GET /api/developer-contracts/{contractId}/payments`.
 - `POST /api/developer-contracts/{contractId}/payments`.
+- `PUT /api/developer-payments/{id}`.
+- `DELETE /api/developer-payments/{id}?expectedVersion=...`.
 - Comprobantes bajo `/api/developer-payments/{paymentId}/receipts`.
 
 ## Modelo de datos

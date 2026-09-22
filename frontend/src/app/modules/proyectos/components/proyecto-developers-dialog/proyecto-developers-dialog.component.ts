@@ -57,7 +57,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
 
   readonly assignmentColumns = ['developer', 'status', 'actions'];
   readonly contractColumns = ['developer', 'role', 'mode', 'amount', 'startDate', 'actions'];
-  readonly paymentColumns = ['date', 'amount', 'period', 'reference', 'receipts'];
+  readonly paymentColumns = ['date', 'amount', 'period', 'reference', 'receipts', 'actions'];
 
   developers: DesarrolladorExterno[] = [];
   analysts: LookupItem[] = [];
@@ -358,33 +358,17 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
     this.loadPayments(contract.id);
   }
 
-  registrarPago(contract: ContratoDesarrollador): void {
-    const ref = this.dialog.open(PagoDesarrolladorFormDialogComponent, { width: '760px', maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)', autoFocus: false, data: { contractId: contract.id } });
-    ref.afterClosed().subscribe((result?: { payload: PagoDesarrolladorFormulario; receiptFile: File | null }) => {
-      if (!result) return;
-
-      this.proyectosService.registrarPagoContrato(contract.id, result.payload).subscribe({
-        next: (payment) => {
-          if (result.receiptFile) {
-            this.proyectosService.subirComprobantePago(payment.id, result.receiptFile).subscribe({
-              next: () => {
-                this.snackBar.open('Pago y comprobante registrados', 'Cerrar', { duration: 3000 });
-                this.loadPayments(contract.id);
-              },
-              error: () => {
-                this.snackBar.open('Pago registrado, pero falló la carga del comprobante', 'Cerrar', { duration: 3500 });
-                this.loadPayments(contract.id);
-              }
-            });
-            return;
-          }
-
-          this.snackBar.open('Pago registrado correctamente', 'Cerrar', { duration: 3000 });
-          this.loadPayments(contract.id);
-        },
-        error: (error) => this.snackBar.open(error?.error?.message ?? 'No se pudo registrar el pago', 'Cerrar', { duration: 3500 })
-      });
+  registrarPago(contract: ContratoDesarrollador, payment?: PagoDesarrollador): void {
+    const ref = this.dialog.open(PagoDesarrolladorFormDialogComponent, { width: '860px', maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)', autoFocus: false, data: { contractId: contract.id, currency: contract.currency, payment } });
+    ref.afterClosed().subscribe((changed?: boolean) => {
+      if (changed) { this.selectedContract = contract; this.loadPayments(contract.id); this.loadContracts(); }
     });
+  }
+  editarPago(payment: PagoDesarrollador): void { if (this.selectedContract) this.registrarPago(this.selectedContract, payment); }
+  anularPago(payment: PagoDesarrollador): void {
+    if (!confirm('¿Anular este pago y su egreso financiero vinculado?')) return;
+    this.proyectosService.anularPago(payment).subscribe({ next: () => this.loadPayments(payment.contractId),
+      error: e => this.snackBar.open(e?.error?.message ?? 'No se pudo anular', 'Cerrar', { duration: 4000 }) });
   }
 
   verLedger(contract: ContratoDesarrollador): void {

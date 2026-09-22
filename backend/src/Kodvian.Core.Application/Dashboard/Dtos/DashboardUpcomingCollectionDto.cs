@@ -7,6 +7,7 @@ public class DashboardUpcomingCollectionDto
     public string CategoryName { get; set; } = string.Empty;
     public string? ClientName { get; set; }
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "ARS";
     public DateOnly? DueDate { get; set; }
     public string Status { get; set; } = string.Empty;
 }

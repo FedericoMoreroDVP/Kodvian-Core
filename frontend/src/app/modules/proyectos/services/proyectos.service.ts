@@ -121,6 +121,13 @@ export class ProyectosService {
     return this.http.post<ApiResponse<PagoDesarrollador>>(`/api/developer-contracts/${contractId}/payments`, payload).pipe(map((r) => r.data));
   }
 
+  actualizarPago(id: string, payload: PagoDesarrolladorFormulario): Observable<PagoDesarrollador> {
+    return this.http.put<ApiResponse<PagoDesarrollador>>(`/api/developer-payments/${id}`, payload).pipe(map(r => r.data));
+  }
+  anularPago(payment: PagoDesarrollador) {
+    return this.http.delete(`/api/developer-payments/${payment.id}`, { params: { expectedVersion: payment.version } });
+  }
+
   subirComprobantePago(paymentId: string, file: File): Observable<void> {
     const formData = new FormData();
     formData.append('file', file);

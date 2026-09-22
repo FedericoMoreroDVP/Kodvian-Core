@@ -240,7 +240,24 @@ Base route: `/api/users`
 
 Los usuarios devueltos incluyen `roles`, `isActive`, `developerId` y `sessionVersion`. `expectedVersion` se toma del listado para evitar sobrescribir cambios posteriores.
 
-## Notas de seguridad
+## Situación financiera y monedas
+
+Rutas exclusivas de administradores:
+
+- `GET /api/finance/overview?from=&to=`: histórico/período, configuración e indicadores ARS/USD.
+- `PUT /api/finance/setup`: punto de partida opcional, saldos por moneda, historial completo y versión esperada.
+- `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios.
+- `POST /api/finance/exchanges`, `DELETE /api/finance/exchanges/{id}`: cambios de moneda emparejados.
+- `GET /api/finance/team-obligations?year=&pageNumber=&pageSize=`: saldos de contratos separados de los egresos pendientes.
+- `PUT /api/developer-payments/{id}` y `DELETE /api/developer-payments/{id}?expectedVersion=...`: corrección/anulación coordinada con Finanzas.
+
+Los movimientos agregan moneda, clasificación, financiación, socio y fecha efectiva; su alta usa requestId y su edición expectedVersion.
+Los pagos agregan monedas real/aplicada, importe aplicado, requestId y existingMovementId opcional; los históricos requieren vincular un egreso existente.
+Los importes escalares antiguos de resúmenes representan solo ARS; usar `currencies` para la información completa.
+
+Detalles: [Finanzas](../modules/finanzas.md).
+
+## Notas de seguridad (aplicables a todas las rutas)
 
 - Los controllers principales usan policies por modulo.
 - El rol Desarrollador aislado consume `/api/my-work`; al combinarlo con otros roles obtiene la unión de sus permisos.

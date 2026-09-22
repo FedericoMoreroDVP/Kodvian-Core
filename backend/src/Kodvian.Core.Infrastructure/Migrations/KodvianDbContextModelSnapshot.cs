@@ -163,14 +163,28 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<decimal?>("AppliedAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("AppliedCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<Guid>("ContractId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
 
                     b.Property<DateTime?>("FechaActualizacion")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("FinancialMovementId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
@@ -189,11 +203,24 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ContractId");
 
+                    b.HasIndex("FinancialMovementId")
+                        .IsUnique();
+
                     b.HasIndex("PaymentDate");
+
+                    b.HasIndex("RequestId")
+                        .IsUnique();
 
                     b.HasIndex("ContractId", "PeriodYear", "PeriodMonth");
 
@@ -273,6 +300,35 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinanceSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("HistoryComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("OpeningArs")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("OpeningUsd")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FinanceSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FinanceSettings_Singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialCategory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -329,6 +385,11 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<Guid>("CreatedById")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -337,11 +398,19 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
 
+                    b.Property<Guid?>("ExchangeId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("FechaActualizacion")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("FechaCreacion")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Funding")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
 
                     b.Property<DateOnly>("MovementDate")
                         .HasColumnType("date");
@@ -349,9 +418,17 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<int>("MovementType")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Nature")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("PartnerId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("PaymentMethod")
                         .HasMaxLength(80)
@@ -367,8 +444,18 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<DateOnly?>("SettlementDate")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("SettlementDateEstimated")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
 
                     b.HasKey("Id");
 
@@ -380,9 +467,13 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
                     b.HasIndex("DueDate");
 
+                    b.HasIndex("ExchangeId");
+
                     b.HasIndex("MovementDate");
 
                     b.HasIndex("MovementType");
+
+                    b.HasIndex("PartnerId");
 
                     b.HasIndex("ProjectId");
 
@@ -390,11 +481,38 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
+                    b.HasIndex("Currency", "SettlementDate");
+
                     b.HasIndex("MovementDate", "FechaCreacion");
 
                     b.HasIndex("MovementType", "Status", "DueDate");
 
                     b.ToTable("FinancialMovements", (string)null);
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.Partner", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Partners", (string)null);
                 });
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.Project", b =>
@@ -519,6 +637,10 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
                     b.Property<decimal?>("AgreedAmount")
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Currency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
 
                     b.Property<Guid>("DeveloperId")
                         .HasColumnType("uuid");
@@ -981,7 +1103,14 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Kodvian.Core.Domain.Entities.FinancialMovement", "FinancialMovement")
+                        .WithOne("DeveloperPayment")
+                        .HasForeignKey("Kodvian.Core.Domain.Entities.DeveloperPayment", "FinancialMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Contract");
+
+                    b.Navigation("FinancialMovement");
                 });
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.DocumentFile", b =>
@@ -1035,6 +1164,11 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Kodvian.Core.Domain.Entities.Partner", "Partner")
+                        .WithMany()
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Kodvian.Core.Domain.Entities.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
@@ -1050,6 +1184,8 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Navigation("Client");
 
                     b.Navigation("CreatedBy");
+
+                    b.Navigation("Partner");
 
                     b.Navigation("Project");
 
@@ -1274,6 +1410,8 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialMovement", b =>
                 {
+                    b.Navigation("DeveloperPayment");
+
                     b.Navigation("Documents");
                 });
 

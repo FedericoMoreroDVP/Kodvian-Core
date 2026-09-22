@@ -1,0 +1,8 @@
+.overview { padding: 18px; border: 1px solid var(--kd-border-subtle); border-radius: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+input, select { color: var(--kd-text-primary); background: var(--kd-surface, #111c25); border: 1px solid var(--kd-border-subtle); padding: 9px; border-radius: 6px; }
+.panel { padding: 14px; border: 1px solid var(--kd-border-subtle); border-radius: 10px; margin-bottom: 14px; }
+.error { color: #ff9b9b; } p { font-size: 13px; line-height: 1.5; } details { margin-top: 15px; } summary { cursor: pointer; padding: 8px 0; }
+.table-wrap { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: 13px; } td, th { padding: 10px; text-align: left; border-bottom: 1px solid var(--kd-border-subtle); white-space: nowrap; }
+app-finance-currency-cards { display: block; margin: 12px 0; }

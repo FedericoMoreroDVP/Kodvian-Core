@@ -7,6 +7,11 @@ public class FinancialMovementListItemDto
     public string CategoryName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "ARS";
+    public string Nature { get; set; } = "Operacion";
+    public Guid? ExchangeId { get; set; }
+    public Guid? DeveloperPaymentId { get; set; }
+    public DateOnly? SettlementDate { get; set; }
     public DateOnly MovementDate { get; set; }
     public DateOnly? DueDate { get; set; }
     public string Status { get; set; } = string.Empty;

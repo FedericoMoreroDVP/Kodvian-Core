@@ -40,9 +40,11 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IProjectDeveloperAssignmentService, ProjectDeveloperAssignmentService>();
         services.AddScoped<IProjectDeveloperContractService, ProjectDeveloperContractService>();
         services.AddScoped<IDeveloperPaymentService, DeveloperPaymentService>();
+        services.AddScoped<DeveloperPaymentAccountingService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IFinancialCategoryService, FinancialCategoryService>();
         services.AddScoped<IFinancialMovementService, FinancialMovementService>();
+        services.AddScoped<IFinanceOverviewService, FinanceOverviewService>();
         services.AddScoped<IProviderService, ProviderService>();
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IMyWorkService, MyWorkService>();

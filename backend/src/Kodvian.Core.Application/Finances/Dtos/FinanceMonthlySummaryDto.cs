@@ -2,6 +2,7 @@
 
 public class FinanceMonthlySummaryDto
 {
+    public IReadOnlyCollection<Kodvian.Core.Application.Finances.Abstractions.CurrencyOverviewDto> Currencies { get; set; } = [];
     public decimal MonthlyIncome { get; set; }
     public decimal MonthlyExpense { get; set; }
     public decimal MonthlyResult { get; set; }

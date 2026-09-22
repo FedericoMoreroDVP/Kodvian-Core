@@ -1,4 +1,9 @@
 import { Component, Inject, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { FinanzasService } from '../../services/finanzas.service';
+import { FinanceOverviewService } from '../../services/finance-overview.service';
+import { FINANCE_NATURES, Partner } from '../../models/finance-overview.models';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -22,7 +27,7 @@ interface MovimientoFormData {
 @Component({
   selector: 'app-movimiento-form-dialog',
   standalone: true,
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule],
+  imports: [MatCheckboxModule, ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule],
   templateUrl: './movimiento-form-dialog.component.html',
   styleUrl: './movimiento-form-dialog.component.scss'
 })
@@ -30,7 +35,17 @@ export class MovimientoFormDialogComponent {
   private readonly fb = inject(FormBuilder);
   private readonly dialogRef = inject(MatDialogRef<MovimientoFormDialogComponent>);
 
-  readonly estados: EstadoMovimiento[] = ['Pendiente', 'Cobrado', 'Pagado', 'Vencido', 'Anulado'];
+  private readonly api = inject(FinanzasService);
+  private readonly finance = inject(FinanceOverviewService);
+  private readonly requestId = crypto.randomUUID();
+  readonly natures = FINANCE_NATURES;
+  partners: Partner[] = [];
+  saving = false;
+  error = '';
+  saved?: MovimientoDetalle;
+  get estados(): EstadoMovimiento[] { return ['Pendiente', this.form.controls.movementType.value === 'Ingreso' ? 'Cobrado' : 'Pagado', 'Vencido', 'Anulado']; }
+  get needsPartner(): boolean { return this.form.controls.nature.value !== 'Operacion'
+    || (this.form.controls.movementType.value === 'Egreso' && this.form.controls.funding.value !== 'Empresa'); }
   receiptFile: File | null = null;
 
   readonly form = this.fb.group({
@@ -41,6 +56,12 @@ export class MovimientoFormDialogComponent {
     projectId: [''],
     description: ['', [Validators.required, Validators.maxLength(500)]],
     amount: [0, [Validators.required, Validators.min(0.01)]],
+    currency: ['ARS', Validators.required],
+    nature: ['Operacion', Validators.required],
+    funding: ['Empresa', Validators.required],
+    partnerId: [''],
+    settlementDate: [null as Date | null],
+    settlementDateEstimated: [false],
     movementDate: [null as Date | null, [Validators.required]],
     dueDate: [null as Date | null],
     status: ['Pendiente' as EstadoMovimiento, [Validators.required]],
@@ -50,6 +71,8 @@ export class MovimientoFormDialogComponent {
   }, { validators: [movementDateRangeValidator()] });
 
   constructor(@Inject(MAT_DIALOG_DATA) public readonly data: MovimientoFormData) {
+    this.saved = data.movimiento;
+    this.finance.partners().subscribe({ next: rows => this.partners = rows, error: () => this.error = 'No se pudieron cargar los socios. Cierra y vuelve a abrir para reintentar.' });
     this.form.patchValue({
       movementType: data.tipoInicial
     });
@@ -63,6 +86,9 @@ export class MovimientoFormDialogComponent {
         projectId: data.movimiento.projectId ?? '',
         description: data.movimiento.description,
         amount: data.movimiento.amount,
+        currency: data.movimiento.currency, nature: data.movimiento.nature, funding: data.movimiento.funding,
+        partnerId: data.movimiento.partnerId ?? '', settlementDate: parseIsoDate(data.movimiento.settlementDate),
+        settlementDateEstimated: data.movimiento.settlementDateEstimated,
         movementDate: parseIsoDate(data.movimiento.movementDate),
         dueDate: parseIsoDate(data.movimiento.dueDate),
         status: data.movimiento.status,
@@ -73,14 +99,19 @@ export class MovimientoFormDialogComponent {
     }
   }
 
-  guardar(): void {
+  async guardar(): Promise<void> {
+    if (this.saving) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
 
     const raw = this.form.getRawValue();
-    this.dialogRef.close({
+    const settled = raw.status === 'Cobrado' || raw.status === 'Pagado';
+    if (settled && !raw.settlementDate) { this.error = 'Indica la fecha efectiva del cobro o pago'; return; }
+    if (this.needsPartner && !raw.partnerId) { this.error = 'Selecciona el socio'; return; }
+    const payload = {
+      requestId: this.requestId,
       movementType: raw.movementType,
       categoryId: raw.categoryId,
       clientId: raw.clientId || null,
@@ -88,6 +119,9 @@ export class MovimientoFormDialogComponent {
       projectId: raw.projectId || null,
       description: raw.description,
       amount: Number(raw.amount),
+      currency: raw.currency!, nature: raw.nature!, funding: raw.nature === 'Operacion' && raw.movementType === 'Egreso' ? raw.funding! : 'Empresa',
+      partnerId: this.needsPartner ? raw.partnerId : null, settlementDate: settled || raw.status === 'Anulado' ? formatDateToIso(raw.settlementDate) : null,
+      settlementDateEstimated: !!raw.settlementDateEstimated, expectedVersion: this.saved?.version,
       movementDate: formatDateToIso(raw.movementDate) ?? '',
       dueDate: formatDateToIso(raw.dueDate),
       status: raw.status,
@@ -95,8 +129,18 @@ export class MovimientoFormDialogComponent {
       receiptNumber: raw.receiptNumber || undefined,
       notes: raw.notes || undefined,
       receiptFile: this.receiptFile
-    } as MovimientoFormulario);
+    } as MovimientoFormulario;
+    this.saving = true; this.error = ''; this.dialogRef.disableClose = true; this.form.disable();
+    try {
+      this.saved = await firstValueFrom(this.saved ? this.api.actualizarMovimiento(this.saved.id, payload) : this.api.crearMovimiento(payload));
+      if (this.receiptFile) {
+        await firstValueFrom(this.api.subirComprobanteMovimiento(this.saved.id, this.receiptFile)); this.receiptFile = null;
+      }
+      this.dialogRef.close(true);
+    } catch (e: any) { this.error = (this.saved ? 'El registro existente se conserva. ' : '') + (e?.error?.message ?? 'No se pudo completar el guardado; puedes reintentar.'); }
+    finally { this.saving = false; this.form.enable(); this.dialogRef.disableClose = !!this.saved; }
   }
+  close(): void { if (!this.saving) this.dialogRef.close(!!this.saved); }
 
   onReceiptSelected(event: Event): void {
     const input = event.target as HTMLInputElement;

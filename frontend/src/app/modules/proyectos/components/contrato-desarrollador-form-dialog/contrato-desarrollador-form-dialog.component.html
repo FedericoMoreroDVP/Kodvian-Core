@@ -1,6 +1,9 @@
 <h2 mat-dialog-title class="dialog-title">{{ data.contract ? 'Editar contrato' : 'Nuevo contrato' }}</h2>
 <mat-dialog-content class="dialog-body">
   <form [formGroup]="form" class="dialog-form form-grid">
+    @if (form.controls.paymentMode.value === 'FixedAmount') {
+      <mat-form-field appearance="outline"><mat-label>Moneda del acuerdo (obligatoria)</mat-label><mat-select formControlName="currency"><mat-option value="ARS">ARS</mat-option><mat-option value="USD">USD</mat-option></mat-select><mat-error>Confirma la moneda del monto fijo</mat-error></mat-form-field>
+    } @else { <p class="full-width">El porcentaje se aplica a los ingresos operativos registrados del proyecto, incluidos pendientes, por separado en ARS y USD. Sin ingresos registrados, el importe correspondiente es cero.</p> }
     <mat-form-field appearance="outline" class="full-width">
       <mat-label>Miembro</mat-label>
       <mat-select formControlName="developerId">

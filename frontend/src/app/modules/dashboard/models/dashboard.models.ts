@@ -23,6 +23,7 @@ export interface PriorityTask {
 }
 
 export interface UpcomingCollection {
+  currency: string;
   id: string;
   description: string;
   categoryName: string;
@@ -33,6 +34,7 @@ export interface UpcomingCollection {
 }
 
 export interface RecentMovement {
+  currency: string;
   id: string;
   movementType: string;
   description: string;
@@ -43,6 +45,7 @@ export interface RecentMovement {
 }
 
 export interface DashboardOverview {
+  finance?: import('../../finanzas/models/finance-overview.models').FinanceOverview;
   kpis: DashboardKpis;
   priorityTasks: PriorityTask[];
   upcomingCollections: UpcomingCollection[];

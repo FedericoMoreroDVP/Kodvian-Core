@@ -16,15 +16,17 @@ public class DeveloperPaymentService : IDeveloperPaymentService
     private readonly KodvianDbContext _dbContext;
     private readonly IFileStorageService _fileStorageService;
     private readonly StorageOptions _storageOptions;
+    private readonly DeveloperPaymentAccountingService _accounting;
 
     public DeveloperPaymentService(
         KodvianDbContext dbContext,
         IFileStorageService fileStorageService,
-        IOptions<StorageOptions> storageOptions)
+        IOptions<StorageOptions> storageOptions, DeveloperPaymentAccountingService accounting)
     {
         _dbContext = dbContext;
         _fileStorageService = fileStorageService;
         _storageOptions = storageOptions.Value;
+        _accounting = accounting;
     }
 
     public async Task<IReadOnlyCollection<DeveloperPaymentDto>> GetByContractAsync(Guid contractId, CancellationToken cancellationToken = default)
@@ -40,6 +42,8 @@ public class DeveloperPaymentService : IDeveloperPaymentService
                 ContractId = x.ContractId,
                 PaymentDate = x.PaymentDate,
                 Amount = x.Amount,
+                Currency = x.Currency, AppliedCurrency = x.AppliedCurrency, AppliedAmount = x.AppliedAmount,
+                FinancialMovementId = x.FinancialMovementId, Version = x.Version, IsActive = x.Activo,
                 PeriodYear = x.PeriodYear,
                 PeriodMonth = x.PeriodMonth,
                 Reference = x.Reference,
@@ -60,44 +64,9 @@ public class DeveloperPaymentService : IDeveloperPaymentService
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<DeveloperPaymentDto> CreateAsync(Guid contractId, DeveloperPaymentCreateRequestDto request, CancellationToken cancellationToken = default)
-    {
-        var contractExists = await _dbContext.ProjectDeveloperContracts.AnyAsync(x => x.Id == contractId, cancellationToken);
-        if (!contractExists)
-        {
-            throw new ArgumentException("El contrato seleccionado no existe");
-        }
-
-        var payment = new DeveloperPayment
-        {
-            ContractId = contractId,
-            PaymentDate = request.PaymentDate,
-            Amount = request.Amount,
-            PeriodYear = request.PeriodYear,
-            PeriodMonth = request.PeriodMonth,
-            Reference = Normalize(request.Reference),
-            Notes = Normalize(request.Notes)
-        };
-
-        _dbContext.DeveloperPayments.Add(payment);
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        return await _dbContext.DeveloperPayments
-            .AsNoTracking()
-            .Where(x => x.Id == payment.Id)
-            .Select(x => new DeveloperPaymentDto
-            {
-                Id = x.Id,
-                ContractId = x.ContractId,
-                PaymentDate = x.PaymentDate,
-                Amount = x.Amount,
-                PeriodYear = x.PeriodYear,
-                PeriodMonth = x.PeriodMonth,
-                Reference = x.Reference,
-                Notes = x.Notes
-            })
-            .FirstAsync(cancellationToken);
-    }
+    public Task<DeveloperPaymentDto> CreateAsync(Guid contractId, DeveloperPaymentCreateRequestDto request, CancellationToken cancellationToken = default) => _accounting.SaveAsync(null, contractId, request, cancellationToken);
+    public Task<DeveloperPaymentDto> UpdateAsync(Guid id, DeveloperPaymentCreateRequestDto request, CancellationToken cancellationToken = default) => _accounting.SaveAsync(id, null, request, cancellationToken);
+    public Task CancelAsync(Guid id, Guid expectedVersion, CancellationToken cancellationToken = default) => _accounting.CancelAsync(id, expectedVersion, cancellationToken);
 
     public async Task<IReadOnlyCollection<FileMetadataDto>> GetReceiptsAsync(Guid paymentId, CancellationToken cancellationToken = default)
     {

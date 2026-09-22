@@ -184,12 +184,12 @@
                     @if (item.paymentMode === 'Percentage') {
                       {{ item.percentage || 0 }}%
                     } @else {
-                      {{ item.agreedAmount ? (item.agreedAmount | currency:'ARS':'symbol':'1.0-0') : '-' }}
+                      {{ item.currency ? (item.agreedAmount | currency:item.currency:'code':'1.2-2') : 'Moneda por confirmar' }}
                     }
                   </td>
-                  <td>{{ item.totalDue | currency:'ARS':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.totalPaid | currency:'ARS':'symbol':'1.0-0' }}</td>
-                  <td>{{ item.totalBalance | currency:'ARS':'symbol':'1.0-0' }}</td>
+                  <td>@for (row of item.currencies; track row.currency) { <div>{{ row.totalDue | currency:row.currency:'code':'1.2-2' }}</div> }</td>
+                  <td>@for (row of item.currencies; track row.currency) { <div>{{ row.totalPaid | currency:row.currency:'code':'1.2-2' }}</div> }</td>
+                  <td>@for (row of item.currencies; track row.currency) { <div>{{ row.totalBalance | currency:row.currency:'code':'1.2-2' }}</div> } @if (item.needsReview) { <small>Monedas por revisar · parcial</small> }</td>
                   <td>
                     <span class="payment-chip" [class.ok]="item.isUpToDate" [class.pending]="!item.isUpToDate">{{ estadoPago(item) }}</span>
                   </td>

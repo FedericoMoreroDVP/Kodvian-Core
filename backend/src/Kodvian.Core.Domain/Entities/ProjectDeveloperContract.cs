@@ -9,6 +9,7 @@ public class ProjectDeveloperContract : BaseEntity
     public ContractPaymentMode PaymentMode { get; set; } = ContractPaymentMode.Percentage;
     public decimal? Percentage { get; set; }
     public decimal? AgreedAmount { get; set; }
+    public string? Currency { get; set; }
     public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     public DateOnly? EndDate { get; set; }
     public string? Notes { get; set; }

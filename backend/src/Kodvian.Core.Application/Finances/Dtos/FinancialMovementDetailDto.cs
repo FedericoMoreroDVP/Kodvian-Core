@@ -14,6 +14,15 @@ public class FinancialMovementDetailDto
     public string? ProjectName { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "ARS";
+    public string Nature { get; set; } = "Operacion";
+    public string Funding { get; set; } = "Empresa";
+    public Guid? PartnerId { get; set; }
+    public DateOnly? SettlementDate { get; set; }
+    public bool SettlementDateEstimated { get; set; }
+    public Guid Version { get; set; }
+    public Guid? ExchangeId { get; set; }
+    public Guid? DeveloperPaymentId { get; set; }
     public DateOnly MovementDate { get; set; }
     public DateOnly? DueDate { get; set; }
     public string Status { get; set; } = string.Empty;

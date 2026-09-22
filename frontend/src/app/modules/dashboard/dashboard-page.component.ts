@@ -10,11 +10,12 @@ import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { CurrentUser } from '../../core/auth/auth.models';
 import { DashboardOverview } from './models/dashboard.models';
 import { DashboardService } from './services/dashboard.service';
+import { FinanceCurrencyCardsComponent } from '../finanzas/components/finance-currency-cards.component';
 
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
-  imports: [CurrencyPipe, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
+  imports: [FinanceCurrencyCardsComponent, CurrencyPipe, RouterLink, MatCardModule, MatButtonModule, MatIconModule, MatSnackBarModule],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.scss'
 })

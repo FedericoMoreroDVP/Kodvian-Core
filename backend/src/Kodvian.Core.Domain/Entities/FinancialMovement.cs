@@ -11,6 +11,16 @@ public class FinancialMovement : BaseEntity
     public Guid? ProjectId { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "ARS";
+    public string Nature { get; set; } = "Operacion";
+    public string Funding { get; set; } = "Empresa";
+    public Guid? PartnerId { get; set; }
+    public Partner? Partner { get; set; }
+    public DateOnly? SettlementDate { get; set; }
+    public bool SettlementDateEstimated { get; set; }
+    public Guid? ExchangeId { get; set; }
+    public Guid Version { get; set; } = Guid.NewGuid();
+    public DeveloperPayment? DeveloperPayment { get; set; }
     public DateOnly MovementDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     public DateOnly? DueDate { get; set; }
     public FinancialMovementStatus Status { get; set; } = FinancialMovementStatus.Pendiente;

@@ -23,6 +23,8 @@ public class KodvianDbContext : DbContext
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<FinancialCategory> FinancialCategories => Set<FinancialCategory>();
     public DbSet<FinancialMovement> FinancialMovements => Set<FinancialMovement>();
+    public DbSet<FinanceSettings> FinanceSettings => Set<FinanceSettings>();
+    public DbSet<Partner> Partners => Set<Partner>();
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<Developer> Developers => Set<Developer>();
     public DbSet<ProjectDeveloperAssignment> ProjectDeveloperAssignments => Set<ProjectDeveloperAssignment>();
@@ -38,6 +40,19 @@ public class KodvianDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<FinanceSettings>(entity =>
+        {
+            entity.ToTable("FinanceSettings", t => t.HasCheckConstraint("CK_FinanceSettings_Singleton", "\"Id\" = 1"));
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.OpeningArs).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.OpeningUsd).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Version).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<Partner>(entity =>
+        {
+            entity.ToTable("Partners");
+            entity.Property(x => x.FullName).HasMaxLength(160).IsRequired();
+        });
 
         modelBuilder.Entity<TaskAttachment>(entity =>
         {
@@ -178,6 +193,7 @@ public class KodvianDbContext : DbContext
             entity.Property(x => x.PaymentMode).HasConversion<int>();
             entity.Property(x => x.Percentage).HasColumnType("numeric(5,2)");
             entity.Property(x => x.AgreedAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(3);
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.HasIndex(x => x.ProjectId);
             entity.HasIndex(x => x.DeveloperId);
@@ -220,6 +236,13 @@ public class KodvianDbContext : DbContext
         modelBuilder.Entity<DeveloperPayment>(entity =>
         {
             entity.ToTable("DeveloperPayments");
+            entity.Property(x => x.Currency).HasMaxLength(3);
+            entity.Property(x => x.AppliedCurrency).HasMaxLength(3);
+            entity.Property(x => x.AppliedAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => x.RequestId).IsUnique();
+            entity.HasOne(x => x.FinancialMovement).WithOne(x => x.DeveloperPayment)
+                .HasForeignKey<DeveloperPayment>(x => x.FinancialMovementId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
             entity.Property(x => x.Reference).HasMaxLength(120);
             entity.Property(x => x.Notes).HasMaxLength(1000);
@@ -236,6 +259,13 @@ public class KodvianDbContext : DbContext
         modelBuilder.Entity<FinancialMovement>(entity =>
         {
             entity.ToTable("FinancialMovements");
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Nature).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.Funding).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.Currency, x.SettlementDate });
+            entity.HasIndex(x => x.ExchangeId);
+            entity.HasOne(x => x.Partner).WithMany().HasForeignKey(x => x.PartnerId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.MovementType).HasConversion<int>();
             entity.Property(x => x.Description).IsRequired().HasMaxLength(500);
             entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");

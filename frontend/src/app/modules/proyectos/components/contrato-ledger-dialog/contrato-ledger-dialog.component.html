@@ -1,54 +1,15 @@
-<h2 mat-dialog-title class="dialog-title">Resumen {{ data.developerName }}</h2>
-<mat-dialog-content class="dialog-body">
-  <div class="detail-grid">
-    <article class="detail-card full-width">
-      <p class="section-eyebrow">Totales</p>
-      <div class="totals-grid">
-        <div class="summary-pill">
-          <span class="label">Total a pagar</span>
-          <strong>{{ data.totalDue | currency:'ARS':'symbol':'1.0-0' }}</strong>
-        </div>
-        <div class="summary-pill">
-          <span class="label">Total pagado</span>
-          <strong>{{ data.totalPaid | currency:'ARS':'symbol':'1.0-0' }}</strong>
-        </div>
-        <div class="summary-pill">
-          <span class="label">Saldo</span>
-          <strong>{{ data.totalBalance | currency:'ARS':'symbol':'1.0-0' }}</strong>
-        </div>
-      </div>
-    </article>
-
-    <article class="detail-card full-width">
-      <p class="section-eyebrow">Detalle mensual</p>
-      <table mat-table [dataSource]="data.months" class="ledger-table">
-        <ng-container matColumnDef="month">
-          <th mat-header-cell *matHeaderCellDef>Mes</th>
-          <td mat-cell *matCellDef="let row">{{ row.month }}/{{ row.year }}</td>
-        </ng-container>
-        <ng-container matColumnDef="income">
-          <th mat-header-cell *matHeaderCellDef>Base ingreso</th>
-          <td mat-cell *matCellDef="let row">{{ row.projectIncomeBase | currency:'ARS':'symbol':'1.0-0' }}</td>
-        </ng-container>
-        <ng-container matColumnDef="due">
-          <th mat-header-cell *matHeaderCellDef>Debe pagar</th>
-          <td mat-cell *matCellDef="let row">{{ row.dueAmount | currency:'ARS':'symbol':'1.0-0' }}</td>
-        </ng-container>
-        <ng-container matColumnDef="paid">
-          <th mat-header-cell *matHeaderCellDef>Pagado</th>
-          <td mat-cell *matCellDef="let row">{{ row.paidAmount | currency:'ARS':'symbol':'1.0-0' }}</td>
-        </ng-container>
-        <ng-container matColumnDef="balance">
-          <th mat-header-cell *matHeaderCellDef>Saldo</th>
-          <td mat-cell *matCellDef="let row">{{ row.balance | currency:'ARS':'symbol':'1.0-0' }}</td>
-        </ng-container>
-
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns"></tr>
-      </table>
-    </article>
-  </div>
+<h2 mat-dialog-title>Resumen {{ data.developerName }}</h2>
+<mat-dialog-content>
+  @if (data.paymentMode === 'Percentage') { <label>Año <input type="number" min="2000" max="2100" [(ngModel)]="year" /></label><button mat-button [disabled]="loading" (click)="load()">Consultar</button><p>Porcentaje sobre ingresos operativos registrados, incluidos pendientes y vencidos, por moneda.</p> }
+  @else { <p>Monto fijo: obligación y pagos acumulados de todo el acuerdo, sin repetir la deuda cada año.</p> }
+  @if (error) { <p role="alert">{{ error }}</p> }
+  @if (data.needsReview) { <p role="alert">Resumen parcial: confirma la moneda del acuerdo fijo y de los pagos históricos desde Editar / Revisar y vincular.</p> }
+  @for (currency of data.currencies; track currency.currency) {
+    <h3>{{ currency.currency }}</h3>
+    <div class="totals-grid"><p>Obligación registrada: <strong>{{ currency.totalDue | currency:currency.currency:'code':'1.2-2' }}</strong></p><p>Cancelado: <strong>{{ currency.totalPaid | currency:currency.currency:'code':'1.2-2' }}</strong></p><p>Saldo: <strong>{{ currency.totalBalance | currency:currency.currency:'code':'1.2-2' }}</strong></p></div>
+    <div style="overflow-x:auto"><table class="ledger-table"><thead><tr><th>Período</th><th>Base registrada</th><th>Obligación</th><th>Cancelado</th><th>Saldo</th></tr></thead><tbody>
+      @for (row of currency.months; track row.month) { <tr><td>{{ row.month }}/{{ row.year }}</td><td>{{ row.projectIncomeBase | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.dueAmount | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.paidAmount | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.balance | currency:currency.currency:'code':'1.2-2' }}</td></tr> }
+    </tbody></table></div>
+  }
 </mat-dialog-content>
-<mat-dialog-actions align="end" class="dialog-actions">
-  <button mat-flat-button color="primary" mat-dialog-close class="action-close">Cerrar</button>
-</mat-dialog-actions>
+<mat-dialog-actions align="end"><button mat-flat-button mat-dialog-close>Cerrar</button></mat-dialog-actions>

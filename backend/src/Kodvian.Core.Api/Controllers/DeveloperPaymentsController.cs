@@ -43,6 +43,17 @@ public class DeveloperPaymentsController : ControllerBase
         return Ok(ApiResponseDto<DeveloperPaymentDto>.Ok(data, "El pago se registró correctamente"));
     }
 
+    [HttpPut("developer-payments/{id:guid}"), Authorize(Policy = "FinancesWrite")]
+    public async Task<IActionResult> Update(Guid id, DeveloperPaymentCreateRequestDto request, CancellationToken ct) =>
+        Ok(ApiResponseDto<DeveloperPaymentDto>.Ok(await _paymentService.UpdateAsync(id, request, ct), "Pago y egreso actualizados"));
+
+    [HttpDelete("developer-payments/{id:guid}"), Authorize(Policy = "FinancesWrite")]
+    public async Task<IActionResult> Cancel(Guid id, [FromQuery] Guid expectedVersion, CancellationToken ct)
+    {
+        await _paymentService.CancelAsync(id, expectedVersion, ct);
+        return Ok(ApiResponseDto<object>.Ok(new { }, "Pago y egreso anulados"));
+    }
+
     [HttpGet("developer-payments/{paymentId:guid}/receipts")]
     public async Task<ActionResult<ApiResponseDto<IReadOnlyCollection<FileMetadataDto>>>> GetReceipts(Guid paymentId, CancellationToken cancellationToken)
     {

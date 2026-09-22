@@ -1,6 +1,25 @@
-<h2 mat-dialog-title class="dialog-title">Registrar pago</h2>
+<h2 mat-dialog-title class="dialog-title">{{ data.payment ? 'Revisar / editar pago' : 'Registrar pago y egreso' }}</h2>
 <mat-dialog-content class="dialog-body">
   <form [formGroup]="form" class="dialog-form form-grid">
+    <mat-form-field appearance="outline"><mat-label>Moneda efectivamente pagada</mat-label><mat-select formControlName="currency"><mat-option value="ARS">ARS</mat-option><mat-option value="USD">USD</mat-option></mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Moneda de la obligación cancelada</mat-label><mat-select formControlName="appliedCurrency"><mat-option value="ARS">ARS</mat-option><mat-option value="USD">USD</mat-option></mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Importe cancelado en el acuerdo</mat-label><input matInput type="number" step="0.01" formControlName="appliedAmount" [readonly]="form.controls.currency.value === form.controls.appliedCurrency.value" /></mat-form-field>
+    @if (form.controls.currency.value !== form.controls.appliedCurrency.value && form.controls.appliedAmount.value) {
+      <p class="full-width">Cotización aplicada: {{ (form.controls.amount.value || 0) / (form.controls.appliedAmount.value || 1) }} {{ form.controls.currency.value }} por {{ form.controls.appliedCurrency.value }}. Se registra el pago real y el importe de deuda cancelado, sin cotización automática.</p>
+    }
+    @if (!saved?.financialMovementId) {
+      @if (data.payment) { <p class="full-width">Pago histórico: confirma ambas monedas y vincula el egreso ya cargado en Finanzas. No se creará otro egreso.</p> }
+      @else { <div class="full-width"><button mat-button type="button" [disabled]="saving" (click)="linkExisting = !linkExisting">{{ linkExisting ? 'Generar egreso nuevo' : 'Vincular egreso existente' }}</button><p>{{ linkExisting ? 'Se usará el egreso seleccionado, sin duplicarlo.' : 'Se generará automáticamente un egreso pagado al guardar.' }}</p></div> }
+      @if (linkExisting) {
+        <div class="full-width"><p>Busca por moneda e importe. El proyecto debe coincidir o estar vacío. Un egreso pendiente se marcará como pagado; si ya está pagado, debe coincidir su fecha efectiva.</p>
+          <button mat-button type="button" [disabled]="saving || loadingCandidates" (click)="loadCandidates()">Buscar egresos existentes</button>
+          <button mat-button type="button" [disabled]="saving || loadingCandidates || candidatePage <= 1" (click)="loadCandidates(candidatePage - 1)">Anterior</button>
+          <button mat-button type="button" [disabled]="saving || loadingCandidates || candidatePage * 10 >= candidateTotal" (click)="loadCandidates(candidatePage + 1)">Siguiente</button>
+          <span>{{ candidateTotal }} coincidencias</span>
+        </div>
+        <mat-form-field appearance="outline" class="full-width"><mat-label>Egreso existente</mat-label><mat-select formControlName="existingMovementId">@for (movement of candidates; track movement.id) { <mat-option [value]="movement.id">{{ movement.description }} · {{ movement.amount | currency:movement.currency:'code':'1.2-2' }} · {{ movement.status }} · {{ movement.settlementDate || movement.movementDate }}</mat-option> }</mat-select></mat-form-field>
+      }
+    } @else { <p class="full-width">Este pago está vinculado a Finanzas. Los cambios actualizarán también su egreso.</p> }
     <mat-form-field appearance="outline">
       <mat-label>Fecha de pago</mat-label>
       <input matInput [matDatepicker]="paymentDatePicker" formControlName="paymentDate" />
@@ -41,8 +60,9 @@
       }
     </div>
   </form>
+  @if (error) { <p role="alert">{{ error }}</p> }
 </mat-dialog-content>
 <mat-dialog-actions align="end" class="dialog-actions">
-  <button mat-button mat-dialog-close class="action-cancel">Cancelar</button>
-  <button mat-flat-button color="primary" class="action-save" (click)="guardar()">Guardar</button>
+  <button mat-button class="action-cancel" [disabled]="saving" (click)="close()">Cerrar</button>
+  <button mat-flat-button color="primary" class="action-save" [disabled]="saving" (click)="guardar()">{{ saving ? 'Guardando…' : 'Guardar pago y egreso' }}</button>
 </mat-dialog-actions>

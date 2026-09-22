@@ -74,32 +74,11 @@
       </mat-card>
     </div>
 
-    <div class="finance-kpi-grid" aria-label="Indicadores financieros">
-      <mat-card class="kpi-card finance-card success">
-        <span class="kpi-icon"><mat-icon>trending_up</mat-icon></span>
-        <div>
-          <h3>Ingresos del mes</h3>
-          <strong>{{ resumen.kpis.monthlyIncome | currency:'ARS':'symbol':'1.0-0' }}</strong>
-          <p>Total acumulado</p>
-        </div>
-      </mat-card>
-      <mat-card class="kpi-card finance-card warning">
-        <span class="kpi-icon"><mat-icon>trending_down</mat-icon></span>
-        <div>
-          <h3>Egresos del mes</h3>
-          <strong>{{ resumen.kpis.monthlyExpense | currency:'ARS':'symbol':'1.0-0' }}</strong>
-          <p>Total acumulado</p>
-        </div>
-      </mat-card>
-      <mat-card class="kpi-card finance-card result" [class.negative]="resumen.kpis.monthlyResult < 0" [class.positive]="resumen.kpis.monthlyResult >= 0">
-        <span class="kpi-icon"><mat-icon>paid</mat-icon></span>
-        <div>
-          <h3>Resultado mensual</h3>
-          <strong>{{ resumen.kpis.monthlyResult | currency:'ARS':'symbol':'1.0-0' }}</strong>
-          <p>Ingresos - Egresos</p>
-        </div>
-      </mat-card>
-    </div>
+    @if (resumen.finance; as finance) {
+      <h3>Finanzas del mes · ARS y USD</h3>
+      <app-finance-currency-cards [rows]="finance.currencies" [provisional]="!finance.setup.historyComplete || !!finance.estimatedDateCount || !!finance.unclassifiedPayments" />
+      <a mat-button routerLink="/finanzas">Consultar histórico y punto de partida</a>
+    }
 
     @if (cargando) {
       <mat-card class="estado-carga">
@@ -157,7 +136,7 @@
                   <tr>
                     <td>{{ item.description }}</td>
                     <td>{{ item.clientName || '-' }}</td>
-                    <td class="numeric">{{ item.amount | currency:'ARS':'symbol':'1.0-0' }}</td>
+                    <td class="numeric">{{ item.amount | currency:item.currency:'code':'1.2-2' }}</td>
                     <td>{{ item.dueDate || '-' }}</td>
                   </tr>
                 }
@@ -186,7 +165,7 @@
                   <tr>
                     <td><span class="movement-type">{{ item.movementType }}</span></td>
                     <td>{{ item.description }}</td>
-                    <td class="numeric">{{ item.amount | currency:'ARS':'symbol':'1.0-0' }}</td>
+                    <td class="numeric">{{ item.amount | currency:item.currency:'code':'1.2-2' }}</td>
                     <td>{{ item.movementDate }}</td>
                   </tr>
                 }

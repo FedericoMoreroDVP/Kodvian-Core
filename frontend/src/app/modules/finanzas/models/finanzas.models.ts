@@ -20,6 +20,11 @@ export interface Proveedor {
 }
 
 export interface MovimientoListado {
+  currency: string;
+  nature: string;
+  settlementDate?: string;
+  exchangeId?: string;
+  developerPaymentId?: string;
   id: string;
   movementType: TipoMovimiento;
   categoryName: string;
@@ -34,6 +39,15 @@ export interface MovimientoListado {
 }
 
 export interface MovimientoDetalle {
+  currency: string;
+  nature: string;
+  funding: string;
+  partnerId?: string;
+  settlementDate?: string;
+  settlementDateEstimated: boolean;
+  version: string;
+  exchangeId?: string;
+  developerPaymentId?: string;
   id: string;
   movementType: TipoMovimiento;
   categoryId: string;
@@ -59,6 +73,14 @@ export interface MovimientoDetalle {
 }
 
 export interface MovimientoFormulario {
+  requestId: string;
+  currency: string;
+  nature: string;
+  funding: string;
+  partnerId?: string | null;
+  settlementDate?: string | null;
+  settlementDateEstimated: boolean;
+  expectedVersion?: string;
   movementType: TipoMovimiento;
   categoryId: string;
   clientId?: string | null;
@@ -85,6 +107,12 @@ export interface ComprobanteArchivo {
 }
 
 export interface FinanzaFiltros {
+  currency?: string;
+  nature?: string;
+  projectId?: string;
+  unlinkedOnly?: boolean;
+  useSettlementDate?: boolean;
+  exactAmount?: number;
   pageNumber: number;
   pageSize: number;
   dateFrom?: string;

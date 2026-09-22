@@ -121,7 +121,7 @@
           <th mat-header-cell *matHeaderCellDef>Valor</th>
           <td mat-cell *matCellDef="let row">
             @if (row.contract) {
-              {{ row.contract.paymentMode === 'Percentage' ? (row.contract.percentage + '%') : (row.contract.agreedAmount | currency:'ARS':'symbol':'1.0-0') }}
+              {{ row.contract.paymentMode === 'Percentage' ? (row.contract.percentage + '% por moneda') : (row.contract.currency ? (row.contract.agreedAmount | currency:row.contract.currency:'code':'1.2-2') : (row.contract.agreedAmount + ' · moneda por confirmar')) }}
             } @else {
               -
             }
@@ -176,7 +176,11 @@
           </ng-container>
           <ng-container matColumnDef="amount">
             <th mat-header-cell *matHeaderCellDef>Monto</th>
-            <td mat-cell *matCellDef="let row">{{ row.amount | currency:'ARS':'symbol':'1.0-0' }}</td>
+            <td mat-cell *matCellDef="let row">{{ row.currency ? (row.amount | currency:row.currency:'code':'1.2-2') : (row.amount + ' · moneda por confirmar') }}
+              @if (row.appliedCurrency) { <small style="display:block">Cancela {{ row.appliedAmount | currency:row.appliedCurrency:'code':'1.2-2' }}</small> }
+              @if (!row.isActive) { <small>Anulado</small> }
+              @else if (!row.financialMovementId) { <small style="display:block">Egreso pendiente de vincular</small> }
+            </td>
           </ng-container>
           <ng-container matColumnDef="period">
             <th mat-header-cell *matHeaderCellDef>Periodo</th>
@@ -210,6 +214,10 @@
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="actions"><th mat-header-cell *matHeaderCellDef>Acciones</th><td mat-cell *matCellDef="let row">
+            <button mat-button [disabled]="!row.isActive" (click)="editarPago(row)">{{ row.financialMovementId ? 'Editar' : 'Revisar y vincular' }}</button>
+            <button mat-button [disabled]="!row.isActive" (click)="anularPago(row)">Anular</button>
+          </td></ng-container>
           <tr mat-header-row *matHeaderRowDef="paymentColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: paymentColumns"></tr>
         </table>

@@ -1,5 +1,15 @@
 # Modelo De Datos
 
+## Extensión financiera multimoneda
+
+- `FinanceSettings`: registro único Id=1, fecha de seguimiento, saldos ARS/USD opcionales, confirmación del historial y versión de edición.
+- `Partner`: socio identificado por nombre y actividad, independiente de roles de acceso.
+- `FinancialMovement`: Currency, Nature, Funding, PartnerId, SettlementDate, SettlementDateEstimated, ExchangeId y Version. Los cambios de moneda tienen dos movimientos enlazados; los importes nunca se suman entre monedas.
+- `DeveloperPayment`: Currency, AppliedCurrency, AppliedAmount, FinancialMovementId único, RequestId único y Version. La baja lógica anula también el egreso vinculado.
+- `ProjectDeveloperContract.Currency`: moneda de acuerdos de monto fijo; los porcentajes se calculan por moneda de los ingresos. Los datos históricos sin moneda requieren revisión.
+
+Reglas completas y migración: [Finanzas](../modules/finanzas.md).
+
 El modelo de datos vive en `backend/src/Kodvian.Core.Domain` y se configura en `backend/src/Kodvian.Core.Infrastructure/Persistence/KodvianDbContext.cs`.
 
 ## BaseEntity
