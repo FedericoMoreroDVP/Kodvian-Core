@@ -7,6 +7,11 @@ cobrados, gastos pagados y resultado del mes, con selector ARS/USD. Finanzas pri
 el listado de movimientos; clasificación, categoría, cliente, proveedor y base de
 fechas están disponibles en **Más filtros**.
 
+La columna **Socio / responsable**, junto a la descripción, muestra el socio asociado
+al movimiento. Usa el nombre actual de Equipo o de la cuenta vinculada, o el nombre
+de la ficha manual; conserva la referencia aunque el socio esté inactivo. Cuando no
+hay socio asignado muestra **—**. No representa al usuario que cargó el registro.
+
 El botón **Visión financiera** abre el módulo `/vision-financiera`, con Resumen,
 Socios y Compromisos. Allí se consultan el histórico y los gráficos, y se accede a
 la configuración del punto de partida. Reemplaza al modal histórico anterior.

@@ -36,6 +36,7 @@ export interface MovimientoListado {
   status: EstadoMovimiento;
   paymentMethod?: string;
   clientName?: string;
+  partnerName?: string | null;
   providerName?: string;
 }
 

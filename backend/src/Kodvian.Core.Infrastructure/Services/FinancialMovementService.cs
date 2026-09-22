@@ -62,6 +62,8 @@ public class FinancialMovementService : IFinancialMovementService
                 Status = x.Status.ToString(),
                 PaymentMethod = x.PaymentMethod,
                 ClientName = x.Client != null ? x.Client.CommercialName : null,
+                PartnerName = x.Partner == null ? null : x.Partner.Developer != null ? x.Partner.Developer.FullName
+                    : x.Partner.User != null ? x.Partner.User.FullName : x.Partner.FullName,
                 ProviderName = x.Provider != null ? x.Provider.Name : null
             })
             .ToListAsync(cancellationToken);

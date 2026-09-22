@@ -81,6 +81,30 @@ public class FinanceHistoryTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("Manual")]
+    [InlineData("Developer")]
+    [InlineData("User")]
+    public async Task MovementListShowsPartnerNameFromItsCurrentIdentity(string source)
+    {
+        var partner = new Partner { FullName = "Socio manual" };
+        if (source == "Developer") partner.Developer = new Developer { FullName = "Persona de Equipo" };
+        if (source == "User") partner.User = new User { FullName = "Persona con cuenta" };
+        db.Partners.Add(partner);
+        var expense = Add(400000, income: false, funding: "SocioAporte", partner: partner);
+        var companyExpense = Add(100, income: false);
+        partner.Activo = false;
+        if (partner.Developer != null) partner.Developer.FullName = "Nombre actualizado de Equipo";
+        if (partner.User != null) partner.User.FullName = "Nombre actualizado de cuenta";
+        db.SaveChanges();
+
+        var result = await Movements.GetPagedAsync(new() { PageSize = 100 });
+        Assert.Equal(partner.Developer?.FullName ?? partner.User?.FullName ?? partner.FullName,
+            result.Items.Single(x => x.Id == expense.Id).PartnerName);
+        Assert.Null(result.Items.Single(x => x.Id == companyExpense.Id).PartnerName);
+        Assert.Equal(2, result.TotalCount);
+    }
+
     [Fact]
     public async Task PartnerDrilldownsUseTheSameContributionAndReimbursementRules()
     {

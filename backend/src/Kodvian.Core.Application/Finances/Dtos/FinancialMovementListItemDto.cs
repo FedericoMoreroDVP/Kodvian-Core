@@ -18,5 +18,6 @@ public class FinancialMovementListItemDto
     public string Status { get; set; } = string.Empty;
     public string? PaymentMethod { get; set; }
     public string? ClientName { get; set; }
+    public string? PartnerName { get; set; }
     public string? ProviderName { get; set; }
 }
