@@ -10,18 +10,28 @@ public class FinanceSetupDto
 }
 public record PartnerDto(Guid Id, string FullName, bool IsActive);
 public class PartnerRequest { public string FullName { get; set; } = ""; public bool IsActive { get; set; } = true; }
-public class CurrencyOverviewDto
+public class CurrencyPeriodDto
 {
     public string Currency { get; set; } = "ARS";
     public decimal Income { get; set; }
     public decimal Expense { get; set; }
     public decimal Result => Income - Expense;
+    public decimal PendingIncome { get; set; }
+    public decimal PendingExpense { get; set; }
+}
+public class FinancePeriodSummaryDto
+{
+    public DateOnly From { get; set; }
+    public DateOnly To { get; set; }
+    public IReadOnlyCollection<CurrencyPeriodDto> Currencies { get; set; } = [];
+}
+public class CurrencyOverviewDto : CurrencyPeriodDto
+{
     public decimal Contributions { get; set; }
     public decimal Withdrawals { get; set; }
     public decimal Reimbursements { get; set; }
-    public decimal PendingIncome { get; set; }
-    public decimal PendingExpense { get; set; }
     public decimal CashChange { get; set; }
+    public decimal RecordedCashBalance { get; set; }
     public decimal? Balance { get; set; }
 }
 public class FinanceMonthDto : CurrencyOverviewDto { public int Year { get; set; } public int Month { get; set; } }
@@ -54,6 +64,7 @@ public class ExchangeRequest
 }
 public interface IFinanceOverviewService
 {
+    Task<FinancePeriodSummaryDto> GetPeriodSummaryAsync(DateOnly from, DateOnly to, CancellationToken ct);
     Task<Kodvian.Core.Application.Common.Models.PagedResultDto<Kodvian.Core.Application.Developers.Dtos.ContractLedgerDto>> TeamObligationsAsync(int year, Kodvian.Core.Application.Common.Models.PagedRequestDto request, CancellationToken ct);
     Task<FinanceOverviewDto> GetAsync(DateOnly? from, DateOnly? to, CancellationToken ct);
     Task<FinanceSetupDto> SetupAsync(FinanceSetupDto request, CancellationToken ct);

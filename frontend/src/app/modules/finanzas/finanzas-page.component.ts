@@ -1,6 +1,9 @@
 import { CurrencyPipe } from '@angular/common';
-import { Component, OnInit, ViewChild, inject } from '@angular/core';
-import { FinanceOverviewComponent } from './components/finance-overview.component';
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Subscription } from 'rxjs';
+import { FinanceMonthSummaryComponent } from './components/finance-month-summary.component';
+import type { FinanceHistoryDialogResult } from './components/finance-overview-dialog.component';
 import { FinanceOverviewService } from './services/finance-overview.service';
 import { FINANCE_NATURES } from './models/finance-overview.models';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
@@ -25,14 +28,20 @@ import { FinanzasService } from './services/finanzas.service';
 @Component({
   selector: 'app-finanzas-page',
   standalone: true,
-  imports: [FinanceOverviewComponent, ReactiveFormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatSnackBarModule],
+  imports: [FinanceMonthSummaryComponent, ReactiveFormsModule, CurrencyPipe, MatCardModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatDatepickerModule, MatInputModule, MatSelectModule, MatButtonModule, MatSnackBarModule],
   templateUrl: './finanzas-page.component.html',
   styleUrl: './finanzas-page.component.scss'
 })
 export class FinanzasPageComponent implements OnInit {
   private readonly finanzasService = inject(FinanzasService);
   private readonly finance = inject(FinanceOverviewService);
-  @ViewChild(FinanceOverviewComponent) overview?: FinanceOverviewComponent;
+  private readonly destroyRef = inject(DestroyRef);
+  private summaryRequest?: Subscription;
+  private destroyed = false;
+  historicoAbierto = false;
+  filtrosAvanzados = false;
+  cargandoResumen = false;
+  errorResumen = '';
   readonly natures = [...FINANCE_NATURES, { value: 'CambioMoneda', label: 'Cambio de moneda' }];
   private readonly fb = inject(FormBuilder);
   private readonly dialog = inject(MatDialog);
@@ -60,12 +69,14 @@ export class FinanzasPageComponent implements OnInit {
   movimientos: MovimientoListado[] = [];
   categorias: CategoriaFinanciera[] = [];
   lookups: FinanzasLookups = { categories: [], clients: [], projects: [], providers: [] };
-  resumen: ResumenMensual = { monthlyIncome: 0, monthlyExpense: 0, monthlyResult: 0, pendingIncome: 0, pendingExpense: 0 };
+  resumen: ResumenMensual = { currencies: [], monthlyIncome: 0, monthlyExpense: 0, monthlyResult: 0, pendingIncome: 0, pendingExpense: 0 };
 
   pageNumber = 1;
   pageSize = 10;
   total = 0;
   cargando = false;
+
+  constructor() { this.destroyRef.onDestroy(() => this.destroyed = true); }
 
   ngOnInit(): void {
     const accion = this.route.snapshot.queryParamMap.get('accion');
@@ -80,6 +91,10 @@ export class FinanzasPageComponent implements OnInit {
     }
 
     this.cargarTodo();
+    if (accion === 'historico') {
+      void this.abrirHistorico();
+      void this.router.navigate([], { relativeTo: this.route, queryParams: { accion: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
   }
 
   cargarTodo(): void {
@@ -121,10 +136,36 @@ export class FinanzasPageComponent implements OnInit {
   }
 
   cargarResumen(): void {
-    this.overview?.reload();
+    this.summaryRequest?.unsubscribe();
+    this.cargandoResumen = true; this.errorResumen = '';
+    this.summaryRequest = this.finanzasService.obtenerResumenMensual().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => { this.resumen = data; this.cargandoResumen = false; },
+      error: () => { this.errorResumen = 'No se pudo cargar el resumen mensual'; this.cargandoResumen = false; }
+    });
+  }
+
+  async abrirHistorico(): Promise<void> {
+    if (this.historicoAbierto) return;
+    this.historicoAbierto = true;
+    try {
+      const { FinanceOverviewDialogComponent } = await import('./components/finance-overview-dialog.component');
+      if (this.destroyed) return;
+      this.dialog.open(FinanceOverviewDialogComponent, {
+        width: '1280px', maxWidth: '96vw', maxHeight: '94vh', autoFocus: 'dialog', ariaLabel: 'Histórico financiero'
+      }).afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result?: FinanceHistoryDialogResult) => {
+        this.historicoAbierto = false;
+        this.cargarResumen();
+        if (result?.detail) this.summaryDetail(result.detail);
+        else this.cargarMovimientos();
+      });
+    } catch {
+      this.historicoAbierto = false;
+      this.snackBar.open('No se pudo abrir el histórico financiero. Vuelve a intentar.', 'Cerrar', { duration: 4000 });
+    }
   }
 
   summaryDetail(event: { currency: string; movementType: 'Ingreso' | 'Egreso'; from: string; to: string }): void {
+    this.filtrosAvanzados = true;
     this.filtrosForm.reset({ currency: event.currency, nature: 'Operacion', movementType: event.movementType,
       useSettlementDate: true, dateFrom: parseIsoDate(event.from), dateTo: parseIsoDate(event.to),
       status: event.movementType === 'Ingreso' ? 'Cobrado' : 'Pagado', categoryId: '', clientId: '', providerId: '' });

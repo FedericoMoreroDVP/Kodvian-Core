@@ -75,9 +75,8 @@
     </div>
 
     @if (resumen.finance; as finance) {
-      <h3>Finanzas del mes · ARS y USD</h3>
-      <app-finance-currency-cards [rows]="finance.currencies" [provisional]="!finance.setup.historyComplete || !!finance.estimatedDateCount || !!finance.unclassifiedPayments" />
-      <a mat-button routerLink="/finanzas">Consultar histórico y punto de partida</a>
+      <app-finance-month-summary [rows]="finance.currencies" [loading]="cargando" />
+      <a mat-button routerLink="/finanzas" [queryParams]="{ accion: 'historico' }">Ver histórico financiero</a>
     }
 
     @if (cargando) {

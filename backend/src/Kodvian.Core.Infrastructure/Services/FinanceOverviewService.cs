@@ -26,6 +26,40 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
             && ((x.MovementType == FinancialMovementType.Ingreso && x.Status == FinancialMovementStatus.Cobrado)
                 || (x.MovementType == FinancialMovementType.Egreso && x.Status == FinancialMovementStatus.Pagado)));
 
+    public async Task<FinancePeriodSummaryDto> GetPeriodSummaryAsync(DateOnly from, DateOnly to, CancellationToken ct)
+    {
+        FinanceRules.Date(from); FinanceRules.Date(to);
+        if (from > to) throw new ArgumentException("El período es inválido");
+        await using var snapshot = db.Database.IsRelational() && db.Database.CurrentTransaction == null
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct) : null;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = to < today ? to : today;
+        // The daily screens need only current-period totals, not the complete history,
+        // opening balances, partners, categories or monthly evolution.
+        var totals = await Settled(cutoff).Where(x => x.SettlementDate >= from && x.Nature == "Operacion")
+            .GroupBy(x => new { x.Currency, x.MovementType })
+            .Select(g => new { g.Key.Currency, g.Key.MovementType, Amount = g.Sum(x => x.Amount) }).ToListAsync(ct);
+        var pending = await db.FinancialMovements.AsNoTracking()
+            .Where(x => x.Activo && x.MovementDate >= from && x.MovementDate <= to
+                && (x.Status == FinancialMovementStatus.Pendiente || x.Status == FinancialMovementStatus.Vencido))
+            .GroupBy(x => new { x.Currency, x.MovementType })
+            .Select(g => new { g.Key.Currency, g.Key.MovementType, Amount = g.Sum(x => x.Amount) }).ToListAsync(ct);
+        var result = new FinancePeriodSummaryDto
+        {
+            From = from, To = to,
+            Currencies = FinanceRules.Currencies.Select(currency => new CurrencyPeriodDto
+            {
+                Currency = currency,
+                Income = totals.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Ingreso).Sum(x => x.Amount),
+                Expense = totals.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Egreso).Sum(x => x.Amount),
+                PendingIncome = pending.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Ingreso).Sum(x => x.Amount),
+                PendingExpense = pending.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Egreso).Sum(x => x.Amount)
+            }).ToArray()
+        };
+        if (snapshot != null) await snapshot.CommitAsync(ct);
+        return result;
+    }
+
     public async Task<FinanceOverviewDto> GetAsync(DateOnly? from, DateOnly? to, CancellationToken ct)
     {
         // Every aggregate in this response must describe the same database snapshot.
@@ -37,7 +71,8 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
         if (from > to) throw new ArgumentException("El período es inválido");
         var cutoff = to.HasValue && to < today ? to.Value : today;
         var settings = await db.FinanceSettings.AsNoTracking().SingleOrDefaultAsync(ct);
-        var start = from ?? settings?.StartDate;
+        // Opening-balance configuration must not hide previously registered receipts.
+        var start = from;
         var settled = Settled(cutoff);
         var period = start.HasValue ? settled.Where(x => x.SettlementDate >= start) : settled;
         var totals = await period.GroupBy(x => new { x.Currency, x.Nature, x.Funding, x.MovementType, Year = x.SettlementDate!.Value.Year, Month = x.SettlementDate.Value.Month })
@@ -49,6 +84,9 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
             .GroupBy(x => new { x.Currency, x.MovementType })
             .Select(g => new { g.Key.Currency, g.Key.MovementType, Amount = g.Sum(x => x.Amount) }).ToListAsync(ct);
         var anchor = settings?.StartDate;
+        var recordedCash = await settled.Where(x => x.Funding == "Empresa")
+            .GroupBy(x => new { x.Currency, Year = x.SettlementDate!.Value.Year, Month = x.SettlementDate.Value.Month })
+            .Select(g => new { g.Key.Currency, g.Key.Year, g.Key.Month, Amount = g.Sum(x => x.MovementType == FinancialMovementType.Ingreso ? x.Amount : -x.Amount) }).ToListAsync(ct);
         var cash = await settled.Where(x => x.Funding == "Empresa" && anchor.HasValue && x.SettlementDate >= anchor)
             .GroupBy(x => new { x.Currency, Year = x.SettlementDate!.Value.Year, Month = x.SettlementDate.Value.Month })
             .Select(g => new { g.Key.Currency, g.Key.Year, g.Key.Month, Amount = g.Sum(x => x.MovementType == FinancialMovementType.Ingreso ? x.Amount : -x.Amount) }).ToListAsync(ct);
@@ -66,6 +104,7 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
             result.PendingIncome = pending.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Ingreso).Sum(x => x.Amount);
             result.PendingExpense = pending.Where(x => x.Currency == currency && x.MovementType == FinancialMovementType.Egreso).Sum(x => x.Amount);
             result.Balance = Balance(currency, cutoff.Year, cutoff.Month);
+            result.RecordedCashBalance = recordedCash.Where(x => x.Currency == currency).Sum(x => x.Amount);
             return result;
         }).ToArray();
         var months = new List<FinanceMonthDto>();
@@ -77,6 +116,7 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
                     var result = Sum(totals.Where(x => x.Currency == currency && x.Year == date.Year && x.Month == date.Month),
                         new FinanceMonthDto { Currency = currency, Year = date.Year, Month = date.Month });
                     result.Balance = Balance(currency, date.Year, date.Month);
+                    result.RecordedCashBalance = recordedCash.Where(x => x.Currency == currency && x.Year * 100 + x.Month <= date.Year * 100 + date.Month).Sum(x => x.Amount);
                     months.Add(result);
                 }
         var expenses = await period.Where(x => x.Nature == "Operacion" && x.MovementType == FinancialMovementType.Egreso)

@@ -156,7 +156,7 @@ public class FinancialMovementService : IFinancialMovementService
         var monthStart = new DateOnly(y, m, 1);
         var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
-        var summary = await _overview.GetAsync(monthStart, monthEnd, cancellationToken);
+        var summary = await _overview.GetPeriodSummaryAsync(monthStart, monthEnd, cancellationToken);
         var ars = summary.Currencies.Single(x => x.Currency == "ARS");
 
         return new FinanceMonthlySummaryDto

@@ -45,6 +45,56 @@ public class FinanceHistoryTests : IDisposable
         new() { Amount = amount, Currency = currency, AppliedAmount = applied, AppliedCurrency = appliedCurrency, PaymentDate = date, PeriodYear = 2025, PeriodMonth = 2, RequestId = Guid.NewGuid() };
 
     [Fact]
+    public async Task ExistingReceiptsRemainInHistoryWithoutOpeningBalanceAndMonthlyViewStaysMonthly()
+    {
+        Add(1500000, settlementDate: new DateOnly(2025, 5, 7));
+        Add(1000000, settlementDate: new DateOnly(2025, 5, 31));
+        Add(1000000, settlementDate: new DateOnly(2025, 6, 14));
+        Add(200000, settlementDate: new DateOnly(2025, 7, 6));
+        Add(1500000, settlementDate: new DateOnly(2025, 7, 23));
+        Add(400000, income: false, settlementDate: new DateOnly(2025, 9, 1));
+        var history = await Overview.GetAsync(null, new(2025, 9, 22), default);
+        var ars = history.Currencies.Single(x => x.Currency == "ARS");
+        Assert.Equal(5200000, ars.Income); Assert.Equal(400000, ars.Expense);
+        Assert.Equal(4800000, ars.RecordedCashBalance); Assert.Null(ars.Balance);
+        Assert.Equal(4800000, history.Months.Single(x => x.Currency == "ARS" && x.Month == 9).RecordedCashBalance);
+
+        var monthly = await Overview.GetPeriodSummaryAsync(new(2025, 9, 1), new(2025, 9, 30), default);
+        Assert.Equal(0, monthly.Currencies.Single(x => x.Currency == "ARS").Income);
+        Assert.Equal(-400000, monthly.Currencies.Single(x => x.Currency == "ARS").Result);
+    }
+
+    [Fact]
+    public async Task OpeningDateDoesNotHideEarlierReceiptsOrCountThemTwice()
+    {
+        Add(5200000, settlementDate: new DateOnly(2025, 7, 1));
+        Add(400000, income: false, settlementDate: new DateOnly(2025, 9, 1));
+        await Overview.SetupAsync(new() { StartDate = new(2025, 9, 1), OpeningArs = 5200000, OpeningUsd = 0 }, default);
+        var history = await Overview.GetAsync(null, new(2025, 9, 22), default);
+        Assert.Null(history.From);
+        var ars = history.Currencies.Single(x => x.Currency == "ARS");
+        Assert.Equal(5200000, ars.Income);
+        Assert.Equal(4800000, ars.RecordedCashBalance);
+        Assert.Equal(4800000, ars.Balance);
+    }
+
+    [Fact]
+    public async Task CompactSummaryMatchesPeriodTotalsButDoesNotExposeHistoricalConfiguration()
+    {
+        Add(1000); Add(200, income: false); Add(30, "USD");
+        Add(999, nature: "AporteSocio"); Add(50, status: FinancialMovementStatus.Vencido);
+        var full = await Overview.GetAsync(new(2025, 2, 1), new(2025, 2, 28), default);
+        var compact = await Overview.GetPeriodSummaryAsync(new(2025, 2, 1), new(2025, 2, 28), default);
+        foreach (var row in compact.Currencies)
+        {
+            var expected = full.Currencies.Single(x => x.Currency == row.Currency);
+            Assert.Equal(expected.Income, row.Income); Assert.Equal(expected.Expense, row.Expense);
+            Assert.Equal(expected.Result, row.Result); Assert.Equal(expected.PendingIncome, row.PendingIncome);
+        }
+        Assert.DoesNotContain("recordedCashBalance", System.Text.Json.JsonSerializer.Serialize(compact, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+    }
+
+    [Fact]
     public async Task EmptyHistoryDoesNotInventZeroOpeningBalances()
     {
         var result = await Overview.GetAsync(null, null, default);

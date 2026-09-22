@@ -50,7 +50,7 @@ public class DashboardService : IDashboardService
             .AsNoTracking()
             .CountAsync(x => x.Activo && x.FechaVencimiento == today, cancellationToken);
 
-        var finance = await _finance.GetAsync(monthStart, monthEnd, cancellationToken);
+        var finance = await _finance.GetPeriodSummaryAsync(monthStart, monthEnd, cancellationToken);
 
         var priorityTasks = await _dbContext.Tasks
             .AsNoTracking()

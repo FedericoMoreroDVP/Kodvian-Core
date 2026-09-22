@@ -137,6 +137,7 @@ export interface FinanzasLookups {
 }
 
 export interface ResumenMensual {
+  currencies: import('./finance-overview.models').CurrencyPeriod[];
   monthlyIncome: number;
   monthlyExpense: number;
   monthlyResult: number;

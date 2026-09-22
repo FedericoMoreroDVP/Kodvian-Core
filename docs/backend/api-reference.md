@@ -244,7 +244,8 @@ Los usuarios devueltos incluyen `roles`, `isActive`, `developerId` y `sessionVer
 
 Rutas exclusivas de administradores:
 
-- `GET /api/finance/overview?from=&to=`: histórico/período, configuración e indicadores ARS/USD.
+- `GET /api/finance/overview?from=&to=`: histórico/período, configuración e indicadores ARS/USD. Incluye `recordedCashBalance` acumulado hasta el corte, independiente de la configuración inicial. Se consulta desde el modal histórico.
+- `GET /api/financial-movements/monthly-summary`: indicadores reducidos por moneda; no carga el análisis histórico. El campo `finance` del dashboard utiliza `FinancePeriodSummaryDto` (from, to, currencies) para el mismo resumen mensual.
 - `PUT /api/finance/setup`: punto de partida opcional, saldos por moneda, historial completo y versión esperada.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios.
 - `POST /api/finance/exchanges`, `DELETE /api/finance/exchanges/{id}`: cambios de moneda emparejados.

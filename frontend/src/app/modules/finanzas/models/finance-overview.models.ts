@@ -1,5 +1,7 @@
 export interface FinanceSetup { startDate: string | null; openingArs: number | null; openingUsd: number | null; historyComplete: boolean; version: string; }
-export interface CurrencyOverview { currency: string; income: number; expense: number; result: number; contributions: number; withdrawals: number; reimbursements: number; pendingIncome: number; pendingExpense: number; cashChange: number; balance: number | null; }
+export interface CurrencyPeriod { currency: string; income: number; expense: number; result: number; pendingIncome: number; pendingExpense: number; }
+export interface FinancePeriodSummary { from: string; to: string; currencies: CurrencyPeriod[]; }
+export interface CurrencyOverview extends CurrencyPeriod { contributions: number; withdrawals: number; reimbursements: number; cashChange: number; recordedCashBalance: number; balance: number | null; }
 export interface FinanceMonth extends CurrencyOverview { year: number; month: number; }
 export interface Partner { id: string; fullName: string; isActive: boolean; }
 export interface PartnerBalance { partnerId: string; partnerName: string; currency: string; contributions: number; withdrawals: number; reimbursableExpenses: number; reimbursements: number; outstanding: number; }

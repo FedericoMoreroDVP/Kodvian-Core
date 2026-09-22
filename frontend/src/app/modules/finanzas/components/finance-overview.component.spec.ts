@@ -11,7 +11,7 @@ describe('Situación financiera', () => {
     setup: { startDate: null, openingArs: null, openingUsd: null, historyComplete: false, version: '00000000-0000-0000-0000-000000000000' },
     from: null, to: '2025-02-28', estimatedDateCount: 1, unclassifiedPayments: 1, months: [], expenses: [], partners: [],
     currencies: ['ARS', 'USD'].map(currency => ({ currency, income: currency === 'ARS' ? 1000 : 10, expense: 0, result: currency === 'ARS' ? 1000 : 10,
-      contributions: 0, withdrawals: 0, reimbursements: 0, pendingIncome: 0, pendingExpense: 0, cashChange: 0, balance: null }))
+      contributions: 0, withdrawals: 0, reimbursements: 0, pendingIncome: 0, pendingExpense: 0, cashChange: 0, recordedCashBalance: currency === 'ARS' ? 1000 : 10, balance: null }))
   });
   beforeEach(() => { TestBed.configureTestingModule({ imports: [FinanceOverviewComponent], providers: [provideHttpClient(), provideHttpClientTesting(), provideNoopAnimations()] }); http = TestBed.inject(HttpTestingController); });
   afterEach(() => http.verify());
@@ -21,7 +21,8 @@ describe('Situación financiera', () => {
     request.flush({ data: overview() }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.currency').length).toBe(2);
     expect(fixture.nativeElement.textContent).toContain('Historial en carga');
-    expect(fixture.nativeElement.textContent).toContain('Punto de partida por configurar');
+    expect(fixture.nativeElement.textContent).toContain('Saldo neto registrado al corte');
+    expect(fixture.nativeElement.textContent).toContain('Saldo anterior no informado');
     expect(fixture.nativeElement.textContent).toContain('pagos del equipo requieren revisar');
     fixture.destroy();
   });

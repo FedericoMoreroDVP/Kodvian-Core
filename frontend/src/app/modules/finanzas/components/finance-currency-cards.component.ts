@@ -17,7 +17,10 @@ import { CurrencyOverview } from '../models/finance-overview.models';
           <div><dt>Egresos registrados por pagar</dt><dd>{{ row.pendingExpense | currency:row.currency:'code':'1.2-2' }}</dd></div>
           <div><dt>Ingresos registrados por cobrar</dt><dd>{{ row.pendingIncome | currency:row.currency:'code':'1.2-2' }}</dd></div>
           <div><dt>Variación de caja del período</dt><dd>{{ row.cashChange | currency:row.currency:'code':'1.2-2' }}</dd></div>
-          <div class="balance"><dt>Saldo de caja estimado al corte {{ provisional ? '(provisional)' : '' }}</dt><dd>{{ row.balance === null ? 'Punto de partida por configurar' : (row.balance | currency:row.currency:'code':'1.2-2') }}</dd></div>
+          <div class="balance"><dt>Saldo neto registrado al corte {{ provisional ? '(provisional)' : '' }}</dt><dd [class.negative]="row.recordedCashBalance < 0">{{ row.recordedCashBalance | currency:row.currency:'code':'1.2-2' }}</dd><small>Acumulado de entradas y salidas de la empresa ya registradas, incluidos cobros anteriores.</small></div>
+          @if (row.balance !== null) {
+            <div class="balance"><dt>Saldo ajustado al punto de partida</dt><dd>{{ row.balance | currency:row.currency:'code':'1.2-2' }}</dd><small>Saldo inicial informado más movimientos desde la fecha configurada.</small></div>
+          } @else { <div class="balance"><small>Saldo anterior no informado. El acumulado registrado ya está incluido; no representa un saldo bancario confirmado.</small></div> }
         </dl>
       </section>
     }

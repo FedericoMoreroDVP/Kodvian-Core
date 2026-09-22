@@ -16,13 +16,17 @@ export class FinanceOverviewComponent implements OnInit, OnDestroy {
   private readonly api = inject(FinanceOverviewService);
   private request?: Subscription;
   @Output() changed = new EventEmitter<void>();
+  @Output() busyChange = new EventEmitter<boolean>();
   @Output() detail = new EventEmitter<{ currency: string; movementType: 'Ingreso' | 'Egreso'; from: string; to: string }>();
   data?: FinanceOverview;
   setup?: FinanceSetup;
   partners: Partner[] = [];
   partnerName = '';
   period = 'history'; from = ''; to = ''; currency = '';
-  loading = false; saving = false; error = ''; message = '';
+  loading = false; error = ''; message = '';
+  private savingValue = false;
+  get saving(): boolean { return this.savingValue; }
+  set saving(value: boolean) { this.savingValue = value; this.busyChange.emit(value); }
   settingsOpen = false; partnersOpen = false; exchangeOpen = false;
   exchange = this.newExchange();
   obligations: LedgerContrato[] = []; obligationsYear = new Date().getFullYear(); obligationsPage = 1; obligationsTotal = 0; obligationsLoading = false;
@@ -56,7 +60,7 @@ export class FinanceOverviewComponent implements OnInit, OnDestroy {
     if (!this.setup || this.saving) return; this.saving = true; this.error = '';
     try {
       await firstValueFrom(this.api.setup({ ...this.setup, startDate: this.setup.startDate || null }));
-      this.settingsOpen = false; this.reload(); this.message = 'Punto de partida guardado';
+      this.settingsOpen = false; this.reload(); this.changed.emit(); this.message = 'Punto de partida guardado';
     } catch (e: any) { this.error = e?.error?.message ?? 'No se pudo guardar'; } finally { this.saving = false; }
   }
   async loadPartners(): Promise<void> {

@@ -2,7 +2,7 @@
 
 public class DashboardOverviewDto
 {
-    public Kodvian.Core.Application.Finances.Abstractions.FinanceOverviewDto Finance { get; set; } = new();
+    public Kodvian.Core.Application.Finances.Abstractions.FinancePeriodSummaryDto Finance { get; set; } = new();
     public DashboardKpisDto Kpis { get; set; } = new();
     public IReadOnlyCollection<DashboardPriorityTaskDto> PriorityTasks { get; set; } = Array.Empty<DashboardPriorityTaskDto>();
     public IReadOnlyCollection<DashboardUpcomingCollectionDto> UpcomingCollections { get; set; } = Array.Empty<DashboardUpcomingCollectionDto>();

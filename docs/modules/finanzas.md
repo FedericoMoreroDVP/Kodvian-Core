@@ -2,11 +2,23 @@
 
 ## Uso
 
-La pantalla `/finanzas` abre **Histórico registrado**. Permite consultar este mes,
-este año o un rango personalizado, con ARS y USD separados. Inicio utiliza el mismo
-servicio de cálculo para sus indicadores mensuales.
+Las pantallas Inicio y `/finanzas` muestran un resumen mensual compacto: ingresos
+cobrados, gastos pagados y resultado del mes, con selector ARS/USD. Finanzas prioriza
+el listado de movimientos; clasificación, categoría, cliente, proveedor y base de
+fechas están disponibles en **Más filtros**.
 
-1. Registrar los socios desde **Socios**; su condición es independiente del rol de usuario.
+El botón **Histórico financiero** abre un modal cargado bajo demanda. Dentro están
+el histórico completo, los períodos personalizados, el punto de partida, los socios,
+los cambios de moneda, la evolución mensual y los saldos del equipo. El enlace de
+Inicio navega a `/finanzas?accion=historico` y abre el modal; después se limpia el
+parámetro para que una recarga no lo abra de nuevo.
+
+Los indicadores diarios usan una consulta reducida compartida que no calcula ni
+devuelve socios, categorías, saldos iniciales o evolución histórica. La consulta
+completa se realiza al abrir el modal. **Ver cobros / Ver gastos** cierra el modal
+y aplica los filtros correspondientes al listado, usando la fecha efectiva.
+
+1. Abrir **Histórico financiero** y registrar los socios desde **Socios**; su condición es independiente del rol de usuario.
 2. Cargar los gastos anteriores con moneda, fecha original y fecha efectiva de pago.
 3. Revisar fechas históricas y las monedas de contratos/pagos.
 4. Vincular pagos históricos con los egresos ya cargados desde Equipo del proyecto → Pagos → Revisar y vincular.
@@ -26,9 +38,11 @@ Todos los importes se calculan por moneda. No hay conversión automática ni un 
 - **Aportes:** entradas AporteSocio y gastos pagados directamente por un socio como aporte.
 - **Retiros:** salidas RetiroSocio, sin afectar el resultado operativo.
 - **Variación de caja:** entradas menos salidas efectivas financiadas por Empresa; incluye aportes, retiros, reintegros y cambios de moneda.
-- **Saldo estimado:** saldo inicial de esa moneda + variación desde la fecha configurada hasta el corte. Si falta fecha o saldo, se devuelve `null`.
+- **Saldo neto registrado (`recordedCashBalance`):** acumulado de entradas menos salidas efectivas de Empresa desde el primer registro hasta el corte, aunque no haya configuración de saldos iniciales. Incluye cobros de meses anteriores; no es un saldo bancario confirmado.
+- **Saldo ajustado al punto de partida (`balance`):** saldo inicial de esa moneda + variación desde la fecha configurada hasta el corte. Si falta fecha o saldo, se devuelve `null`, pero el acumulado registrado sigue visible.
 - El saldo inicial corresponde al inicio de la fecha configurada, antes de los movimientos de ese día. No se deben registrar otra vez como movimientos los importes ya incluidos en él.
-- Un filtro de período afecta los cobros, gastos y resultado del período; el saldo al cierre siempre conserva el acumulado desde el punto de partida.
+- Sin un filtro explícito de fecha inicial, el histórico conserva todos los movimientos: configurar el punto de partida no oculta cobros anteriores.
+- Un filtro de período afecta cobros, gastos y resultado del período. El saldo neto registrado conserva el acumulado hasta el corte, y el saldo ajustado conserva su base inicial. La evolución mensual muestra el saldo neto registrado al cierre.
 - **Pendientes:** incluye Pendiente y Vencido, sin afectar la caja. Sin fecha final de consulta se incluyen también obligaciones futuras ya registradas; con rango se usa la fecha del movimiento.
 - Se excluyen anulados e inactivos. Los cobros y pagos con fecha futura no aumentan ni reducen la caja actual.
 
@@ -36,6 +50,13 @@ El resumen ofrece evolución mensual, gastos por categoría, saldos de socios y 
 a los movimientos de cobros/gastos usando su fecha efectiva. Los totales no dependen
 de la página del listado. Las consultas agregan en la base de datos y el resumen usa
 una transacción de lectura Repeatable Read para mantener coherencia entre sus cifras.
+
+Ejemplo de regresión: cinco cobros de mayo a julio por ARS 5.200.000 y un gasto
+de septiembre por ARS 400.000 muestran ARS 4.800.000 acumulados, incluso sin saldo
+inicial. En septiembre los indicadores mensuales muestran ingresos cero, gastos
+ARS 400.000 y resultado -ARS 400.000; ese resultado mensual no sustituye al histórico.
+Si se informa ARS 5.200.000 como saldo al inicio de septiembre, el saldo ajustado
+también será ARS 4.800.000, sin sumar otra vez los cobros anteriores a esa fecha.
 
 ## Clasificación y financiación
 
@@ -88,7 +109,8 @@ que permita consolidarlos automáticamente sin duplicación.
 
 Todas las rutas financieras requieren Administrador; las escrituras además usan FinancesWrite.
 
-- `GET /api/finance/overview?from=&to=`: configuración, indicadores por moneda, evolución mensual, categorías y saldos de socios.
+- `GET /api/finance/overview?from=&to=`: configuración, indicadores por moneda con recordedCashBalance, evolución mensual, categorías y saldos de socios; consumido por el modal.
+- `GET /api/financial-movements/monthly-summary`: totales mensuales por moneda sin el análisis histórico completo. Inicio utiliza la misma operación de servicio y devuelve ese resumen reducido en `finance`.
 - `PUT /api/finance/setup`: startDate, openingArs, openingUsd, historyComplete, version.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios y actividad.
 - `POST /api/finance/exchanges`: requestId, fromCurrency/fromAmount, toCurrency/toAmount, date, notes.
@@ -125,5 +147,6 @@ protegen el vínculo pago/egreso y la identidad de cada pago.
 
 - `FinanceHistoryTests`: monedas, caja/pendientes, fechas, carga retroactiva, saldos iniciales, socios, reintegros, cambios, porcentajes, pagos cruzados, vinculación histórica, correcciones, anulaciones y reintentos. Usa EF InMemory.
 - Frontend: pruebas de vista histórica, estados desconocidos, filtros, clasificación de pagos históricos, fechas efectivas, moneda e identificación estable al reintentar.
+- Regresiones: cobros históricos sin saldo inicial, punto de partida posterior a los cobros, equivalencia de totales mensuales, modal bajo demanda, cierre al consultar movimientos y bloqueo de cierre durante el guardado.
 - Compilar backend/frontend, ejecutar las suites y comprobar las diferencias del modelo EF.
 - Revisar/aplicar la migración en PostgreSQL de prueba y verificar allí transacciones, bloqueos y recuperación ante fallos; InMemory no verifica esos comportamientos relacionales.

@@ -1,5 +1,5 @@
 <section class="overview">
-  <h3>Situación de la empresa</h3>
+  <h3>Situación acumulada de la empresa</h3>
   <div class="toolbar">
     <label>Período<select [(ngModel)]="period" (change)="selectPeriod()"><option value="history">Histórico registrado</option><option value="month">Este mes</option><option value="year">Este año</option><option value="custom">Personalizado</option></select></label>
     @if (period === 'custom') {
@@ -16,7 +16,8 @@
   @if (loading) { <p role="status">Calculando situación financiera…</p> }
   @if (settingsOpen && setup) {
     <form class="panel" (ngSubmit)="saveSetup()">
-      <h4>Punto de partida</h4><p>Los saldos corresponden al inicio de esta fecha, antes de sus movimientos. Deja vacíos los importes desconocidos; cero significa saldo confirmado en cero.</p>
+      <h4>Punto de partida (opcional)</h4><p>Los cobros y gastos existentes ya forman parte del saldo neto registrado. No los vuelvas a cargar como saldo inicial.</p>
+      <p>Configura aquí un saldo conocido al inicio de una fecha: el saldo ajustado sumará solo los movimientos posteriores, incluidos los de ese día. El histórico completo seguirá visible. Deja vacíos los importes desconocidos; cero significa saldo confirmado en cero.</p>
       <div class="toolbar"><label>Fecha<input name="start" type="date" [(ngModel)]="setup.startDate" /></label>
         <label>Saldo inicial ARS<input name="ars" type="number" step="0.01" [(ngModel)]="setup.openingArs" /></label>
         <label>Saldo inicial USD<input name="usd" type="number" step="0.01" [(ngModel)]="setup.openingUsd" /></label>
@@ -54,8 +55,8 @@
         @for (contract of obligations; track contract.contractId) { @for (row of contract.currencies; track row.currency) { <tr><td>{{ contract.projectName }}</td><td>{{ contract.developerName }}</td><td>{{ row.currency }}</td><td>{{ row.totalDue | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.totalPaid | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.totalBalance | currency:row.currency:'code':'1.2-2' }}</td><td>{{ contract.needsReview ? 'Parcial: revisar monedas' : 'Monedas confirmadas' }}</td></tr> } }
       </tbody></table></div>
     </details>
-    <details><summary>Evolución mensual</summary><div class="table-wrap"><table><thead><tr><th>Mes</th><th>Moneda</th><th>Cobrado</th><th>Gastos</th><th>Resultado</th><th>Aportes</th><th>Retiros</th><th>Saldo al cierre</th></tr></thead><tbody>
-      @for (row of summary.months; track row.currency + row.year + '-' + row.month) { @if (!currency || currency === row.currency) { <tr><td>{{ row.month }}/{{ row.year }}</td><td>{{ row.currency }}</td><td>{{ row.income | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.expense | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.result | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.contributions | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.withdrawals | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.balance === null ? 'Por configurar' : (row.balance | currency:row.currency:'code':'1.2-2') }}</td></tr> } }
+    <details><summary>Evolución mensual</summary><div class="table-wrap"><table><thead><tr><th>Mes</th><th>Moneda</th><th>Cobrado</th><th>Gastos</th><th>Resultado</th><th>Aportes</th><th>Retiros</th><th>Saldo neto registrado al cierre</th></tr></thead><tbody>
+      @for (row of summary.months; track row.currency + row.year + '-' + row.month) { @if (!currency || currency === row.currency) { <tr><td>{{ row.month }}/{{ row.year }}</td><td>{{ row.currency }}</td><td>{{ row.income | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.expense | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.result | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.contributions | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.withdrawals | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.recordedCashBalance | currency:row.currency:'code':'1.2-2' }}</td></tr> } }
     </tbody></table></div></details>
     <details><summary>Gastos por categoría</summary><div class="table-wrap"><table><thead><tr><th>Categoría</th><th>Importe</th></tr></thead><tbody>@for (row of summary.expenses; track row.currency + row.category) { @if (!currency || currency === row.currency) { <tr><td>{{ row.category }}</td><td>{{ row.amount | currency:row.currency:'code':'1.2-2' }}</td></tr> } }</tbody></table></div></details>
     <details><summary>Aportes, retiros y gastos por reintegrar a socios (acumulados al corte)</summary><div class="table-wrap"><table><thead><tr><th>Socio</th><th>Moneda</th><th>Aportes</th><th>Retiros</th><th>Gastos reintegrables</th><th>Reintegrado</th><th>Pendiente de reintegro</th></tr></thead><tbody>@for (row of summary.partners; track row.partnerId + row.currency) { <tr><td>{{ row.partnerName }}</td><td>{{ row.currency }}</td><td>{{ row.contributions | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.withdrawals | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.reimbursableExpenses | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.reimbursements | currency:row.currency:'code':'1.2-2' }}</td><td>{{ row.outstanding | currency:row.currency:'code':'1.2-2' }}</td></tr> }</tbody></table></div></details>

@@ -45,7 +45,7 @@ export interface RecentMovement {
 }
 
 export interface DashboardOverview {
-  finance?: import('../../finanzas/models/finance-overview.models').FinanceOverview;
+  finance?: import('../../finanzas/models/finance-overview.models').FinancePeriodSummary;
   kpis: DashboardKpis;
   priorityTasks: PriorityTask[];
   upcomingCollections: UpcomingCollection[];

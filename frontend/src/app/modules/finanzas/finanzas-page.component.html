@@ -8,25 +8,29 @@
     <div class="acciones-header">
       <button mat-flat-button color="primary" (click)="nuevoIngreso()">Nuevo ingreso</button>
       <button mat-flat-button color="primary" (click)="nuevoEgreso()">Nuevo egreso</button>
+      <button mat-stroked-button [disabled]="historicoAbierto" (click)="abrirHistorico()">Histórico financiero</button>
       <button mat-button (click)="nuevaCategoria()">Nueva categoría</button>
     </div>
   </div>
 
-  <app-finance-overview (changed)="cargarMovimientos()" (detail)="summaryDetail($event)" />
+  @if (errorResumen) { <p role="alert">{{ errorResumen }} <button mat-button (click)="cargarResumen()">Reintentar</button></p> }
+  @else { <app-finance-month-summary [rows]="resumen.currencies" [loading]="cargandoResumen" /> }
 
   <mat-card class="movimientos-card">
     <form [formGroup]="filtrosForm" class="filtros-row">
       <mat-form-field appearance="outline"><mat-label>Moneda</mat-label><mat-select formControlName="currency"><mat-option value="">Todas (sin sumarlas)</mat-option><mat-option value="ARS">ARS</mat-option><mat-option value="USD">USD</mat-option></mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Clasificación</mat-label><mat-select formControlName="nature"><mat-option value="">Todas</mat-option>@for (nature of natures; track nature.value) { <mat-option [value]="nature.value">{{ nature.label }}</mat-option> }</mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Filtrar fechas por</mat-label><mat-select formControlName="useSettlementDate"><mat-option [value]="false">Fecha del movimiento</mat-option><mat-option [value]="true">Fecha efectiva de cobro/pago</mat-option></mat-select></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>Fecha desde</mat-label><input matInput [matDatepicker]="dateFromPicker" formControlName="dateFrom" /><mat-datepicker-toggle matIconSuffix [for]="dateFromPicker"></mat-datepicker-toggle><mat-datepicker #dateFromPicker></mat-datepicker></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>Fecha hasta</mat-label><input matInput [matDatepicker]="dateToPicker" formControlName="dateTo" /><mat-datepicker-toggle matIconSuffix [for]="dateToPicker"></mat-datepicker-toggle><mat-datepicker #dateToPicker></mat-datepicker></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>Tipo de movimiento</mat-label><mat-select formControlName="movementType"><mat-option value="">Todos</mat-option>@for (tipo of tipos; track tipo) {<mat-option [value]="tipo">{{ tipo }}</mat-option>}</mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Categoría</mat-label><mat-select formControlName="categoryId"><mat-option value="">Todas</mat-option>@for (cat of lookups.categories; track cat.id) {<mat-option [value]="cat.id">{{ cat.name }}</mat-option>}</mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Cliente</mat-label><mat-select formControlName="clientId"><mat-option value="">Todos</mat-option>@for (cliente of lookups.clients; track cliente.id) {<mat-option [value]="cliente.id">{{ cliente.name }}</mat-option>}</mat-select></mat-form-field>
-      <mat-form-field appearance="outline"><mat-label>Proveedor</mat-label><mat-select formControlName="providerId"><mat-option value="">Todos</mat-option>@for (proveedor of lookups.providers; track proveedor.id) {<mat-option [value]="proveedor.id">{{ proveedor.name }}</mat-option>}</mat-select></mat-form-field>
       <mat-form-field appearance="outline"><mat-label>Estado</mat-label><mat-select formControlName="status"><mat-option value="">Todos</mat-option>@for (estado of estados; track estado) {<mat-option [value]="estado">{{ estado }}</mat-option>}</mat-select></mat-form-field>
-      <div class="acciones-filtro"><button mat-flat-button color="primary" type="button" (click)="aplicarFiltros()">Filtrar</button><button mat-button type="button" (click)="limpiarFiltros()">Limpiar</button></div>
+      <div class="acciones-filtro"><button mat-flat-button color="primary" type="button" (click)="aplicarFiltros()">Filtrar</button><button mat-button type="button" (click)="limpiarFiltros()">Limpiar</button><button mat-button type="button" [attr.aria-expanded]="filtrosAvanzados" (click)="filtrosAvanzados = !filtrosAvanzados">{{ filtrosAvanzados ? 'Ocultar filtros avanzados' : 'Más filtros' }}</button></div>
+      @if (filtrosAvanzados) {
+        <mat-form-field appearance="outline"><mat-label>Clasificación</mat-label><mat-select formControlName="nature"><mat-option value="">Todas</mat-option>@for (nature of natures; track nature.value) { <mat-option [value]="nature.value">{{ nature.label }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Filtrar fechas por</mat-label><mat-select formControlName="useSettlementDate"><mat-option [value]="false">Fecha del movimiento</mat-option><mat-option [value]="true">Fecha efectiva de cobro/pago</mat-option></mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Categoría</mat-label><mat-select formControlName="categoryId"><mat-option value="">Todas</mat-option>@for (cat of lookups.categories; track cat.id) {<mat-option [value]="cat.id">{{ cat.name }}</mat-option>}</mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Cliente</mat-label><mat-select formControlName="clientId"><mat-option value="">Todos</mat-option>@for (cliente of lookups.clients; track cliente.id) {<mat-option [value]="cliente.id">{{ cliente.name }}</mat-option>}</mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Proveedor</mat-label><mat-select formControlName="providerId"><mat-option value="">Todos</mat-option>@for (proveedor of lookups.providers; track proveedor.id) {<mat-option [value]="proveedor.id">{{ proveedor.name }}</mat-option>}</mat-select></mat-form-field>
+      }
     </form>
 
     <div class="tabla-wrapper">
