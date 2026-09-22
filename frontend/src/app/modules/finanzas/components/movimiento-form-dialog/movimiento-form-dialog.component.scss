@@ -3,6 +3,15 @@
 @include dialog.dialog-form-grid(900px);
 @include dialog.dialog-premium-shell();
 
+.dialog-actions .save-error {
+  flex: 1 0 100%;
+  margin: 0 0 12px;
+  max-height: 100px;
+  overflow: auto;
+  color: #ff8b8b;
+  font-size: 13px;
+}
+
 .receipt-upload {
   display: flex;
   flex-direction: column;

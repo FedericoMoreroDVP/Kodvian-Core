@@ -1,4 +1,4 @@
-import { Component, Inject, inject } from '@angular/core';
+import { Component, ElementRef, Inject, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { FinanzasService } from '../../services/finanzas.service';
@@ -38,7 +38,11 @@ export class MovimientoFormDialogComponent {
   private readonly api = inject(FinanzasService);
   private readonly finance = inject(FinanceOverviewService);
   private readonly requestId = crypto.randomUUID();
-  readonly natures = FINANCE_NATURES;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef, { optional: true });
+  get natures() {
+    return FINANCE_NATURES.filter(x => x.value === 'Operacion' || (this.form.controls.movementType.value === 'Ingreso'
+      ? x.value === 'AporteSocio' : x.value === 'RetiroSocio' || x.value === 'ReintegroSocio'));
+  }
   partners: Partner[] = [];
   saving = false;
   error = '';
@@ -99,17 +103,70 @@ export class MovimientoFormDialogComponent {
     }
   }
 
+  onMovementTypeChange(): void {
+    const controls = this.form.controls;
+    if (!this.natures.some(x => x.value === controls.nature.value)) controls.nature.setValue('Operacion');
+    if (controls.movementType.value === 'Ingreso') controls.funding.setValue('Empresa');
+    if (controls.status.value === 'Pagado' && controls.movementType.value === 'Ingreso') controls.status.setValue('Cobrado');
+    else if (controls.status.value === 'Cobrado' && controls.movementType.value === 'Egreso') controls.status.setValue('Pagado');
+    if (!this.categoriasFiltradas().some(x => x.id === controls.categoryId.value)) controls.categoryId.setValue('');
+    this.onClassificationChange();
+  }
+
+  onClassificationChange(): void {
+    if (this.form.controls.nature.value !== 'Operacion') this.form.controls.funding.setValue('Empresa');
+    if (!this.needsPartner) this.form.controls.partnerId.setValue('');
+    this.error = '';
+  }
+
+  private showIssue(message: string, control?: keyof typeof this.form.controls): void {
+    this.error = message;
+    if (control) {
+      this.form.controls[control].markAsTouched();
+      const element = this.host?.nativeElement.querySelector<HTMLElement>(`[formcontrolname="${control}"]`);
+      element?.focus({ preventScroll: true });
+      element?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  private showFormErrors(): void {
+    this.form.markAllAsTouched();
+    if (this.form.hasError('invalidDueDate')) { this.showIssue('La fecha de vencimiento no puede ser anterior a la fecha de movimiento.', 'dueDate'); return; }
+    if (this.form.hasError('invalidReceiptFile')) { this.showIssue('El comprobante debe ser un archivo PDF.'); return; }
+    const fields = { movementType: 'Tipo de movimiento', categoryId: 'Categoría', description: 'Descripción', amount: 'Monto',
+      currency: 'Moneda', nature: 'Clasificación', funding: 'Quién afrontó el gasto', settlementDate: 'Fecha efectiva',
+      movementDate: 'Fecha de movimiento', dueDate: 'Fecha de vencimiento', status: 'Estado', paymentMethod: 'Medio de pago',
+      receiptNumber: 'Número de comprobante', notes: 'Observaciones' };
+    for (const name of Object.keys(fields) as (keyof typeof fields)[]) {
+      const errors = this.form.controls[name].errors;
+      if (!errors) continue;
+      const reason = errors['required'] ? 'completa este campo' : errors['maxlength'] ? `máximo ${errors['maxlength'].requiredLength} caracteres` : 'revisa el valor ingresado';
+      this.showIssue(`${fields[name]}: ${reason}.`, name); return;
+    }
+    this.showIssue('Revisa los campos del movimiento antes de guardar.');
+  }
+
   async guardar(): Promise<void> {
     if (this.saving) return;
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
+      this.showFormErrors();
       return;
     }
 
     const raw = this.form.getRawValue();
+    if (!this.natures.some(x => x.value === raw.nature)) {
+      this.showIssue(raw.movementType === 'Egreso'
+        ? 'Para un gasto pagado por un socio, selecciona Operación de la empresa y luego un socio como aporte en Quién afrontó el gasto.'
+        : 'Un ingreso admite Operación de la empresa o Aporte de dinero de un socio.', 'nature'); return;
+    }
+    if (!this.estados.includes(raw.status!)) { this.showIssue('Selecciona un estado compatible con el tipo de movimiento.', 'status'); return; }
+    if (!this.categoriasFiltradas().some(x => x.id === raw.categoryId)) { this.showIssue('Selecciona una categoría compatible con el tipo de movimiento.', 'categoryId'); return; }
     const settled = raw.status === 'Cobrado' || raw.status === 'Pagado';
-    if (settled && !raw.settlementDate) { this.error = 'Indica la fecha efectiva del cobro o pago'; return; }
-    if (this.needsPartner && !raw.partnerId) { this.error = 'Selecciona el socio'; return; }
+    if (this.needsPartner && !settled && raw.status !== 'Anulado') {
+      this.showIssue(raw.movementType === 'Ingreso' ? 'Un aporte de dinero debe estar Cobrado para registrarse.' : 'Un gasto afrontado por un socio, retiro o reintegro debe estar Pagado para registrarse.', 'status'); return;
+    }
+    if (settled && !raw.settlementDate) { this.showIssue('Indica la fecha efectiva del cobro o pago', 'settlementDate'); return; }
+    if (this.needsPartner && !raw.partnerId) { this.showIssue('Selecciona el socio', 'partnerId'); return; }
     const payload = {
       requestId: this.requestId,
       movementType: raw.movementType,
@@ -168,8 +225,13 @@ export class MovimientoFormDialogComponent {
   }
 
   categoriasFiltradas(): CategoriaFinanciera[] {
-    const type = this.form.value.movementType;
-    return this.data.categorias.filter((x) => x.isActive && x.movementType === type);
+    const type = this.form.controls.movementType.value;
+    const categories = this.data.categorias.filter(x => x.movementType === type && (x.isActive || x.id === this.data.movimiento?.categoryId));
+    const current = this.data.movimiento;
+    if (current && current.movementType === type && !this.data.categorias.some(x => x.id === current.categoryId)) {
+      categories.push({ id: current.categoryId, name: current.categoryName, movementType: current.movementType, isActive: false });
+    }
+    return categories;
   }
 }
 

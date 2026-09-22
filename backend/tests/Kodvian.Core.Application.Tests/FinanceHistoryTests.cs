@@ -342,6 +342,35 @@ public class FinanceHistoryTests : IDisposable
     }
 
     [Fact]
+    public async Task ExistingExpenseCanBecomePartnerContributionWithoutDuplicatingOrChangingHistory()
+    {
+        var partner = new Partner { FullName = "Socio" }; db.Partners.Add(partner);
+        var expense = Add(400000, income: false);
+        expense.Description = "Pago Marketing"; expense.DueDate = date; expense.SettlementDateEstimated = true;
+        expense.PaymentMethod = "Mercado Pago"; expense.ReceiptNumber = "176693693860"; db.SaveChanges();
+        var request = new FinancialMovementUpsertRequestDto { RequestId = Guid.NewGuid(), ExpectedVersion = expense.Version,
+            Amount = expense.Amount, Currency = expense.Currency, Description = expense.Description, CategoryId = expense.CategoryId,
+            ProjectId = expense.ProjectId, MovementType = "Egreso", Status = "Pagado", MovementDate = date, DueDate = date,
+            SettlementDate = date, SettlementDateEstimated = true, PaymentMethod = expense.PaymentMethod, ReceiptNumber = expense.ReceiptNumber,
+            Nature = "AporteSocio", Funding = "Empresa", PartnerId = partner.Id };
+        await Assert.ThrowsAsync<ArgumentException>(() => Movements.UpdateAsync(expense.Id, request));
+        Assert.Equal("Empresa", expense.Funding);
+        request.Nature = "Operacion"; request.Funding = "SocioAporte";
+        var updated = await Movements.UpdateAsync(expense.Id, request);
+        Assert.NotNull(updated); Assert.Equal(expense.Id, updated.Id);
+        var stored = await db.FinancialMovements.SingleAsync();
+        Assert.Equal(400000, stored.Amount); Assert.Equal("ARS", stored.Currency);
+        Assert.Equal(FinancialMovementType.Egreso, stored.MovementType); Assert.Equal("Operacion", stored.Nature);
+        Assert.Equal("SocioAporte", stored.Funding); Assert.Equal(partner.Id, stored.PartnerId);
+        Assert.Equal(date, stored.MovementDate); Assert.Equal(date, stored.DueDate); Assert.Equal(date, stored.SettlementDate);
+        Assert.True(stored.SettlementDateEstimated); Assert.Equal("176693693860", stored.ReceiptNumber);
+        var overview = await Overview.GetAsync(null, null, default);
+        var ars = overview.Currencies.Single(x => x.Currency == "ARS");
+        Assert.Equal(400000, ars.Expense); Assert.Equal(-400000, ars.Result); Assert.Equal(0, ars.RecordedCashBalance);
+        Assert.Equal(400000, Assert.Single(overview.Partners).Contributions);
+    }
+
+    [Fact]
     public async Task ManualExpenseRetryDoesNotDuplicateTheMovement()
     {
         var request = new FinancialMovementUpsertRequestDto { RequestId = Guid.NewGuid(), Amount = 20, Currency = "USD", Description = "Gasto", CategoryId = expenseCategory.Id,

@@ -77,6 +77,23 @@ La condición de socio y su actividad financiera son independientes de los roles
 Los aportes, retiros y reintegros se registran cuando se hacen efectivos. La categoría
 describe el concepto; la clasificación determina cómo participa en los cálculos.
 
+### Atribuir un egreso existente a un socio
+
+Editar el movimiento y conservar **Egreso → Operación de la empresa**. En **Quién
+afrontó el gasto**, elegir **Un socio como aporte (sin devolución)** y seleccionar
+el socio. El estado debe ser **Pagado**, con su fecha efectiva original revisada.
+Guardar actualiza el mismo registro: no se crea un ingreso adicional.
+
+Por ejemplo, “Pago Marketing” de ARS 400.000 continúa siendo un gasto de ARS 400.000,
+suma ese importe a los aportes del socio y deja de descontarlo de la caja empresarial.
+**Aporte de dinero de un socio** se ofrece únicamente para ingresos de dinero a la empresa.
+
+Al cambiar el tipo, el formulario ajusta la clasificación y el estado Cobrado/Pagado
+y exige volver a seleccionar una categoría compatible. En edición se permite conservar
+la categoría original aunque esté archivada. Las validaciones se muestran junto a
+Guardar y enfocan el campo a corregir; los errores del servidor también permanecen
+visibles allí, conservando los datos para reintentar.
+
 ## Cambios de moneda
 
 Una operación de cambio crea exactamente dos movimientos vinculados por ExchangeId:

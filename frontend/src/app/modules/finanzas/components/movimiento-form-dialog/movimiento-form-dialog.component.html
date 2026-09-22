@@ -1,14 +1,16 @@
 ﻿<h2 mat-dialog-title class="dialog-title">{{ data.movimiento ? 'Editar movimiento' : (data.tipoInicial === 'Ingreso' ? 'Nuevo ingreso' : 'Nuevo egreso') }}</h2>
 <mat-dialog-content class="dialog-body">
   <form [formGroup]="form" class="form-grid dialog-form">
+    <mat-form-field appearance="outline"><mat-label>Tipo de movimiento</mat-label><mat-select formControlName="movementType" (selectionChange)="onMovementTypeChange()"><mat-option value="Ingreso">Ingreso</mat-option><mat-option value="Egreso">Egreso</mat-option></mat-select></mat-form-field>
     <mat-form-field appearance="outline"><mat-label>Moneda</mat-label><mat-select formControlName="currency"><mat-option value="ARS">ARS · Pesos argentinos</mat-option><mat-option value="USD">USD · Dólares</mat-option></mat-select></mat-form-field>
-    <mat-form-field appearance="outline"><mat-label>Clasificación</mat-label><mat-select formControlName="nature">@for (nature of natures; track nature.value) { <mat-option [value]="nature.value">{{ nature.label }}</mat-option> }</mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Clasificación</mat-label><mat-select formControlName="nature" (selectionChange)="onClassificationChange()">@for (nature of natures; track nature.value) { <mat-option [value]="nature.value">{{ nature.value === 'AporteSocio' ? 'Aporte de dinero de un socio' : nature.label }}</mat-option> }</mat-select></mat-form-field>
     @if (form.controls.movementType.value === 'Egreso' && form.controls.nature.value === 'Operacion') {
-      <mat-form-field appearance="outline"><mat-label>Quién afrontó el gasto</mat-label><mat-select formControlName="funding"><mat-option value="Empresa">La empresa</mat-option><mat-option value="SocioAporte">Un socio como aporte (sin devolución)</mat-option><mat-option value="SocioReintegrable">Un socio, a reintegrar</mat-option></mat-select></mat-form-field>
+      <mat-form-field appearance="outline"><mat-label>Quién afrontó el gasto</mat-label><mat-select formControlName="funding" (selectionChange)="onClassificationChange()"><mat-option value="Empresa">La empresa</mat-option><mat-option value="SocioAporte">Un socio como aporte (sin devolución)</mat-option><mat-option value="SocioReintegrable">Un socio, a reintegrar</mat-option></mat-select></mat-form-field>
+      <p class="full-width">Si un socio pagó este gasto como aporte, selecciónalo en Quién afrontó el gasto. El movimiento sigue siendo un egreso operativo.</p>
     }
     @if (needsPartner) {
       <mat-form-field appearance="outline"><mat-label>Socio</mat-label><mat-select formControlName="partnerId">@for (partner of partners; track partner.id) { <mat-option [value]="partner.id" [disabled]="!partner.isActive && data.movimiento?.partnerId !== partner.id">{{ partner.fullName }}</mat-option> }</mat-select></mat-form-field>
-      <p class="full-width">Los socios se registran desde Finanzas → Socios. Un gasto aportado o reintegrable no descuenta caja de la empresa. El reintegro posterior no se cuenta otra vez como gasto.</p>
+      <p class="full-width">Los socios se registran desde Visión financiera → Configurar → Gestionar socios. Un gasto aportado o reintegrable no descuenta caja de la empresa. El reintegro posterior no se cuenta otra vez como gasto.</p>
     }
     @if (form.controls.status.value === 'Cobrado' || form.controls.status.value === 'Pagado') {
       <mat-form-field appearance="outline"><mat-label>Fecha efectiva de cobro/pago</mat-label><input matInput [matDatepicker]="settlementPicker" formControlName="settlementDate" /><mat-datepicker-toggle matIconSuffix [for]="settlementPicker" /><mat-datepicker #settlementPicker /></mat-form-field>
@@ -18,14 +20,6 @@
       <p class="section-eyebrow">Datos del movimiento</p>
       <span class="section-divider"></span>
     </div>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Tipo de movimiento</mat-label>
-      <mat-select formControlName="movementType">
-        <mat-option value="Ingreso">Ingreso</mat-option>
-        <mat-option value="Egreso">Egreso</mat-option>
-      </mat-select>
-    </mat-form-field>
 
     <mat-form-field appearance="outline">
       <mat-label>Categoría</mat-label>
@@ -157,9 +151,9 @@
       }
     </div>
   </form>
-  @if (error) { <p role="alert">{{ error }}</p> }
 </mat-dialog-content>
 <mat-dialog-actions align="end" class="dialog-actions">
+  @if (error) { <p role="alert" id="movement-save-error" class="save-error">{{ error }}</p> }
   <button mat-button class="action-cancel" [disabled]="saving" (click)="close()">Cerrar</button>
-  <button mat-flat-button color="primary" class="action-save" [disabled]="saving" (click)="guardar()">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
+  <button mat-flat-button color="primary" class="action-save" [disabled]="saving" [attr.aria-describedby]="error ? 'movement-save-error' : null" (click)="guardar()">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
 </mat-dialog-actions>
