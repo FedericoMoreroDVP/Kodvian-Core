@@ -17,6 +17,9 @@ public class FinanceController(IFinanceOverviewService service) : ControllerBase
     public async Task<IActionResult> Setup(FinanceSetupDto request, CancellationToken ct) => Ok(ApiResponseDto<FinanceSetupDto>.Ok(await service.SetupAsync(request, ct), "Configuración guardada"));
     [HttpGet("partners")]
     public async Task<IActionResult> Partners(CancellationToken ct) => Ok(ApiResponseDto<IReadOnlyCollection<PartnerDto>>.Ok(await service.PartnersAsync(ct), "Socios obtenidos"));
+    [HttpGet("partners/people")]
+    public async Task<IActionResult> PartnerPeople([FromQuery] PartnerPeopleRequest request, CancellationToken ct) =>
+        Ok(ApiResponseDto<PagedResultDto<PartnerPersonDto>>.Ok(await service.PartnerPeopleAsync(request, ct), "Personas disponibles"));
     [HttpPost("partners"), Authorize(Policy = "FinancesWrite")]
     public async Task<IActionResult> CreatePartner(PartnerRequest request, CancellationToken ct) => Ok(ApiResponseDto<PartnerDto>.Ok(await service.SavePartnerAsync(null, request, ct), "Socio guardado"));
     [HttpPut("partners/{id:guid}"), Authorize(Policy = "FinancesWrite")]

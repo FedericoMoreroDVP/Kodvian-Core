@@ -3,7 +3,7 @@
 ## Extensión financiera multimoneda
 
 - `FinanceSettings`: registro único Id=1, fecha de seguimiento, saldos ARS/USD opcionales, confirmación del historial y versión de edición.
-- `Partner`: socio identificado por nombre y actividad, independiente de roles de acceso.
+- `Partner`: socio con nombre, correo opcional y actividad, independiente de roles de acceso. Puede vincularse mediante DeveloperId o UserId (mutuamente excluyentes, con índices únicos y borrado restringido). Nombre y correo se proyectan desde la persona vinculada; las fichas manuales conservan sus datos propios.
 - `FinancialMovement`: Currency, Nature, Funding, PartnerId, SettlementDate, SettlementDateEstimated, ExchangeId y Version. Los cambios de moneda tienen dos movimientos enlazados; los importes nunca se suman entre monedas.
 - `DeveloperPayment`: Currency, AppliedCurrency, AppliedAmount, FinancialMovementId único, RequestId único y Version. La baja lógica anula también el egreso vinculado.
 - `ProjectDeveloperContract.Currency`: moneda de acuerdos de monto fijo; los porcentajes se calculan por moneda de los ingresos. Los datos históricos sin moneda requieren revisión.

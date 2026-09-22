@@ -59,6 +59,11 @@ también será ARS 4.800.000, sin sumar otra vez los cobros anteriores a esa fec
 
 ## Clasificación y financiación
 
+Los socios pueden tomar nombre y correo de una persona existente de Equipo o de una
+cuenta sin perfil, o registrarse manualmente. La vinculación mantiene el mismo PartnerId
+y todo su historial. Se realiza desde Visión financiera → Configurar → Gestionar socios.
+La condición de socio y su actividad financiera son independientes de los roles y del acceso al sistema.
+
 `Nature` admite Operacion, AporteSocio, RetiroSocio, ReintegroSocio y CambioMoneda.
 `Funding` admite Empresa, SocioAporte y SocioReintegrable.
 

@@ -50,8 +50,13 @@ public class KodvianDbContext : DbContext
         });
         modelBuilder.Entity<Partner>(entity =>
         {
-            entity.ToTable("Partners");
+            entity.ToTable("Partners", t => t.HasCheckConstraint("CK_Partners_OnePersonSource", "\"DeveloperId\" IS NULL OR \"UserId\" IS NULL"));
             entity.Property(x => x.FullName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(120);
+            entity.HasIndex(x => x.DeveloperId).IsUnique();
+            entity.HasIndex(x => x.UserId).IsUnique();
+            entity.HasOne(x => x.Developer).WithMany().HasForeignKey(x => x.DeveloperId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<TaskAttachment>(entity =>

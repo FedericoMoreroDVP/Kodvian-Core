@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map } from 'rxjs';
 import { ApiResponse, PagedResult } from '../../../shared/models/api.models';
 import { LedgerContrato } from '../../proyectos/models/proyectos.models';
-import { FinanceOverview, FinanceSetup, Partner } from '../models/finance-overview.models';
+import { FinanceOverview, FinanceSetup, Partner, PartnerDetails, PartnerPerson } from '../models/finance-overview.models';
 
 @Injectable({ providedIn: 'root' })
 export class FinanceOverviewService {
@@ -17,9 +17,12 @@ export class FinanceOverviewService {
   }
   setup(value: FinanceSetup) { return this.http.put<ApiResponse<FinanceSetup>>('/api/finance/setup', value).pipe(map(r => r.data)); }
   partners() { return this.http.get<ApiResponse<Partner[]>>('/api/finance/partners').pipe(map(r => r.data)); }
-  savePartner(fullName: string, isActive = true, id?: string) {
-    return (id ? this.http.put<ApiResponse<Partner>>(`/api/finance/partners/${id}`, { fullName, isActive })
-      : this.http.post<ApiResponse<Partner>>('/api/finance/partners', { fullName, isActive })).pipe(map(r => r.data));
+  partnerPeople(search = '', pageNumber = 1) {
+    return this.http.get<ApiResponse<PagedResult<PartnerPerson>>>('/api/finance/partners/people', { params: { search: search.trim(), pageNumber, pageSize: 20 } }).pipe(map(r => r.data));
+  }
+  savePartner(fullName: string, isActive = true, id?: string, details: PartnerDetails = {}) {
+    return (id ? this.http.put<ApiResponse<Partner>>(`/api/finance/partners/${id}`, { fullName, isActive, ...details })
+      : this.http.post<ApiResponse<Partner>>('/api/finance/partners', { fullName, isActive, ...details })).pipe(map(r => r.data));
   }
   exchange(value: { requestId: string; fromCurrency: string; toCurrency: string; fromAmount: number; toAmount: number; date: string; notes: string }) {
     return this.http.post<ApiResponse<string>>('/api/finance/exchanges', value).pipe(map(r => r.data));

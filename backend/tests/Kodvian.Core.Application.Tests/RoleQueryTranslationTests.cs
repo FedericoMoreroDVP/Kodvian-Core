@@ -24,6 +24,8 @@ public class RoleQueryTranslationTests
         Assert.Contains("UserRoles", dev.Message);
         var analyst = await Assert.ThrowsAsync<TranslatedQuery>(() => new TeamUserService(db, new NoPasswords(), guard).GetAnalystsAsync());
         Assert.Contains("UserRoles", analyst.Message);
+        var partners = await Assert.ThrowsAsync<TranslatedQuery>(() => new PartnerDirectoryService(db).ListAsync(default));
+        Assert.Contains("Developers", partners.Message); Assert.Contains("Users", partners.Message);
     }
 
     private sealed class TranslatedQuery(string sql) : Exception(sql);

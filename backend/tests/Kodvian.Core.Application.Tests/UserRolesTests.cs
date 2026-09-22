@@ -114,6 +114,19 @@ public class UserRolesTests : IDisposable
     }
 
     [Fact]
+    public async Task ProfileAssociationCannotMergeTwoExistingPartnerIdentities()
+    {
+        var target = AddUser(RoleNames.Operative);
+        var profile = new Developer { FullName = target.FullName, Email = target.Email };
+        db.Developers.Add(profile); db.SaveChanges();
+        var partners = new PartnerDirectoryService(db);
+        await partners.SaveAsync(null, new() { Source = "User", PersonId = target.Id }, default);
+        await partners.SaveAsync(null, new() { Source = "Developer", PersonId = profile.Id }, default);
+        await Assert.ThrowsAsync<ArgumentException>(() => Change(target, RoleNames.Analyst));
+        Assert.Null(target.DeveloperId); Assert.Equal(2, await db.Partners.CountAsync());
+    }
+
+    [Fact]
     public async Task NonAdministratorCannotListOrChangeRoles()
     {
         var analyst = AddUser(RoleNames.Analyst); ActAs(analyst);

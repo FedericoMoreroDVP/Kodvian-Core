@@ -49,6 +49,29 @@ El menú Configurar abre diálogos específicos para punto de partida, socios y 
 de moneda. Los formularios conservan datos ante error y bloquean el cierre mientras guardan.
 El cambio de moneda conserva su identificador al reintentar.
 
+### Personas existentes y socios nuevos
+
+Gestionar socios permite elegir **Persona existente** (opción inicial) o **Persona nueva**:
+
+- El selector busca por nombre o correo y pagina de a 20 personas. Primero lista perfiles activos de Equipo (incluidos analistas y desarrolladores), luego cuentas activas sin perfil. Un usuario vinculado a un perfil no aparece dos veces.
+- Al seleccionar una persona se muestran su nombre y correo. Las personas ya asociadas a un socio se indican como **Ya es socio**, incluso si la ficha de socio está inactiva; se edita o reactiva la ficha existente.
+- Persona nueva crea una ficha manual de socio con nombre y correo opcional. No crea una cuenta de acceso ni asigna roles.
+- Una ficha manual existente puede **Vincular a una persona** conservando su Id, aportes, retiros y reintegros. Coincidencias de nombre/correo se muestran solo como sugerencias: la asociación siempre es explícita.
+- Una vez vinculada, la ficha no puede transferirse a otra persona. Nombre y correo se consultan desde Equipo o la cuenta vinculada; el estado de socio se administra por separado.
+- Se admiten cuentas sin perfil (por ejemplo un administrador). Si esa cuenta luego recibe un perfil de Equipo, se sigue reconociendo al mismo socio.
+
+`GET /api/finance/partners/people?search=&pageNumber=1&pageSize=20` devuelve
+`source`, `personId`, `fullName`, `email` y `registeredPartnerId`. El listado de socios
+agrega `source`, `personId` y `email`. Alta/edición acepta `source` (Manual, Developer o User),
+`personId` y correo opcional. La API conserva el vínculo si un cliente anterior omite el origen.
+
+La migración `20260922191843_PartnerPeopleLinks` agrega vínculos opcionales a Developers/Users,
+índices únicos, una restricción de origen excluyente y correo. Las fichas actuales siguen
+siendo manuales; no se vinculan por nombre ni correo automáticamente. El historial permanece
+asociado al mismo PartnerId. Los cambios de perfiles y las vinculaciones comparten el bloqueo
+financiero, con orden de bloqueo cuentas → finanzas, evitando duplicados al asociar cuentas/perfiles.
+Se rechaza unir una cuenta y un perfil que ya representen socios distintos.
+
 La franja Historial en revisión resume el estado de carga, las fechas efectivas
 provisionales y los pagos históricos sin clasificar/vincular. Sus explicaciones se abren
 al solicitarlo. Un saldo inicial desconocido se mantiene como `null`, no se convierte en cero.
@@ -97,7 +120,7 @@ consultan sin fecha inicial para conservar el acumulado.
 - Chart.js 4, con importación diferida de `chart-runtime.ts` y registro selectivo de barras y líneas.
 - Los eventos frecuentes y el renderizado de gráficos se ejecutan fuera de la zona Angular; las selecciones vuelven a ella.
 - Cada instancia de gráfico se destruye al salir o al cambiar su modelo.
-- No se agregan entidades ni migraciones: los cambios del servidor son filtros, proyecciones y contratos de consulta.
+- La creación inicial del módulo no agregó migraciones. La vinculación posterior de socios con personas incorpora la migración PartnerPeopleLinks descrita arriba.
 
 ## Verificación
 

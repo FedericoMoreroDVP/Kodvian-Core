@@ -248,6 +248,12 @@ Rutas exclusivas de administradores:
 - `GET /api/financial-movements/monthly-summary`: indicadores reducidos por moneda; no carga el análisis histórico. El campo `finance` del dashboard utiliza `FinancePeriodSummaryDto` (from, to, currencies) para el mismo resumen mensual.
 - `PUT /api/finance/setup`: punto de partida opcional, saldos por moneda, historial completo y versión esperada.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios.
+- `GET /api/finance/partners/people?search=&pageNumber=&pageSize=`: personas activas de Equipo y cuentas sin perfil, sin repetir usuarios vinculados a perfiles; informa si ya son socios.
+
+Los socios devuelven `source` (Manual, Developer o User), `personId` y `email` además
+de sus campos originales. El alta/edición acepta esos campos para asociar una persona
+existente o crear una ficha manual. Vincular una ficha manual conserva su historial;
+se rechazan duplicados de una identidad ya vinculada y el cambio de identidad de un socio vinculado.
 - `POST /api/finance/exchanges`, `DELETE /api/finance/exchanges/{id}`: cambios de moneda emparejados.
 - `GET /api/finance/team-obligations?year=&pageNumber=&pageSize=`: saldos de contratos separados de los egresos pendientes.
 - `PUT /api/developer-payments/{id}` y `DELETE /api/developer-payments/{id}?expectedVersion=...`: corrección/anulación coordinada con Finanzas.

@@ -18,6 +18,9 @@ public sealed class UserAccessGuard(KodvianDbContext db, ICurrentUser currentUse
         {
             if (db.Database.IsNpgsql())
                 await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(746291805)", ct);
+            // Keep profile associations stable while Finance links existing people.
+            // Lock order is always accounts, then finance.
+            await FinanceWriteScope.LockAsync(db, ct);
             return transaction;
         }
         catch { await transaction.DisposeAsync(); throw; }
@@ -67,6 +70,9 @@ public sealed class UserAccessGuard(KodvianDbContext db, ICurrentUser currentUse
         if (matches.Count > 1 || matches.Any(x => x.Users.Any(u => u.Id != user.Id)))
             throw new ArgumentException("Hay perfiles con este correo vinculados o duplicados. Revisa la vinculación antes de asignar el rol.");
         var profile = matches.SingleOrDefault();
+        if (profile != null && await db.Partners.AnyAsync(p => p.UserId == user.Id, ct)
+            && await db.Partners.AnyAsync(p => p.DeveloperId == profile.Id || p.UserId != user.Id && p.User != null && p.User.DeveloperId == profile.Id, ct))
+            throw new ArgumentException("La cuenta y el perfil ya corresponden a socios distintos. Revisa esas vinculaciones antes de unirlos.");
         if (profile is null)
         {
             profile = new Developer { FullName = user.FullName, Email = user.Email, Activo = user.Activo };

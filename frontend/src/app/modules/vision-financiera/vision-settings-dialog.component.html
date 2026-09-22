@@ -14,11 +14,41 @@
       @for (row of data.overview.currencies; track row.currency) { @if (row.balance !== null) { <p>Saldo ajustado guardado · {{ row.currency }}: <strong>{{ money(row.balance, row.currency) }}</strong></p> } }
     }
     @case ('partners') {
-      <p>Los socios son personas de la empresa, independientemente de sus permisos de acceso.</p>
-      <form class="grid" (ngSubmit)="savePartner()"><label>Nombre del socio<input name="partnerName" [(ngModel)]="partnerName" maxlength="160" required [disabled]="saving" /></label><button mat-stroked-button type="submit" [disabled]="saving || !partnerName.trim()">Agregar socio</button></form>
+      <p>Selecciona una persona de Equipo o una cuenta ya existente, o registra una persona nueva como socio. La condición de socio es independiente de sus roles.</p>
+      <div #partnerEditor tabindex="-1" class="mode-buttons" role="group" aria-label="Origen del socio">
+        <button mat-stroked-button type="button" [class.selected-mode]="partnerMode === 'existing'" [attr.aria-pressed]="partnerMode === 'existing'" [disabled]="saving" (click)="selectPartnerMode('existing')">Persona existente</button>
+        <button mat-stroked-button type="button" [class.selected-mode]="partnerMode === 'new'" [attr.aria-pressed]="partnerMode === 'new'" [disabled]="saving" (click)="selectPartnerMode('new')">Persona nueva</button>
+      </div>
+      @if (linkingPartner) { <p class="person-preview">Vincular a <strong>{{ linkingPartner.fullName }}</strong> Se conservarán sus aportes, retiros y reintegros.<button mat-button type="button" [disabled]="saving" (click)="linkingPartner = undefined; selectedPersonKey = ''">Cancelar vinculación</button></p> }
+      @if (partnerMode === 'existing') {
+        <form class="people-search" (ngSubmit)="loadPeople()"><input aria-label="Buscar personas por nombre o correo" name="peopleSearch" [(ngModel)]="peopleSearch" placeholder="Buscar nombre o correo" [disabled]="saving" /><button mat-button type="submit" [disabled]="saving || peopleLoading">Buscar</button></form>
+        @if (peopleLoading) { <p role="status">Cargando personas…</p> }
+        @if (peopleError) { <p role="alert" class="error">{{ peopleError }} <button mat-button [disabled]="saving || peopleLoading" (click)="loadPeople()">Reintentar</button></p> }
+        <label>Persona<select [(ngModel)]="selectedPersonKey" [disabled]="saving || peopleLoading">
+          <option value="">Selecciona una persona</option>
+          @for (person of people; track personKey(person)) { <option [value]="personKey(person)" [disabled]="!!person.registeredPartnerId && person.registeredPartnerId !== linkingPartner?.id">{{ person.fullName }}{{ person.email ? ' · ' + person.email : '' }} · {{ person.source === 'Developer' ? 'Equipo' : 'Usuario' }}{{ person.registeredPartnerId && person.registeredPartnerId !== linkingPartner?.id ? ' · Ya es socio' : '' }}</option> }
+        </select></label>
+        <div class="people-pages"><span>{{ peopleTotal }} personas · página {{ peoplePage }}</span><button mat-button [disabled]="saving || peopleLoading || peoplePage <= 1" (click)="loadPeople(peoplePage - 1)">Anterior</button><button mat-button [disabled]="saving || peopleLoading || peoplePage * 20 >= peopleTotal" (click)="loadPeople(peoplePage + 1)">Siguiente</button></div>
+        @if (!peopleLoading && !peopleError && peopleTotal === 0) { <p>No se encontraron personas. Prueba otra búsqueda o elige Persona nueva.</p> }
+        @if (selectedPerson; as person) { <div class="person-preview"><strong>{{ person.fullName }}</strong><small>{{ person.email || 'Sin correo registrado' }}</small></div> }
+        @if (similarManualPartners.length) {
+          <div class="person-preview"><p>Hay fichas manuales con nombre o correo similares. Puedes vincular una para conservar sus movimientos:</p>
+            @for (partner of similarManualPartners; track partner.id) { <button mat-button type="button" [disabled]="saving" (click)="linkingPartner = partner">Vincular la ficha de {{ partner.fullName }}</button> }
+          </div>
+        }
+        <button mat-flat-button type="button" [disabled]="!canAddPartner" (click)="savePartner()">{{ saving ? 'Guardando…' : linkingPartner ? 'Vincular conservando historial' : 'Agregar como socio' }}</button>
+      } @else {
+        <form class="grid" (ngSubmit)="savePartner()"><label>Nombre de la persona<input name="partnerName" [(ngModel)]="partnerName" maxlength="160" required [disabled]="saving" /></label><label>Correo (opcional)<input name="partnerEmail" type="email" [(ngModel)]="partnerEmail" maxlength="120" [disabled]="saving" /></label><p class="wide">Crea una ficha de socio. El acceso al sistema se gestiona por separado desde Equipo.</p><button mat-flat-button type="submit" [disabled]="!canAddPartner">Crear socio</button></form>
+      }
+      <h3>Socios registrados</h3>
       @if (loading) { <p role="status">Cargando socios…</p> }
       @for (partner of partners; track partner.id) {
-        <div class="partner"><label>Nombre<input [(ngModel)]="partner.fullName" maxlength="160" [disabled]="saving" /></label><label class="check"><input type="checkbox" [(ngModel)]="partner.isActive" [disabled]="saving" /> Activo</label><button mat-button [disabled]="saving" (click)="savePartner(partner)">Guardar socio</button></div>
+        <div class="partner"><div class="partner-data">
+          @if (isLinked(partner)) { <strong>{{ partner.fullName }}</strong><span>{{ partner.email || 'Sin correo registrado' }}</span><small class="linked-note">Datos de {{ partner.source === 'Developer' ? 'Equipo' : 'la cuenta vinculada' }} · se actualizan desde su ficha de origen.</small> }
+          @else { <label>Nombre<input [(ngModel)]="partner.fullName" maxlength="160" [disabled]="saving" /></label><label>Correo (opcional)<input type="email" [(ngModel)]="partner.email" maxlength="120" [disabled]="saving" /></label><small class="linked-note">Ficha manual</small> }
+        </div><div class="partner-actions"><label class="check"><input type="checkbox" [(ngModel)]="partner.isActive" [disabled]="saving" /> Activo</label><button mat-button [disabled]="saving" (click)="savePartner(partner)">Guardar socio</button>
+          @if (!isLinked(partner)) { <button mat-button [disabled]="saving" (click)="linkExistingPartner(partner)">Vincular a una persona</button> }
+        </div></div>
       }
       @if (!loading && error) { <button mat-button (click)="loadPartners()">Reintentar carga</button> }
     }

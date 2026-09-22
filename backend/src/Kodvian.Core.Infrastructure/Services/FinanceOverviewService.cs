@@ -122,7 +122,8 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
         var expenses = await period.Where(x => x.Nature == "Operacion" && x.MovementType == FinancialMovementType.Egreso)
             .GroupBy(x => new { x.Currency, x.CategoryId, Category = x.Category!.Name }).Select(g => new ExpenseCategoryDto(g.Key.Currency, g.Key.Category, g.Sum(x => x.Amount), g.Key.CategoryId)).ToListAsync(ct);
         var partners = await settled.Where(x => x.PartnerId != null)
-            .GroupBy(x => new { x.PartnerId, Name = x.Partner!.FullName, x.Currency })
+            .GroupBy(x => new { x.PartnerId, Name = x.Partner!.Developer != null ? x.Partner.Developer.FullName
+                : x.Partner.User != null ? x.Partner.User.FullName : x.Partner.FullName, x.Currency })
             .Select(g => new PartnerBalanceDto(g.Key.PartnerId!.Value, g.Key.Name, g.Key.Currency,
                 g.Sum(x => x.Nature == "AporteSocio" || x.Funding == "SocioAporte" ? x.Amount : 0),
                 g.Sum(x => x.Nature == "RetiroSocio" ? x.Amount : 0),
@@ -174,17 +175,9 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
         await db.SaveChangesAsync(ct); if (tx != null) await tx.CommitAsync(ct); return Map(entity);
     }
     private static FinanceSetupDto Map(FinanceSettings? x) => new() { StartDate = x?.StartDate, OpeningArs = x?.OpeningArs, OpeningUsd = x?.OpeningUsd, HistoryComplete = x?.HistoryComplete ?? false, Version = x?.Version ?? Guid.Empty };
-    public async Task<IReadOnlyCollection<PartnerDto>> PartnersAsync(CancellationToken ct) => await db.Partners.AsNoTracking().OrderBy(x => x.FullName)
-        .Select(x => new PartnerDto(x.Id, x.FullName, x.Activo)).ToListAsync(ct);
-    public async Task<PartnerDto> SavePartnerAsync(Guid? id, PartnerRequest request, CancellationToken ct)
-    {
-        var name = request.FullName?.Trim() ?? "";
-        if (name.Length is 0 or > 160) throw new ArgumentException("Indica el nombre del socio (hasta 160 caracteres)");
-        var entity = id.HasValue ? await db.Partners.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new KeyNotFoundException("Socio no encontrado") : new Partner();
-        if (!id.HasValue) db.Partners.Add(entity);
-        entity.FullName = name; entity.Activo = request.IsActive; entity.FechaActualizacion = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct); return new(entity.Id, entity.FullName, entity.Activo);
-    }
+    public Task<IReadOnlyCollection<PartnerDto>> PartnersAsync(CancellationToken ct) => new PartnerDirectoryService(db).ListAsync(ct);
+    public Task<Kodvian.Core.Application.Common.Models.PagedResultDto<PartnerPersonDto>> PartnerPeopleAsync(PartnerPeopleRequest request, CancellationToken ct) => new PartnerDirectoryService(db).PeopleAsync(request, ct);
+    public Task<PartnerDto> SavePartnerAsync(Guid? id, PartnerRequest request, CancellationToken ct) => new PartnerDirectoryService(db).SaveAsync(id, request, ct);
     public async Task<Guid> ExchangeAsync(ExchangeRequest request, CancellationToken ct)
     {
         FinanceRules.Currency(request.FromCurrency); FinanceRules.Currency(request.ToCurrency); FinanceRules.Money(request.FromAmount); FinanceRules.Money(request.ToAmount); FinanceRules.Date(request.Date);

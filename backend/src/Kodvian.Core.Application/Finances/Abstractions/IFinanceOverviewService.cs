@@ -8,8 +8,22 @@ public class FinanceSetupDto
     public bool HistoryComplete { get; set; }
     public Guid Version { get; set; }
 }
-public record PartnerDto(Guid Id, string FullName, bool IsActive);
-public class PartnerRequest { public string FullName { get; set; } = ""; public bool IsActive { get; set; } = true; }
+public record PartnerDto(Guid Id, string FullName, bool IsActive)
+{
+    public string? Email { get; init; }
+    public string Source { get; init; } = "Manual";
+    public Guid? PersonId { get; init; }
+}
+public class PartnerRequest
+{
+    public string FullName { get; set; } = "";
+    public string? Email { get; set; }
+    public bool IsActive { get; set; } = true;
+    public string? Source { get; set; }
+    public Guid? PersonId { get; set; }
+}
+public class PartnerPeopleRequest : Kodvian.Core.Application.Common.Models.PagedRequestDto { public string? Search { get; set; } }
+public record PartnerPersonDto(string Source, Guid PersonId, string FullName, string? Email, Guid? RegisteredPartnerId);
 public class CurrencyPeriodDto
 {
     public string Currency { get; set; } = "ARS";
@@ -69,6 +83,7 @@ public interface IFinanceOverviewService
     Task<FinanceOverviewDto> GetAsync(DateOnly? from, DateOnly? to, CancellationToken ct);
     Task<FinanceSetupDto> SetupAsync(FinanceSetupDto request, CancellationToken ct);
     Task<IReadOnlyCollection<PartnerDto>> PartnersAsync(CancellationToken ct);
+    Task<Kodvian.Core.Application.Common.Models.PagedResultDto<PartnerPersonDto>> PartnerPeopleAsync(PartnerPeopleRequest request, CancellationToken ct);
     Task<PartnerDto> SavePartnerAsync(Guid? id, PartnerRequest request, CancellationToken ct);
     Task<Guid> ExchangeAsync(ExchangeRequest request, CancellationToken ct);
     Task CancelExchangeAsync(Guid id, CancellationToken ct);
