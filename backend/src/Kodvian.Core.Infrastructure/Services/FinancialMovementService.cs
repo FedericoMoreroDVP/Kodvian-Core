@@ -574,11 +574,13 @@ public class FinancialMovementService : IFinancialMovementService
 
         if (request.ProjectId.HasValue)
         {
-            var projectExists = await _dbContext.Projects.AnyAsync(x => x.Id == request.ProjectId.Value, cancellationToken);
+            var project = await _dbContext.Projects.SingleOrDefaultAsync(x => x.Id == request.ProjectId.Value, cancellationToken);
+            var projectExists = project != null;
             if (!projectExists)
             {
                 throw new ArgumentException("El proyecto seleccionado no existe");
             }
+            if (project!.Estado == ProjectStatus.Cancelado) throw new ArgumentException("No puedes registrar ni modificar movimientos en un proyecto cancelado");
         }
 
         if (createdById.HasValue)

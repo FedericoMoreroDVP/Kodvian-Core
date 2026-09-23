@@ -99,6 +99,11 @@ la categoría original aunque esté archivada. Las validaciones se muestran junt
 Guardar y enfocan el campo a corregir; los errores del servidor también permanecen
 visibles allí, conservando los datos para reintentar.
 
+Los movimientos asociados a proyectos cancelados no admiten nuevas altas ni modificaciones.
+La eliminación de un acuerdo desde el proyecto anula sus pagos y egresos vinculados;
+por eso dejan de afectar gastos, caja y pendientes, pero se conservan como anulados para
+mantener el historial verificable.
+
 ## Cambios de moneda
 
 Una operación de cambio crea exactamente dos movimientos vinculados por ExchangeId:

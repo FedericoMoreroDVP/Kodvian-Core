@@ -61,6 +61,31 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
         return await db.ProjectDeveloperContracts.Where(x => x.Id == id).Select(ToDto()).SingleAsync(cancellationToken);
     }
 
+    public async Task<bool> CancelAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await using var tx = await FinanceWriteScope.BeginAsync(db, cancellationToken);
+        var contract = await db.ProjectDeveloperContracts.Include(x => x.Project)
+            .Include(x => x.Payments).ThenInclude(x => x.FinancialMovement)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (contract == null) return false;
+        if (contract.Project?.Estado != ProjectStatus.Cancelado)
+            throw new ArgumentException("Solo puedes eliminar acuerdos de proyectos cancelados");
+
+        contract.Activo = false; contract.FechaActualizacion = DateTime.UtcNow;
+        foreach (var payment in contract.Payments.Where(x => x.Activo))
+        {
+            payment.Activo = false; payment.Version = Guid.NewGuid(); payment.FechaActualizacion = DateTime.UtcNow;
+            if (payment.FinancialMovement != null)
+            {
+                payment.FinancialMovement.Status = FinancialMovementStatus.Anulado;
+                payment.FinancialMovement.Version = Guid.NewGuid(); payment.FinancialMovement.FechaActualizacion = DateTime.UtcNow;
+            }
+        }
+        await db.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<ContractLedgerDto?> GetLedgerAsync(Guid contractId, int year, CancellationToken cancellationToken = default)
     {
         if (year is < 2000 or > 2100) throw new ArgumentException("Año inválido");
@@ -128,7 +153,9 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
     };
     private async Task ValidateAsync(Guid projectId, ProjectDeveloperContractUpsertRequestDto request, Guid? id, CancellationToken ct)
     {
-        if (!await db.Projects.AnyAsync(x => x.Id == projectId, ct)) throw new ArgumentException("Proyecto no encontrado");
+        var project = await db.Projects.SingleOrDefaultAsync(x => x.Id == projectId, ct);
+        if (project == null) throw new ArgumentException("Proyecto no encontrado");
+        if (project.Estado == ProjectStatus.Cancelado) throw new ArgumentException("No puedes crear ni modificar acuerdos en un proyecto cancelado");
         if (!await db.Developers.AnyAsync(x => x.Id == request.DeveloperId, ct)) throw new ArgumentException("Miembro no encontrado");
         if (request.PaymentMode is not ("Percentage" or "FixedAmount")) throw new ArgumentException("Modalidad inválida");
         if (request.PaymentMode == "Percentage" && (request.Percentage is null or <= 0 or > 100)) throw new ArgumentException("El porcentaje debe ser mayor a cero y no superar 100");

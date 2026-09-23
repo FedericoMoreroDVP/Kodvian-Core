@@ -135,6 +135,7 @@ public class ProjectService : IProjectService
 
     public async Task<ProjectDetailDto?> UpdateAsync(Guid id, ProjectUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
+        await using var tx = await FinanceWriteScope.BeginAsync(_dbContext, cancellationToken);
         var project = await _dbContext.Projects.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (project is null)
         {
@@ -142,10 +143,22 @@ public class ProjectService : IProjectService
         }
 
         await ValidateReferencesAsync(request, cancellationToken, project.ResponsableId);
+        var becomingCanceled = project.Estado != ProjectStatus.Cancelado && ParseStatus(request.Status) == ProjectStatus.Cancelado;
         ApplyRequest(project, request);
         project.FechaActualizacion = DateTime.UtcNow;
+        if (becomingCanceled)
+        {
+            var now = DateTime.UtcNow;
+            var activeContracts = await _dbContext.ProjectDeveloperContracts.Where(x => x.ProjectId == id && x.Activo).ToListAsync(cancellationToken);
+            foreach (var contract in activeContracts)
+            {
+                contract.Activo = false;
+                contract.FechaActualizacion = now;
+            }
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (tx != null) await tx.CommitAsync(cancellationToken);
 
         return await _dbContext.Projects
             .AsNoTracking()

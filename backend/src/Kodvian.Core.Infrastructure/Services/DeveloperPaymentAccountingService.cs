@@ -36,8 +36,9 @@ public class DeveloperPaymentAccountingService(KodvianDbContext db, ICurrentUser
                 return Map(previous);
             }
         }
-        var contract = await db.ProjectDeveloperContracts.Include(x => x.Developer).SingleOrDefaultAsync(x => x.Id == (payment != null ? payment.ContractId : contractId), ct)
+        var contract = await db.ProjectDeveloperContracts.Include(x => x.Project).Include(x => x.Developer).SingleOrDefaultAsync(x => x.Id == (payment != null ? payment.ContractId : contractId), ct)
             ?? throw new KeyNotFoundException("Acuerdo no encontrado");
+        if (contract.Project?.Estado == ProjectStatus.Cancelado) throw new ArgumentException("No puedes registrar ni modificar pagos en un proyecto cancelado");
         if (payment == null && !contract.Activo) throw new ArgumentException("El acuerdo está inactivo");
         if (contract.PaymentMode == ContractPaymentMode.FixedAmount && contract.Currency != request.AppliedCurrency)
             throw new ArgumentException("Confirma la moneda del acuerdo y utiliza esa moneda para el importe cancelado");

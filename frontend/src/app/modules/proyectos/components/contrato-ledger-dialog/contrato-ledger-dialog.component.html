@@ -7,6 +7,7 @@
   @for (currency of data.currencies; track currency.currency) {
     <h3>{{ currency.currency }}</h3>
     <div class="totals-grid"><p>Obligación registrada: <strong>{{ currency.totalDue | currency:currency.currency:'code':'1.2-2' }}</strong></p><p>Cancelado: <strong>{{ currency.totalPaid | currency:currency.currency:'code':'1.2-2' }}</strong></p><p>Saldo: <strong>{{ currency.totalBalance | currency:currency.currency:'code':'1.2-2' }}</strong></p></div>
+    @if (currency.totalDue === 0 && currency.totalPaid === 0) { <p>Sin obligación a pagar: no hay ingresos operativos registrados para este acuerdo en esta moneda.</p> }
     <div style="overflow-x:auto"><table class="ledger-table"><thead><tr><th>Período</th><th>Base registrada</th><th>Obligación</th><th>Cancelado</th><th>Saldo</th></tr></thead><tbody>
       @for (row of currency.months; track row.month) { <tr><td>{{ row.month }}/{{ row.year }}</td><td>{{ row.projectIncomeBase | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.dueAmount | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.paidAmount | currency:currency.currency:'code':'1.2-2' }}</td><td>{{ row.balance | currency:currency.currency:'code':'1.2-2' }}</td></tr> }
     </tbody></table></div>

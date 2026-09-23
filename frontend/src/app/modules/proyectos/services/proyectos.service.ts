@@ -112,6 +112,9 @@ export class ProyectosService {
   actualizarContratoDesarrollador(contractId: string, payload: ContratoDesarrolladorFormulario): Observable<ContratoDesarrollador> {
     return this.http.put<ApiResponse<ContratoDesarrollador>>(`/api/developer-contracts/${contractId}`, payload).pipe(map((r) => r.data));
   }
+  eliminarContratoDesarrollador(contractId: string): Observable<void> {
+    return this.http.delete<ApiResponse<unknown>>(`/api/developer-contracts/${contractId}`).pipe(map(() => undefined));
+  }
 
   obtenerPagosContrato(contractId: string): Observable<PagoDesarrollador[]> {
     return this.http.get<ApiResponse<PagoDesarrollador[]>>(`/api/developer-contracts/${contractId}/payments`).pipe(map((r) => r.data));

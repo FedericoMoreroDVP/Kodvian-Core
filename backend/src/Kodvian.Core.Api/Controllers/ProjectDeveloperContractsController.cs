@@ -60,6 +60,15 @@ public class ProjectDeveloperContractsController : ControllerBase
         return Ok(ApiResponseDto<ProjectDeveloperContractDto>.Ok(data, "El contrato se actualizó correctamente"));
     }
 
+    [HttpDelete("developer-contracts/{id:guid}")]
+    [Authorize(Policy = "FinancesWrite")]
+    public async Task<IActionResult> Cancel(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await _contractService.CancelAsync(id, cancellationToken))
+            return NotFound(ApiResponseDto<object>.Fail("Acuerdo no encontrado"));
+        return Ok(ApiResponseDto<object>.Ok(new { }, "Acuerdo, pagos y egresos anulados"));
+    }
+
     [HttpGet("developer-contracts/{id:guid}/ledger")]
     public async Task<ActionResult<ApiResponseDto<ContractLedgerDto>>> GetLedger(Guid id, [FromQuery] int year, CancellationToken cancellationToken)
     {

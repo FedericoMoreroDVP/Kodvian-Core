@@ -84,6 +84,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
   get canViewEconomics(): boolean {
     return this.authSession.user?.permissions.includes('finances.read') ?? false;
   }
+  get projectCanceled(): boolean { return this.projectDetail?.status === 'Cancelado'; }
 
   get selectedAnalyst(): LookupItem | undefined {
     return this.analysts.find((x) => x.id === this.selectedAnalystId);
@@ -260,6 +261,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
   }
 
   crearContrato(): void {
+    if (this.projectCanceled) return;
     const ref = this.dialog.open(ContratoDesarrolladorFormDialogComponent, {
       width: '760px',
       maxWidth: 'calc(100vw - 32px)',
@@ -282,6 +284,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
   }
 
   crearContratoPara(row: ContractTableRow): void {
+    if (this.projectCanceled) return;
     this.ensureDeveloperInList(row.developerId, row.developerName);
     const ref = this.dialog.open(ContratoDesarrolladorFormDialogComponent, {
       width: '760px',
@@ -331,7 +334,21 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
     this.crearContratoPara(row);
   }
 
+  eliminarContrato(contract: ContratoDesarrollador): void {
+    const confirmed = window.confirm(`Se eliminará el acuerdo de ${contract.developerName} y se anularán sus pagos y egresos financieros vinculados. Esta acción conserva el historial como anulado. ¿Continuar?`);
+    if (!confirmed) return;
+    this.proyectosService.eliminarContratoDesarrollador(contract.id).subscribe({
+      next: () => {
+        this.selectedContract = undefined; this.payments = [];
+        this.snackBar.open('Acuerdo, pagos y egresos anulados correctamente', 'Cerrar', { duration: 3500 });
+        this.loadContracts();
+      },
+      error: error => this.snackBar.open(error?.error?.message ?? 'No se pudo eliminar el acuerdo', 'Cerrar', { duration: 4000 })
+    });
+  }
+
   editarContrato(contract: ContratoDesarrollador): void {
+    if (this.projectCanceled) return;
     const ref = this.dialog.open(ContratoDesarrolladorFormDialogComponent, {
       width: '760px',
       maxWidth: 'calc(100vw - 32px)',
@@ -359,12 +376,13 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
   }
 
   registrarPago(contract: ContratoDesarrollador, payment?: PagoDesarrollador): void {
+    if (this.projectCanceled || !contract.isActive) return;
     const ref = this.dialog.open(PagoDesarrolladorFormDialogComponent, { width: '860px', maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)', autoFocus: false, data: { contractId: contract.id, currency: contract.currency, payment } });
     ref.afterClosed().subscribe((changed?: boolean) => {
       if (changed) { this.selectedContract = contract; this.loadPayments(contract.id); this.loadContracts(); }
     });
   }
-  editarPago(payment: PagoDesarrollador): void { if (this.selectedContract) this.registrarPago(this.selectedContract, payment); }
+  editarPago(payment: PagoDesarrollador): void { if (!this.projectCanceled && this.selectedContract) this.registrarPago(this.selectedContract, payment); }
   anularPago(payment: PagoDesarrollador): void {
     if (!confirm('¿Anular este pago y su egreso financiero vinculado?')) return;
     this.proyectosService.anularPago(payment).subscribe({ next: () => this.loadPayments(payment.contractId),

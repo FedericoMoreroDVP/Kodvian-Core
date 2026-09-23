@@ -3,6 +3,7 @@ using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Application.Developers.Requests;
 using Kodvian.Core.Application.Finances.Abstractions;
 using Kodvian.Core.Application.Finances.Requests;
+using Kodvian.Core.Application.Projects.Requests;
 using Kodvian.Core.Domain.Entities;
 using Kodvian.Core.Domain.Enums;
 using Kodvian.Core.Infrastructure.Persistence;
@@ -363,6 +364,32 @@ public class FinanceHistoryTests : IDisposable
         Assert.Equal(20, (await Overview.GetAsync(null, null, default)).Partners.Single().Outstanding);
         request.ExpectedVersion = saved.Version; request.Status = "Cobrado";
         await Assert.ThrowsAsync<ArgumentException>(() => Movements.UpdateAsync(saved.Id, request));
+    }
+
+    [Fact]
+    public async Task CancelingProjectStopsContractsAndDeletingAgreementAnnulsItsPaymentsAndExpenses()
+    {
+        var developer = new Developer { FullName = "Agustín" };
+        var contract = new ProjectDeveloperContract { Project = project, Developer = developer, PaymentMode = ContractPaymentMode.Percentage, Percentage = 15, StartDate = date };
+        var expense = Add(100, income: false);
+        var payment = new DeveloperPayment { Contract = contract, FinancialMovement = expense, RequestId = Guid.NewGuid(), Amount = 100, Currency = "ARS",
+            AppliedAmount = 100, AppliedCurrency = "ARS", PaymentDate = date, PeriodYear = date.Year, PeriodMonth = date.Month };
+        db.Add(payment); db.SaveChanges();
+        var projectService = new ProjectService(db, new NoStorage(), Options.Create(new StorageOptions()));
+        await projectService.UpdateAsync(project.Id, new ProjectUpsertRequestDto { ClientId = project.ClienteId, Name = project.Nombre, Status = "Cancelado",
+            Priority = project.Prioridad.ToString(), StartDate = project.FechaInicio, EstimatedDeliveryDate = project.FechaEntregaEstimada,
+            ClosingDate = project.FechaCierre, Budget = project.Presupuesto, ProgressPercentage = project.PorcentajeAvance, IsActive = true });
+        Assert.False(contract.Activo); Assert.True(payment.Activo); Assert.Equal(FinancialMovementStatus.Pagado, expense.Status);
+
+        var contracts = new ProjectDeveloperContractService(db);
+        await Assert.ThrowsAsync<ArgumentException>(() => contracts.CreateAsync(project.Id, new() { DeveloperId = developer.Id, PaymentMode = "Percentage", Percentage = 10, StartDate = date }));
+        await Assert.ThrowsAsync<ArgumentException>(() => new DeveloperPaymentAccountingService(db, new Actor(user)).SaveAsync(null, contract.Id,
+            new() { RequestId = Guid.NewGuid(), Amount = 10, Currency = "ARS", AppliedAmount = 10, AppliedCurrency = "ARS", PaymentDate = date, PeriodYear = date.Year, PeriodMonth = date.Month }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => Movements.CreateAsync(user.Id, new() { RequestId = Guid.NewGuid(), Amount = 10, Currency = "ARS", Description = "Gasto cancelado",
+            CategoryId = expenseCategory.Id, ProjectId = project.Id, MovementType = "Egreso", Status = "Pagado", MovementDate = date, SettlementDate = date }));
+        Assert.True(await contracts.CancelAsync(contract.Id));
+        Assert.False(payment.Activo); Assert.Equal(FinancialMovementStatus.Anulado, expense.Status);
+        Assert.True(await contracts.CancelAsync(contract.Id));
     }
 
     [Fact]
