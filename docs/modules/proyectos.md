@@ -56,7 +56,7 @@ Contratos y pagos:
 - Acuerdos fijos con moneda explícita; porcentajes sobre ingresos operativos registrados, por separado en ARS y USD. Un porcentaje sin base de ingresos genera cero obligación.
 - Pagos con moneda real y moneda/importe cancelados. Los nuevos pagos crean o vinculan un egreso; los históricos se revisan y vinculan sin generar egresos duplicados.
 - Edición y anulación de pagos sincronizadas con Finanzas. El detalle y los resúmenes del equipo muestran importes por moneda y avisos de revisión. Ver [Finanzas](finanzas.md).
-- Al cancelar un proyecto se desactivan automáticamente sus acuerdos activos, sin anular pagos históricos por sí solo. Desde Equipo, un administrador puede **Eliminar acuerdo**: desactiva el acuerdo y anula de forma coordinada sus pagos y egresos vinculados, conservándolos en el historial como anulados. No se pueden crear ni modificar acuerdos, pagos o movimientos financieros asociados a proyectos cancelados.
+- Al cancelar un proyecto se desactivan automáticamente sus acuerdos activos, sin anular pagos históricos por sí solo. Desde Equipo, un administrador puede **Eliminar acuerdo**: lo quita del listado, conserva su marca de eliminación para auditoría y anula de forma coordinada sus pagos y egresos vinculados. No se pueden crear ni modificar acuerdos, pagos o movimientos financieros asociados a proyectos cancelados.
 
 - `GET /api/projects/{projectId}/developer-contracts`.
 - `POST /api/projects/{projectId}/developer-contracts`.

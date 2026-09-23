@@ -13,6 +13,7 @@ public class ProjectDeveloperContract : BaseEntity
     public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.UtcNow);
     public DateOnly? EndDate { get; set; }
     public string? Notes { get; set; }
+    public DateTime? DeletedAt { get; set; }
 
     public Project? Project { get; set; }
     public Developer? Developer { get; set; }

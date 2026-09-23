@@ -13,7 +13,7 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
     public async Task<Kodvian.Core.Application.Common.Models.PagedResultDto<Kodvian.Core.Application.Developers.Dtos.ContractLedgerDto>> TeamObligationsAsync(int year, Kodvian.Core.Application.Common.Models.PagedRequestDto request, CancellationToken ct)
     {
         if (year is < 2000 or > 2100) throw new ArgumentException("Año inválido");
-        var query = db.ProjectDeveloperContracts.AsNoTracking();
+        var query = db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.DeletedAt == null);
         var total = await query.CountAsync(ct);
         var ids = await query.OrderBy(x => x.Project!.Nombre).ThenBy(x => x.Id).Skip((request.PageNumber - 1) * request.PageSize).Take(request.PageSize).Select(x => x.Id).ToListAsync(ct);
         var items = new List<Kodvian.Core.Application.Developers.Dtos.ContractLedgerDto>();

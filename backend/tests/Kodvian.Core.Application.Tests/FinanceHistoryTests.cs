@@ -389,6 +389,7 @@ public class FinanceHistoryTests : IDisposable
             CategoryId = expenseCategory.Id, ProjectId = project.Id, MovementType = "Egreso", Status = "Pagado", MovementDate = date, SettlementDate = date }));
         Assert.True(await contracts.CancelAsync(contract.Id));
         Assert.False(payment.Activo); Assert.Equal(FinancialMovementStatus.Anulado, expense.Status);
+        Assert.Empty(await contracts.GetByProjectAsync(project.Id));
         Assert.True(await contracts.CancelAsync(contract.Id));
     }
 

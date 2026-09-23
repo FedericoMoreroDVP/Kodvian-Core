@@ -13,12 +13,12 @@ namespace Kodvian.Core.Infrastructure.Services;
 public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeveloperContractService
 {
     public async Task<IReadOnlyCollection<ProjectDeveloperContractDto>> GetByProjectAsync(Guid projectId, CancellationToken cancellationToken = default) =>
-        await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.ProjectId == projectId)
+        await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.ProjectId == projectId && x.DeletedAt == null)
             .OrderByDescending(x => x.Activo).ThenByDescending(x => x.FechaCreacion).Select(ToDto()).ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyCollection<DeveloperContractSummaryDto>> GetByDeveloperSummaryAsync(Guid developerId, int year, CancellationToken cancellationToken = default)
     {
-        var contracts = await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.DeveloperId == developerId)
+        var contracts = await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.DeveloperId == developerId && x.DeletedAt == null)
             .OrderByDescending(x => x.Activo).Select(ToDto()).ToListAsync(cancellationToken);
         var result = new List<DeveloperContractSummaryDto>();
         foreach (var contract in contracts)
@@ -49,7 +49,7 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
     public async Task<ProjectDeveloperContractDto?> UpdateAsync(Guid id, ProjectDeveloperContractUpsertRequestDto request, CancellationToken cancellationToken = default)
     {
         await using var tx = await FinanceWriteScope.BeginAsync(db, cancellationToken);
-        var entity = await db.ProjectDeveloperContracts.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var entity = await db.ProjectDeveloperContracts.SingleOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, cancellationToken);
         if (entity == null) return null;
         await ValidateAsync(entity.ProjectId, request, id, cancellationToken);
         if (await db.DeveloperPayments.AnyAsync(x => x.ContractId == id, cancellationToken)
@@ -71,7 +71,7 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
         if (contract.Project?.Estado != ProjectStatus.Cancelado)
             throw new ArgumentException("Solo puedes eliminar acuerdos de proyectos cancelados");
 
-        contract.Activo = false; contract.FechaActualizacion = DateTime.UtcNow;
+        contract.Activo = false; contract.DeletedAt = DateTime.UtcNow; contract.FechaActualizacion = DateTime.UtcNow;
         foreach (var payment in contract.Payments.Where(x => x.Activo))
         {
             payment.Activo = false; payment.Version = Guid.NewGuid(); payment.FechaActualizacion = DateTime.UtcNow;
@@ -89,7 +89,7 @@ public class ProjectDeveloperContractService(KodvianDbContext db) : IProjectDeve
     public async Task<ContractLedgerDto?> GetLedgerAsync(Guid contractId, int year, CancellationToken cancellationToken = default)
     {
         if (year is < 2000 or > 2100) throw new ArgumentException("Año inválido");
-        var contract = await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.Id == contractId).Select(ToDto()).SingleOrDefaultAsync(cancellationToken);
+        var contract = await db.ProjectDeveloperContracts.AsNoTracking().Where(x => x.Id == contractId && x.DeletedAt == null).Select(ToDto()).SingleOrDefaultAsync(cancellationToken);
         if (contract == null) return null;
         var start = new DateOnly(year, 1, 1); var end = new DateOnly(year, 12, 31);
         if (contract.StartDate > start) start = contract.StartDate;
