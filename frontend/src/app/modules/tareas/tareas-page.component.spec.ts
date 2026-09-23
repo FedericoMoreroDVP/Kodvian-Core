@@ -24,8 +24,9 @@ describe('Tablero de tareas: movimientos', () => {
 
   beforeEach(() => {
     response = new Subject();
-    api = jasmine.createSpyObj('TareasService', ['actualizarEstado']);
+    api = jasmine.createSpyObj('TareasService', ['actualizarEstado', 'eliminar']);
     api.actualizarEstado.and.returnValue(response);
+    api.eliminar.and.returnValue(of(undefined));
     session = { user: { permissions: ['tasks.write'] } };
     TestBed.configureTestingModule({ providers: [FormBuilder,
       { provide: TareasService, useValue: api },
@@ -76,6 +77,16 @@ describe('Tablero de tareas: movimientos', () => {
     session.user.permissions = ['tasks.write']; component.movingId = 'other';
     component.moverTarjeta(event());
     expect(api.actualizarEstado).not.toHaveBeenCalled();
+  });
+  it('elimina permanentemente sólo una tarea cancelada tras confirmación', () => {
+    spyOn(window, 'confirm').and.returnValue(true);
+    component.eliminar('task', 'Cancelada', 'Cancelar evidencia');
+    expect(api.eliminar).toHaveBeenCalledWith('task');
+    expect(component.cargarDatos).toHaveBeenCalled();
+  });
+  it('no elimina una tarea que no está cancelada', () => {
+    component.eliminar('task', 'EnCurso', 'Activa');
+    expect(api.eliminar).not.toHaveBeenCalled();
   });
 });
 

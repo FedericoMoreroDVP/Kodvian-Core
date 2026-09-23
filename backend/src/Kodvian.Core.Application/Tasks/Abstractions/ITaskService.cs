@@ -11,6 +11,7 @@ public interface ITaskService
     Task<TaskDetailDto> CreateAsync(Guid createdById, TaskUpsertRequestDto request, CancellationToken cancellationToken = default);
     Task<TaskDetailDto?> UpdateAsync(Guid id, TaskUpsertRequestDto request, CancellationToken cancellationToken = default);
     Task<TaskDetailDto?> UpdateStatusAsync(Guid id, TaskStatusUpdateRequestDto request, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<TaskKanbanColumnDto>> GetKanbanAsync(TaskListRequestDto request, CancellationToken cancellationToken = default);
     Task<TaskLookupsDto> GetLookupsAsync(CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,6 @@
 ﻿using System.Linq.Expressions;
 using Kodvian.Core.Application.Common.Models;
+using Kodvian.Core.Application.Common.Files;
 using Kodvian.Core.Application.Tasks.Abstractions;
 using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Application.Tasks.Dtos;
@@ -8,6 +9,7 @@ using Kodvian.Core.Domain.Entities;
 using Kodvian.Core.Domain.Enums;
 using Kodvian.Core.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using DomainTaskStatus = Kodvian.Core.Domain.Enums.TaskStatus;
 
 namespace Kodvian.Core.Infrastructure.Services;
@@ -15,10 +17,14 @@ namespace Kodvian.Core.Infrastructure.Services;
 public class TaskService : ITaskService
 {
     private readonly KodvianDbContext _dbContext;
+    private readonly IFileStorageService _storage;
+    private readonly ILogger<TaskService> _logger;
 
-    public TaskService(KodvianDbContext dbContext)
+    public TaskService(KodvianDbContext dbContext, IFileStorageService storage, ILogger<TaskService> logger)
     {
         _dbContext = dbContext;
+        _storage = storage;
+        _logger = logger;
     }
 
     public async Task<PagedResultDto<TaskListItemDto>> GetPagedAsync(TaskListRequestDto request, CancellationToken cancellationToken = default)
@@ -165,6 +171,30 @@ public class TaskService : ITaskService
             .FirstOrDefaultAsync(cancellationToken);
 
         return row is null ? null : MapToDetailDto(row);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var task = await _dbContext.Tasks.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (task is null) return false;
+        if (task.Estado != DomainTaskStatus.Cancelada)
+            throw new ArgumentException("Solo puedes eliminar tareas canceladas");
+
+        var attachments = await _dbContext.TaskAttachments.Where(x => x.TaskId == id).ToListAsync(cancellationToken);
+        foreach (var attachment in attachments)
+        {
+            try { await _storage.DeleteAsync(attachment.StoragePath, cancellationToken); }
+            catch (Exception exception) when (exception is not OperationCanceledException and not ArgumentException)
+            {
+                _logger.LogError(exception, "No se pudo eliminar la evidencia {StoragePath} de la tarea cancelada {TaskId}", attachment.StoragePath, id);
+                throw new StorageUnavailableException(exception);
+            }
+        }
+
+        _dbContext.TaskAttachments.RemoveRange(attachments);
+        _dbContext.Tasks.Remove(task);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyCollection<TaskKanbanColumnDto>> GetKanbanAsync(TaskListRequestDto request, CancellationToken cancellationToken = default)

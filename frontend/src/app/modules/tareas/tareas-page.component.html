@@ -121,8 +121,9 @@
           <td mat-cell *matCellDef="let row" class="acciones-row">
             <button mat-button class="table-action" type="button" (click)="verDetalle(row.id)">Ver detalle</button>
             @if (canWrite) {
-              <button mat-button class="table-action" type="button" (click)="editar(row.id)">Editar</button>
-              <button mat-button class="table-action" type="button" (click)="cambiarEstado(row.id, row.status)">Cambiar estado</button>
+              <button mat-button class="table-action" type="button" [disabled]="!!deletingId" (click)="editar(row.id)">Editar</button>
+              <button mat-button class="table-action" type="button" [disabled]="!!deletingId" (click)="cambiarEstado(row.id, row.status)">Cambiar estado</button>
+              @if (row.status === 'Cancelada') { <button mat-button class="table-action" type="button" [disabled]="!!deletingId" (click)="eliminar(row.id, row.status, row.title)">Eliminar</button> }
             }
           </td>
         </ng-container>
@@ -141,22 +142,26 @@
     @if (canWrite) { <p class="drag-hint">Haz clic sobre una tarjeta y arrástrala manteniendo presionado el botón del mouse. En pantallas táctiles, mantén presionada la tarjeta antes de moverla.</p> }
     <div class="kanban-grid" cdkDropListGroup>
       @for (column of kanban; track column.status) {
-        <section class="kanban-col" cdkDropList [cdkDropListData]="column" [cdkDropListSortingDisabled]="true" [cdkDropListDisabled]="!canWrite || !!movingId || cargando" (cdkDropListDropped)="moverTarjeta($event)">
+        <section class="kanban-col" cdkDropList [cdkDropListData]="column" [cdkDropListSortingDisabled]="true" [cdkDropListDisabled]="!canWrite || !!movingId || !!deletingId || cargando" (cdkDropListDropped)="moverTarjeta($event)">
           <h3>{{ mostrarEstado(column.status) }}</h3>
           @if (column.items.length === 0) {
             <p class="vacio">Sin tareas</p>
           }
           @for (item of column.items; track item.id) {
-            <article class="kanban-card" cdkDrag [cdkDragData]="item" [cdkDragStartDelay]="{ mouse: 0, touch: 300 }" [cdkDragDisabled]="!canWrite || !!movingId || cargando" [class.saving]="movingId === item.id" [attr.aria-busy]="movingId === item.id">
+            <article class="kanban-card" cdkDrag [cdkDragData]="item" [cdkDragStartDelay]="{ mouse: 0, touch: 300 }" [cdkDragDisabled]="!canWrite || !!movingId || !!deletingId || cargando" [class.saving]="movingId === item.id || deletingId === item.id" [attr.aria-busy]="movingId === item.id || deletingId === item.id">
               <strong>{{ item.title }}</strong>
               <span>{{ item.projectName }}</span>
                <small>Desarrollador: {{ item.developerName || item.responsibleName || '-' }}</small>
               <small>Prioridad: <span class="tag-priority">{{ item.priority }}</span></small>
               <small>Vence: {{ item.dueDate || '-' }}</small>
-              @if (movingId === item.id) { <small role="status">Guardando cambio…</small> }
+               @if (movingId === item.id) { <small role="status">Guardando cambio…</small> }
+               @if (deletingId === item.id) { <small role="status">Eliminando permanentemente…</small> }
               <div class="kanban-actions" (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
                 <button mat-button type="button" (click)="verDetalle(item.id)">Ver detalle</button>
-                @if (canWrite) { <button mat-button type="button" [disabled]="!!movingId" (click)="editar(item.id)">Editar</button> }
+                @if (canWrite) {
+                  <button mat-button type="button" [disabled]="!!movingId || !!deletingId" (click)="editar(item.id)">Editar</button>
+                  @if (column.status === 'Cancelada') { <button mat-button type="button" [disabled]="!!movingId || !!deletingId" (click)="eliminar(item.id, column.status, item.title)">Eliminar</button> }
+                }
               </div>
             </article>
           }

@@ -117,4 +117,14 @@ public class TasksController : ControllerBase
         return Ok(ApiResponseDto<TaskDetailDto>.Ok(data, "El estado de la tarea se actualizó correctamente"));
     }
 
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "TasksWrite")]
+    public async Task<ActionResult<ApiResponseDto<object>>> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        if (!await _taskService.DeleteAsync(id, cancellationToken))
+            return NotFound(ApiResponseDto<object>.Fail("Tarea no encontrada"));
+
+        return Ok(ApiResponseDto<object>.Ok(new { }, "La tarea cancelada y sus adjuntos se eliminaron permanentemente"));
+    }
+
 }

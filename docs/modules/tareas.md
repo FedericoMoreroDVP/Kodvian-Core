@@ -11,6 +11,7 @@ El modulo de tareas organiza el trabajo operativo asociado a proyectos. Permite 
 - Crear tarea.
 - Editar tarea.
 - Cambiar estado.
+- Eliminar permanentemente tareas canceladas y sus evidencias.
 - Consultar detalle.
 - Visualizar kanban (vista inicial).
 - Mantener presionada una tarjeta y arrastrarla a otra columna para cambiar su estado.
@@ -33,6 +34,7 @@ El modulo de tareas organiza el trabajo operativo asociado a proyectos. Permite 
 - `POST /api/tasks`.
 - `PUT /api/tasks/{id}`.
 - `PATCH /api/tasks/{id}/status`.
+- `DELETE /api/tasks/{id}` (sólo tareas `Cancelada`).
 - `GET /api/tasks/{id}/attachments`.
 - `POST /api/tasks/{id}/attachments` (`multipart/form-data`: `file`, `uploadId` UUID estable por archivo/reintento).
 - `GET /api/tasks/{id}/attachments/{attachmentId}` (descarga autenticada).
@@ -69,7 +71,7 @@ Prioridades:
 ## Permisos
 
 - `tasks.read` para consulta.
-- `tasks.write` para alta, edicion y cambio de estado.
+- `tasks.write` para alta, edicion, cambio de estado y eliminación permanente de tareas canceladas.
 - El controller de tareas aplica policies de lectura/escritura.
 - Adjuntos: lectura general con `tasks.read`, gestión general con `tasks.read` y `tasks.write`.
 - Desde Mi trabajo: `developer.work.read` permite consultar adjuntos de tareas activas asignadas al desarrollador del token; `developer.tasks.status.write` permite subir y eliminar archivos propios en esas tareas.
@@ -89,11 +91,13 @@ Prioridades:
 - Estado y prioridad deben expresarse con etiquetas claras.
 - Las horas estimadas/reales usan precision decimal.
 - Kanban depende de estado y orden.
+- Una tarea sólo se puede eliminar permanentemente cuando su estado es `Cancelada`. La operación borra sus metadatos y sus binarios adjuntos; no se puede deshacer.
 
 ## Tablero y guardado
 
 - La vista inicial siempre es tablero. Se conserva la opción de lista.
 - Las tarjetas ofrecen Ver detalle y Editar; el formulario permite cambiar el estado con teclado.
+- Las tarjetas y filas canceladas muestran Eliminar para usuarios con permisos de escritura. La confirmación advierte que se borrarán la tarea y sus adjuntos.
 - Arrastre inmediato con mouse manteniendo el botón presionado, sin espera inicial; pulsación sostenida de 300 ms en pantallas táctiles. Los botones de la tarjeta no inician arrastre y el texto no se selecciona durante el gesto.
 - Soltar sobre otra columna, incluso vacía, persiste el estado usando el PATCH existente y conserva `kanbanOrder`.
 - Soltar fuera o dentro de la misma columna no escribe ni reordena.

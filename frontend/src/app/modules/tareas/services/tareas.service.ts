@@ -39,6 +39,10 @@ export class TareasService {
     return this.http.patch<ApiResponse<TareaDetalle>>(`${this.endpoint}/${id}/status`, { status, kanbanOrder }).pipe(map((r) => r.data));
   }
 
+  eliminar(id: string): Observable<void> {
+    return this.http.delete<ApiResponse<object>>(`${this.endpoint}/${id}`).pipe(map(() => undefined));
+  }
+
   private buildParams(filtros: TareaFiltros): HttpParams {
     let params = new HttpParams().set('pageNumber', filtros.pageNumber).set('pageSize', filtros.pageSize);
 

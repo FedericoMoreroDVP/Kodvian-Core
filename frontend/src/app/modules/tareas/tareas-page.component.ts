@@ -38,6 +38,7 @@ export class TareasPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly session = inject(AuthSessionService);
   movingId: string | null = null;
+  deletingId: string | null = null;
   get canWrite(): boolean { return this.session.user?.permissions.includes('tasks.write') ?? false; }
 
   private debeAbrirNuevaTarea = false;
@@ -194,7 +195,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   editar(id: string): void {
-    if (!this.canWrite || this.movingId) return;
+    if (!this.canWrite || this.movingId || this.deletingId) return;
     this.tareasService.obtenerDetalle(id).subscribe({
       next: (detalle: TareaDetalle) => {
         const dialogRef = this.dialog.open(TareaFormDialogComponent, {
@@ -211,7 +212,7 @@ export class TareasPageComponent implements OnInit {
   }
 
   cambiarEstado(id: string, actual: EstadoTarea): void {
-    if (!this.canWrite) return;
+    if (!this.canWrite || this.deletingId) return;
     const dialogRef = this.dialog.open(TareaStatusDialogComponent, {
       width: '420px',
       data: { statusActual: actual }
@@ -250,8 +251,26 @@ export class TareasPageComponent implements OnInit {
     };
   }
 
+  eliminar(id: string, status: EstadoTarea, title: string): void {
+    if (!this.canWrite || this.movingId || this.deletingId || status !== 'Cancelada') return;
+    if (!confirm(`Eliminar permanentemente "${title}" y todos sus adjuntos? Esta acción no se puede deshacer.`)) return;
+
+    this.deletingId = id;
+    this.tareasService.eliminar(id).subscribe({
+      next: () => {
+        this.deletingId = null;
+        this.snackBar.open('La tarea cancelada y sus adjuntos se eliminaron permanentemente', 'Cerrar', { duration: 3500 });
+        this.cargarDatos();
+      },
+      error: (error) => {
+        this.deletingId = null;
+        this.snackBar.open(error?.error?.message ?? 'No se pudo eliminar la tarea cancelada', 'Cerrar', { duration: 4000 });
+      }
+    });
+  }
+
   moverTarjeta(event: CdkDragDrop<KanbanColumn>): void {
-    if (!event.isPointerOverContainer || event.previousContainer === event.container || !this.canWrite || this.movingId) return;
+    if (!event.isPointerOverContainer || event.previousContainer === event.container || !this.canWrite || this.movingId || this.deletingId) return;
     const source = event.previousContainer.data;
     const target = event.container.data;
     const item = event.item.data as KanbanColumn['items'][number];
