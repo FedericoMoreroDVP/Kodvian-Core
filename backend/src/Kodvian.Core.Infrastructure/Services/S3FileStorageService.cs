@@ -60,13 +60,7 @@ public sealed class S3FileStorageService : IFileStorageService, IDisposable
         var key = $"{DateTime.UtcNow:yyyy}/{DateTime.UtcNow:MM}/{Guid.NewGuid():N}{sanitizedExtension}";
 
         using var stream = new MemoryStream(content);
-        var request = new PutObjectRequest
-        {
-            BucketName = _bucket,
-            Key = key,
-            InputStream = stream,
-            AutoCloseStream = true
-        };
+        var request = CreateUploadRequest(_bucket, key, stream);
 
         await _s3Client.PutObjectAsync(request, cancellationToken);
         return key;
@@ -107,6 +101,16 @@ public sealed class S3FileStorageService : IFileStorageService, IDisposable
     {
         _s3Client.Dispose();
     }
+
+    internal static PutObjectRequest CreateUploadRequest(string bucket, string key, Stream content) => new()
+    {
+        BucketName = bucket,
+        Key = key,
+        InputStream = content,
+        AutoCloseStream = true,
+        // Some S3-compatible providers do not implement AWS's streaming payload signature.
+        UseChunkEncoding = false
+    };
 
     private static string NormalizeKey(string storagePath)
     {
