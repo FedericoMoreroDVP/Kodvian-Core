@@ -14,6 +14,7 @@
   @if (loading) { <p role="status">Cargando adjuntos…</p> }
   @for (item of pending; track item.uploadId) {
     <div class="file-row">
+      @if (item.preview) { <button type="button" class="thumbnail" (click)="openPreview(item.preview, item.file.name)" [attr.aria-label]="'Ampliar ' + item.file.name"><img [src]="item.preview" [alt]="item.file.name" /></button> }
       <div><strong>{{ item.file.name }}</strong><small>{{ size(item.file.size) }} · {{ item.uploading ? 'Subiendo…' : 'Pendiente de subida' }}</small>
         @if (item.error) { <small role="alert" class="error">{{ item.error }}</small> }
       </div>
@@ -27,7 +28,7 @@
   @for (item of attachments; track item.id) {
     <div class="file-row">
       @if (previews.get(item.id); as preview) {
-        <button type="button" class="thumbnail" (click)="expanded = item" [attr.aria-label]="'Ampliar ' + item.fileName"><img [src]="preview" [alt]="item.fileName" /></button>
+        <button type="button" class="thumbnail" (click)="openPreview(preview, item.fileName)" [attr.aria-label]="'Ampliar ' + item.fileName"><img [src]="preview" [alt]="item.fileName" /></button>
       }
       <div class="file-info"><strong>{{ item.fileName }}</strong><small>{{ size(item.size) }} · {{ item.contentType }}</small>
         <small>{{ item.uploadedByName }} · {{ item.createdAt | date:'dd/MM/yyyy HH:mm' }}</small>
@@ -41,7 +42,7 @@
   @if (expanded; as image) {
     <div class="expanded" role="region" aria-label="Imagen ampliada">
       <button mat-button type="button" (click)="expanded = undefined">Cerrar imagen</button>
-      <img [src]="previews.get(image.id)" [alt]="image.fileName" />
+      <img [src]="image.preview" [alt]="image.fileName" />
     </div>
   }
 </section>

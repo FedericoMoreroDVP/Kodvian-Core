@@ -54,6 +54,24 @@ describe('Adjuntos de tarea', () => {
     component.drop({ dataTransfer: { files: [file] }, preventDefault, stopPropagation: () => {} } as unknown as DragEvent);
     expect(component.pending.length).toBe(2); expect(preventDefault).toHaveBeenCalled();
   });
+  it('muestra y libera la preview local de una captura pendiente', () => {
+    const create = spyOn(URL, 'createObjectURL').and.returnValue('blob:captura');
+    const revoke = spyOn(URL, 'revokeObjectURL');
+    component.addFiles([new File(['image'], 'captura.png', { type: 'image/png' })]);
+    expect(component.pending[0].preview).toBe('blob:captura'); expect(create).toHaveBeenCalled();
+    component.openPreview('blob:captura', 'captura.png'); expect(component.expanded?.fileName).toBe('captura.png');
+    component.removePending(component.pending[0]); expect(revoke).toHaveBeenCalledWith('blob:captura');
+  });
+  it('conserva la preview y ofrece reintento ante una falla temporal de almacenamiento', fakeAsync(() => {
+    spyOn(URL, 'createObjectURL').and.returnValue('blob:captura');
+    component.addFiles([new File(['image'], 'captura.png', { type: 'image/png' })]);
+    const uploadId = component.pending[0].uploadId;
+    void component.uploadPending('task');
+    http.expectOne(r => r.method === 'POST').flush({ message: 'No se pudo guardar la evidencia en el almacenamiento. Verifica tu conexión y reintenta; si persiste, informa la hora y el nombre del archivo.' }, { status: 503, statusText: 'Servicio no disponible' }); tick();
+    http.expectOne(r => r.method === 'GET').flush({ data: [] }); tick();
+    expect(component.pending[0]).toEqual(jasmine.objectContaining({ uploadId, preview: 'blob:captura' }));
+    expect(component.pending[0].error).toContain('reintenta');
+  }));
   it('bloquea la carga para usuarios de lectura', () => {
     component.canWrite = false;
     component.addFiles([new File(['texto'], 'prueba.txt')]);

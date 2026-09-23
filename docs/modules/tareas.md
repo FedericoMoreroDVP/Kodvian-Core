@@ -105,9 +105,10 @@ Prioridades:
 - Componente compartido `tarea-attachments`, disponible en edición y detalle, incluido el detalle de Mi trabajo.
 - Formatos: PNG/JPG/JPEG/WebP, PDF, DOC/DOCX, XLS/XLSX, TXT/CSV y ZIP. Máximo 10 MiB por archivo (mostrado como 10 MB en la UI).
 - La API valida extensión, tamaño y firma básica del formato; determina el tipo de contenido sin confiar en el MIME enviado.
-- Imágenes con miniatura y ampliación; todos los archivos se pueden descargar. Se muestra autor, fecha y tamaño.
+- Imágenes con miniatura y ampliación antes de guardar, durante un reintento y después de subir; todos los archivos se pueden descargar. Se muestra autor, fecha y tamaño.
 - Al crear/editar, los archivos quedan en cola hasta guardar. Se guarda primero la tarea y luego se suben secuencialmente.
 - Si falla un archivo, se conserva en cola y puede reintentarse individualmente; no se vuelve a crear la tarea.
+- Si el almacenamiento no está disponible, la API responde 503 con una indicación segura para reintentar. El detalle técnico queda únicamente en el log del servidor; la captura y su preview local se conservan hasta quitarla o subirla correctamente.
 - `UploadId` tiene índice único por tarea y permite repetir una subida cuya respuesta se perdió sin duplicar el archivo.
 - Los binarios usan `IFileStorageService` (local o S3 según configuración); PostgreSQL guarda solo metadatos en `TaskAttachments`.
 - El borrado conserva un registro marcado como eliminado y la ruta para permitir reintentos si falla el almacenamiento. Si el usuario cerró el diálogo tras ese fallo, la eliminación física puede reintentarse con el mismo endpoint/ID.

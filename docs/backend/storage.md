@@ -37,14 +37,13 @@ Variables relevantes:
 - `Storage__ForcePathStyle`.
 - `Storage__MaxPdfSizeMb`.
 
-## Validacion de archivos
+## Adjuntos de tareas
 
-Los uploads actuales estan orientados a PDFs:
-
-- Se valida tamano maximo.
-- Se valida content type.
-- Se valida magic header `%PDF`.
-- Se calcula y guarda SHA-256.
+Las evidencias de tareas aceptan PNG, JPG, WebP, PDF, Word, Excel, TXT, CSV y ZIP,
+con un límite de 10 MB por archivo. El servidor valida extensión, tamaño y firma del
+contenido para imágenes y PDF. Las imágenes muestran miniatura y vista ampliada antes
+de guardar y después de subir; los reintentos conservan el mismo identificador para no
+duplicar archivos.
 
 ## Casos de uso
 
@@ -52,6 +51,7 @@ Los uploads actuales estan orientados a PDFs:
 - Versiones de documentos de proyecto.
 - Comprobantes de movimientos financieros.
 - Comprobantes de pagos a desarrolladores.
+- Adjuntos y evidencias de tareas.
 
 ## Modelo relacionado
 
@@ -72,3 +72,6 @@ Los uploads actuales estan orientados a PDFs:
 - Para produccion, configurar S3 antes del primer deploy.
 - Eliminar archivo fisico/remoto cuando el flujo realmente borre comprobantes.
 - Diferenciar baja logica de documentos de proyecto vs eliminacion de comprobantes.
+- Si una subida devuelve 503, el almacenamiento no estuvo disponible: reintentar y
+  revisar el log del POST de adjuntos. En S3 verificar bucket, credenciales, endpoint
+  y permiso PutObject; en local, permisos y espacio de `App_Data/files`.

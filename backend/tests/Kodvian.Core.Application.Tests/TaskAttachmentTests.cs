@@ -116,6 +116,14 @@ public class TaskAttachmentTests : IDisposable
     }
 
     [Fact]
+    public async Task StorageFailureReturnsARecoverableErrorWithoutCreatingAttachment()
+    {
+        storage.FailSave = true;
+        await Assert.ThrowsAsync<StorageUnavailableException>(() => Service.UploadAsync(task.Id, Guid.NewGuid(), "prueba.txt", [65], Own, default));
+        Assert.Empty(storage.Files); Assert.Empty(await db.TaskAttachments.ToListAsync());
+    }
+
+    [Fact]
     public async Task LostCommitAcknowledgementDoesNotDeleteTheCommittedFile()
     {
         db.FailAfterSave = true;
@@ -129,7 +137,7 @@ public class TaskAttachmentTests : IDisposable
     {
         var item = await Service.UploadAsync(task.Id, Guid.NewGuid(), "prueba.txt", [65], Own, default);
         storage.FailDelete = true;
-        await Assert.ThrowsAsync<IOException>(() => Service.DeleteAsync(task.Id, item.Id, Own, default));
+        await Assert.ThrowsAsync<StorageUnavailableException>(() => Service.DeleteAsync(task.Id, item.Id, Own, default));
         Assert.Empty(await Service.ListAsync(task.Id, Own, default));
         storage.FailDelete = false;
         await Service.DeleteAsync(task.Id, item.Id, Own, default);
@@ -172,8 +180,10 @@ public class TaskAttachmentTests : IDisposable
     {
         public readonly Dictionary<string, byte[]> Files = new();
         public bool FailDelete;
+        public bool FailSave;
         public Task<string> SaveAsync(byte[] content, string extension, CancellationToken cancellationToken = default)
         {
+            if (FailSave) throw new IOException("Simulated storage failure");
             var key = Guid.NewGuid() + extension; Files[key] = content; return Task.FromResult(key);
         }
         public Task<byte[]> ReadAsync(string path, CancellationToken cancellationToken = default) => Task.FromResult(Files[path]);

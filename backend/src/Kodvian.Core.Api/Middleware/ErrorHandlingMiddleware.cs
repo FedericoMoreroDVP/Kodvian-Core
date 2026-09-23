@@ -1,4 +1,5 @@
 ﻿using Kodvian.Core.Application.Common.Models;
+using Kodvian.Core.Application.Common.Files;
 
 namespace Kodvian.Core.Api.Middleware;
 
@@ -33,6 +34,12 @@ public class ErrorHandlingMiddleware
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail("Archivo no encontrado"));
+        }
+        catch (StorageUnavailableException exception)
+        {
+            _logger.LogError(exception, "Storage unavailable while processing request.");
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
         }
         catch (ArgumentException exception)
         {

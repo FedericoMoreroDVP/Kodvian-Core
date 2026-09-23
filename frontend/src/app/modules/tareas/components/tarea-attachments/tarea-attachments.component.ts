@@ -10,7 +10,7 @@ interface Attachment {
   id: string; fileName: string; contentType: string; size: number;
   createdAt: string; uploadedById: string; uploadedByName: string;
 }
-interface PendingFile { file: File; uploadId: string; error?: string; uploading: boolean; }
+interface PendingFile { file: File; uploadId: string; error?: string; uploading: boolean; preview?: string; }
 
 @Component({
   selector: 'app-tarea-attachments', standalone: true,
@@ -30,7 +30,7 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
   attachments: Attachment[] = [];
   pending: PendingFile[] = [];
   previews = new Map<string, string>();
-  expanded?: Attachment;
+  expanded?: { preview: string; fileName: string };
   busy = false;
   loading = false;
   error = '';
@@ -45,12 +45,20 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
   }
   private endpoint(): string { return `/api/tasks/${this.taskId}/attachments`; }
   private message(error: any): string {
-    return error?.error?.message ?? error?.error?.Message ?? 'No se pudo completar la operación. Puedes reintentar.';
+    const server = error?.error?.message ?? error?.error?.Message;
+    return server === 'Ocurrió un error interno al procesar la solicitud'
+      ? 'No se pudo guardar el archivo. Reintenta; si persiste, informa la hora y el nombre del archivo.'
+      : server ?? 'No se pudo completar la operación. Puedes reintentar.';
   }
   private setBusy(value: boolean): void { this.busy = value; this.busyChange.emit(value); }
   private objectUrl(blob: Blob): string {
     const url = URL.createObjectURL(blob); this.urls.add(url); return url;
   }
+  private releaseUrl(url?: string): void {
+    if (!url) return;
+    URL.revokeObjectURL(url); this.urls.delete(url);
+  }
+  openPreview(preview: string, fileName: string): void { this.expanded = { preview, fileName }; }
 
   async load(): Promise<void> {
     if (!this.taskId || this.destroyed) return;
@@ -93,7 +101,8 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
       const extension = '.' + file.name.split('.').pop()?.toLowerCase();
       if (!this.accept.split(',').includes(extension)) { errors.push(`${file.name}: formato no permitido.`); continue; }
       if (!file.size || file.size > 10 * 1024 * 1024) { errors.push(`${file.name}: debe contener información y no superar 10 MB.`); continue; }
-      this.pending.push({ file, uploadId: crypto.randomUUID(), uploading: false });
+      const preview = file.type.startsWith('image/') ? this.objectUrl(file) : undefined;
+      this.pending.push({ file, uploadId: crypto.randomUUID(), uploading: false, preview });
     }
     this.error = errors.join(' ');
     if (!this.deferUploads && this.taskId && this.pending.length) void this.uploadPending(this.taskId);
@@ -110,7 +119,7 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
         try {
           const result = await firstValueFrom(this.http.post<ApiResponse<Attachment>>(this.endpoint(), body));
           if (!this.attachments.some(a => a.id === result.data.id)) this.attachments.unshift(result.data);
-          this.pending = this.pending.filter(p => p !== item);
+          this.releaseUrl(item.preview); this.pending = this.pending.filter(p => p !== item);
         } catch (error) { item.error = this.message(error); }
         finally { item.uploading = false; }
       }
@@ -119,7 +128,7 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
     } finally { this.setBusy(false); }
   }
   retry(item?: PendingFile): void { if (this.taskId) void this.uploadPending(this.taskId, item); }
-  removePending(item: PendingFile): void { this.pending = this.pending.filter(p => p !== item); }
+  removePending(item: PendingFile): void { this.releaseUrl(item.preview); this.pending = this.pending.filter(p => p !== item); }
   canDelete(item: Attachment): boolean {
     return this.canWrite && (this.session.user?.permissions.includes('tasks.write') === true || item.uploadedById === this.session.user?.id);
   }
@@ -130,7 +139,7 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
       await firstValueFrom(this.http.delete(this.endpoint() + '/' + item.id));
       this.attachments = this.attachments.filter(a => a.id !== item.id);
       const preview = this.previews.get(item.id);
-      if (preview) { URL.revokeObjectURL(preview); this.urls.delete(preview); this.previews.delete(item.id); }
+      if (preview) { this.releaseUrl(preview); this.previews.delete(item.id); }
     } catch (error) { this.error = this.message(error); }
     finally { this.setBusy(false); }
   }
@@ -140,7 +149,7 @@ export class TareaAttachmentsComponent implements OnChanges, OnDestroy {
       if (this.destroyed) return;
       const url = this.objectUrl(blob);
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = item.fileName; anchor.click();
-      setTimeout(() => { URL.revokeObjectURL(url); this.urls.delete(url); }, 1000);
+      setTimeout(() => this.releaseUrl(url), 1000);
     } catch (error) { this.error = this.message(error); }
   }
   size(bytes: number): string { return bytes < 1048576 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1048576).toFixed(1)} MB`; }
