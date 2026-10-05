@@ -15,8 +15,8 @@ import { AgendaLookupItem, EstadoReunion, PrioridadReunion, Reunion } from './mo
 import { AgendaService } from './services/agenda.service';
 
 type VistaAgenda = 'dia' | 'semana' | 'mes' | 'lista';
-const WORKDAY_START = 8;
-const WORKDAY_END = 19;
+const WORKDAY_START = 0;
+const WORKDAY_END = 24;
 const SLOT_MINUTES = 30;
 const PIXELS_PER_HOUR = 64;
 @Component({ selector: 'app-agenda-page', standalone: true, imports: [DatePipe, DecimalPipe, NgStyle, ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule], templateUrl: './agenda-page.component.html', styleUrl: './agenda-page.component.scss' })
@@ -42,7 +42,7 @@ export class AgendaPageComponent implements OnInit {
   loadingLookups = false;
   filtersOpen = false;
   private openNewAfterLookups = false;
-  view: VistaAgenda = 'semana';
+  view: VistaAgenda = 'mes';
   cursor = new Date();
   days: Date[] = [];
   monthDays: Date[] = [];
@@ -61,7 +61,6 @@ export class AgendaPageComponent implements OnInit {
   ngOnInit(): void {
     const projectId = this.route.snapshot.queryParamMap.get('projectId');
     if (projectId) this.filters.patchValue({ projectId });
-    if (window.matchMedia('(max-width: 640px)').matches) this.view = 'dia';
     this.openNewAfterLookups = this.route.snapshot.queryParamMap.get('action') === 'new' && this.canWrite();
     if (this.openNewAfterLookups) this.router.navigate([], { relativeTo: this.route, queryParams: { action: null }, queryParamsHandling: 'merge', replaceUrl: true });
     this.updateDays(); this.loadLookups(); this.loadMeetings();
