@@ -1,5 +1,5 @@
 import { Component, OnInit, inject } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe, NgStyle } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,7 +15,11 @@ import { AgendaLookupItem, EstadoReunion, PrioridadReunion, Reunion } from './mo
 import { AgendaService } from './services/agenda.service';
 
 type VistaAgenda = 'dia' | 'semana' | 'mes' | 'lista';
-@Component({ selector: 'app-agenda-page', standalone: true, imports: [DatePipe, ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule], templateUrl: './agenda-page.component.html', styleUrl: './agenda-page.component.scss' })
+const WORKDAY_START = 8;
+const WORKDAY_END = 19;
+const SLOT_MINUTES = 30;
+const PIXELS_PER_HOUR = 64;
+@Component({ selector: 'app-agenda-page', standalone: true, imports: [DatePipe, DecimalPipe, NgStyle, ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule], templateUrl: './agenda-page.component.html', styleUrl: './agenda-page.component.scss' })
 export class AgendaPageComponent implements OnInit {
   private readonly agenda = inject(AgendaService);
   private readonly dialog = inject(MatDialog);
@@ -28,6 +32,7 @@ export class AgendaPageComponent implements OnInit {
   readonly canCancel = () => this.session.user?.permissions.includes('meetings.cancel') ?? false;
   readonly priorities: PrioridadReunion[] = ['Baja', 'Media', 'Alta', 'Urgente'];
   readonly statuses: EstadoReunion[] = ['Programada', 'Confirmada', 'Realizada', 'Cancelada'];
+  readonly views: { value: VistaAgenda; label: string }[] = [{ value: 'dia', label: 'Día' }, { value: 'semana', label: 'Semana' }, { value: 'mes', label: 'Mes' }, { value: 'lista', label: 'Lista' }];
   readonly filters = this.fb.group({ projectId: [''], priority: [''], status: [''] });
   projects: AgendaLookupItem[] = [];
   users: AgendaLookupItem[] = [];
@@ -35,6 +40,7 @@ export class AgendaPageComponent implements OnInit {
   selected?: Reunion;
   loading = false;
   loadingLookups = false;
+  filtersOpen = false;
   private openNewAfterLookups = false;
   view: VistaAgenda = 'semana';
   cursor = new Date();
@@ -46,6 +52,11 @@ export class AgendaPageComponent implements OnInit {
     if (this.view === 'mes') return this.cursor.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     return formatRange(this.weekStart, this.days[6]);
   }
+  readonly timeSlots = Array.from({ length: (WORKDAY_END - WORKDAY_START) * 2 }, (_, index) => {
+    const minutesFromStart = index * SLOT_MINUTES;
+    return { hour: WORKDAY_START + Math.floor(minutesFromStart / 60), minute: minutesFromStart % 60 };
+  });
+  get activeFilterCount(): number { return Object.values(this.filters.getRawValue()).filter(Boolean).length; }
 
   ngOnInit(): void {
     const projectId = this.route.snapshot.queryParamMap.get('projectId');
@@ -85,6 +96,7 @@ export class AgendaPageComponent implements OnInit {
   isToday(day: Date): boolean { return sameDay(day, new Date()); }
   participantNames(meeting: Reunion): string { return meeting.participants.map(participant => participant.name).join(', '); }
   select(meeting: Reunion): void { this.selected = meeting; }
+  closeDetail(): void { this.selected = undefined; }
   selectAndOpen(meeting: Reunion): void { this.selected = meeting; this.cursor = new Date(meeting.startsAt); this.view = 'semana'; this.updateDays(); this.loadMeetings(); }
   openForm(meeting?: Reunion, day?: Date): void {
     if (!this.canWrite() || this.loadingLookups) return;
@@ -99,6 +111,19 @@ export class AgendaPageComponent implements OnInit {
     });
   }
   openDay(day: Date): void { this.cursor = new Date(day); this.view = 'dia'; this.loadMeetings(); }
+  slotDate(day: Date, hour: number, minute: number): Date { const value = new Date(day); value.setHours(hour, minute, 0, 0); return value; }
+  eventStyle(meeting: Reunion, day: Date): Record<string, string> {
+    const dayStart = startOfDay(day);
+    const dayEnd = endOfDay(day);
+    const start = new Date(Math.max(new Date(meeting.startsAt).getTime(), dayStart.getTime()));
+    const end = new Date(Math.min(new Date(meeting.endsAt).getTime(), dayEnd.getTime()));
+    const minutesFromWorkday = ((start.getHours() * 60) + start.getMinutes()) - (WORKDAY_START * 60);
+    const durationMinutes = Math.max(30, (end.getTime() - start.getTime()) / 60000);
+    return {
+      '--event-top': `${Math.max(0, minutesFromWorkday / 60 * PIXELS_PER_HOUR)}px`,
+      '--event-height': `${Math.max(34, durationMinutes / 60 * PIXELS_PER_HOUR)}px`
+    };
+  }
   priorityClass(priority: PrioridadReunion): string { return `priority-${priority.toLowerCase()}`; }
   projectColor(meeting: Reunion): string { return meeting.projectCalendarColor || '#5AB0FF'; }
   private moveCursor(direction: number): void {
