@@ -34,6 +34,9 @@ public static class RolePermissionMap
                 PermissionCodes.ProjectsDocumentsDelete,
                 PermissionCodes.TasksRead,
                 PermissionCodes.TasksWrite,
+                PermissionCodes.MeetingsRead,
+                PermissionCodes.MeetingsWrite,
+                PermissionCodes.MeetingsCancel,
                 PermissionCodes.TeamRead,
                 PermissionCodes.TeamWrite,
                 PermissionCodes.FinancesRead,
@@ -52,6 +55,9 @@ public static class RolePermissionMap
                 PermissionCodes.ProjectsDocumentsDelete,
                 PermissionCodes.TasksRead,
                 PermissionCodes.TasksWrite,
+                PermissionCodes.MeetingsRead,
+                PermissionCodes.MeetingsWrite,
+                PermissionCodes.MeetingsCancel,
                 PermissionCodes.TeamRead,
                 PermissionCodes.TeamWrite
             ],
@@ -61,6 +67,7 @@ public static class RolePermissionMap
                 PermissionCodes.ProjectsRead,
                 PermissionCodes.ProjectsDocumentsRead,
                 PermissionCodes.TasksRead,
+                PermissionCodes.MeetingsRead,
                 PermissionCodes.TeamRead,
                 PermissionCodes.AdministrationRead
             ],
@@ -75,13 +82,17 @@ public static class RolePermissionMap
                 PermissionCodes.ProjectsDocumentsDelete,
                 PermissionCodes.TasksRead,
                 PermissionCodes.TasksWrite,
+                PermissionCodes.MeetingsRead,
+                PermissionCodes.MeetingsWrite,
+                PermissionCodes.MeetingsCancel,
                 PermissionCodes.TeamRead,
                 PermissionCodes.TeamWrite
             ],
             RoleNames.Developer =>
             [
                 PermissionCodes.DeveloperWorkRead,
-                PermissionCodes.DeveloperTasksStatusWrite
+                PermissionCodes.DeveloperTasksStatusWrite,
+                PermissionCodes.MeetingsRead
             ],
             _ => Array.Empty<string>()
         };

@@ -12,6 +12,9 @@ public static class PermissionCodes
     public const string ProjectsDocumentsDelete = "projects.documents.delete";
     public const string TasksRead = "tasks.read";
     public const string TasksWrite = "tasks.write";
+    public const string MeetingsRead = "meetings.read";
+    public const string MeetingsWrite = "meetings.write";
+    public const string MeetingsCancel = "meetings.cancel";
     public const string TeamRead = "team.read";
     public const string TeamWrite = "team.write";
     public const string FinancesRead = "finances.read";

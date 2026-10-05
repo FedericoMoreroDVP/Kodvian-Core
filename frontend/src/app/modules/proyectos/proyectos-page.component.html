@@ -108,6 +108,12 @@
                   <mat-icon>more_horiz</mat-icon>
                 </button>
                 <mat-menu #projectActions="matMenu">
+                  @if (canScheduleMeetings) {
+                    <button mat-menu-item type="button" (click)="agendarReunion(row)">
+                      <mat-icon>event</mat-icon>
+                      <span>Agendar reunión</span>
+                    </button>
+                  }
                   <button mat-menu-item type="button" (click)="administrarDesarrolladores(row)">
                     <mat-icon>groups</mat-icon>
                     <span>Equipo</span>

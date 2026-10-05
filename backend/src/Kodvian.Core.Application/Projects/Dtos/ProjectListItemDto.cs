@@ -10,6 +10,7 @@ public class ProjectListItemDto
     public string? ResponsibleName { get; set; }
     public string Status { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
+    public string CalendarColor { get; set; } = string.Empty;
     public DateOnly? StartDate { get; set; }
     public DateOnly? EstimatedDeliveryDate { get; set; }
     public int ProgressPercentage { get; set; }

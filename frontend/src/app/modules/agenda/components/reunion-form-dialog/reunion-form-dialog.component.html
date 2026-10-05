@@ -1,0 +1,18 @@
+<h2 mat-dialog-title>{{ data.reunion ? 'Editar reunión' : 'Nueva reunión' }}</h2>
+<mat-dialog-content>
+  <form [formGroup]="form" class="form-grid">
+    <mat-form-field appearance="outline"><mat-label>Proyecto</mat-label><mat-select formControlName="projectId">@for (project of data.projects; track project.id) { <mat-option [value]="project.id">{{ project.name }}</mat-option> }</mat-select><mat-error>El proyecto es obligatorio</mat-error></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Tema de la reunión</mat-label><input matInput formControlName="title" /><mat-error>El tema es obligatorio</mat-error></mat-form-field>
+    <mat-form-field appearance="outline" class="full"><mat-label>Temas a tratar / descripción</mat-label><textarea matInput rows="3" formControlName="description"></textarea></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Fecha</mat-label><input matInput type="date" formControlName="date" /></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Inicio</mat-label><input matInput type="time" formControlName="startTime" /></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Fin</mat-label><input matInput type="time" formControlName="endTime" /></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Prioridad</mat-label><mat-select formControlName="priority">@for (priority of prioridades; track priority) { <mat-option [value]="priority">{{ priority }}</mat-option> }</mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Estado</mat-label><mat-select formControlName="status">@for (status of estados; track status) { <mat-option [value]="status">{{ status }}</mat-option> }</mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Participantes</mat-label><mat-select formControlName="participantIds" multiple>@for (user of data.users; track user.id) { <mat-option [value]="user.id">{{ user.name }}</mat-option> }</mat-select></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Enlace</mat-label><input matInput type="url" formControlName="link" /></mat-form-field>
+    <mat-form-field appearance="outline"><mat-label>Ubicación</mat-label><input matInput formControlName="location" /></mat-form-field>
+  </form>
+  @if (error) { <p class="form-error" role="alert">{{ error }}</p> }
+</mat-dialog-content>
+<mat-dialog-actions align="end"><button mat-button (click)="dialogRef.close()" [disabled]="saving">Cancelar</button><button mat-flat-button color="primary" (click)="guardar()" [disabled]="saving">{{ saving ? 'Guardando...' : 'Guardar reunión' }}</button></mat-dialog-actions>

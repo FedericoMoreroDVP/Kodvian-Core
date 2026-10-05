@@ -12,6 +12,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { AuthSessionService } from '../../core/auth/auth-session.service';
 
 import { ProyectoDetailDialogComponent } from './components/proyecto-detail-dialog/proyecto-detail-dialog.component';
 import { ProyectoDevelopersDialogComponent } from './components/proyecto-developers-dialog/proyecto-developers-dialog.component';
@@ -33,6 +34,8 @@ export class ProyectosPageComponent implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly session = inject(AuthSessionService);
+  get canScheduleMeetings(): boolean { return this.session.user?.permissions.includes('meetings.write') ?? false; }
 
   private debeAbrirNuevoProyecto = false;
 
@@ -168,6 +171,10 @@ export class ProyectosPageComponent implements OnInit {
       autoFocus: false,
       data: { project: row }
     }).afterClosed().subscribe(() => this.cargarProyectos());
+  }
+
+  agendarReunion(row: ProyectoListado): void {
+    this.router.navigate(['/agenda'], { queryParams: { projectId: row.id, action: 'new' } });
   }
 
   mostrarEstado(estado: EstadoProyecto): string {

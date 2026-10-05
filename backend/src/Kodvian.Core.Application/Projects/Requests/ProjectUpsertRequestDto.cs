@@ -5,6 +5,7 @@ public class ProjectUpsertRequestDto
     public Guid ClientId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? CalendarColor { get; set; }
     public Guid? ResponsibleId { get; set; }
     public string Status { get; set; } = "Planificacion";
     public string Priority { get; set; } = "Media";

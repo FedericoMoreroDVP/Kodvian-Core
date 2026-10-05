@@ -72,6 +72,7 @@ public class ProjectService : IProjectService
                 ResponsibleName = x.Responsable != null ? x.Responsable.FullName : null,
                 Status = x.Estado.ToString(),
                 Priority = x.Prioridad.ToString(),
+                CalendarColor = x.CalendarColor,
                 StartDate = x.FechaInicio,
                 EstimatedDeliveryDate = x.FechaEntregaEstimada,
                 ProgressPercentage = x.PorcentajeAvance,
@@ -494,6 +495,8 @@ public class ProjectService : IProjectService
         project.ClienteId = request.ClientId;
         project.Nombre = request.Name.Trim();
         project.Descripcion = Normalize(request.Description);
+        if (!string.IsNullOrWhiteSpace(request.CalendarColor))
+            project.CalendarColor = request.CalendarColor.Trim().ToUpperInvariant();
         project.ResponsableId = request.ResponsibleId;
         project.Estado = ParseStatus(request.Status);
         project.Prioridad = ParsePriority(request.Priority);
@@ -599,6 +602,7 @@ public class ProjectService : IProjectService
             ResponsibleName = x.Responsable != null ? x.Responsable.FullName : null,
             Status = x.Estado.ToString(),
             Priority = x.Prioridad.ToString(),
+            CalendarColor = x.CalendarColor,
             StartDate = x.FechaInicio,
             EstimatedDeliveryDate = x.FechaEntregaEstimada,
             ClosingDate = x.FechaCierre,

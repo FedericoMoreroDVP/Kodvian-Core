@@ -75,10 +75,11 @@ public class ProjectDriveLinkTests : IDisposable
         var client = new Client { CommercialName = "Cliente" };
         var project = new Project { Cliente = client, Nombre = "Antes", GoogleDriveFolderUrl = "https://drive.google.com/drive/folders/abc" };
         db.Projects.Add(project); await db.SaveChangesAsync();
-        await Service.UpdateAsync(project.Id, new ProjectUpsertRequestDto { ClientId = client.Id, Name = "Después" });
+        await Service.UpdateAsync(project.Id, new ProjectUpsertRequestDto { ClientId = client.Id, Name = "Después", CalendarColor = "#D183FF" });
         db.ChangeTracker.Clear();
         Assert.Equal("Después", (await Service.GetByIdAsync(project.Id))!.Name);
         Assert.Equal("https://drive.google.com/drive/folders/abc", (await Service.GetDriveLinkAsync(project.Id))!.GoogleDriveFolderUrl);
+        Assert.Equal("#D183FF", (await Service.GetByIdAsync(project.Id))!.CalendarColor);
     }
 
     [Fact]

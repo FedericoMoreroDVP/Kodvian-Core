@@ -85,6 +85,23 @@ Base route: `/api/tasks`
 | PUT | `/api/tasks/{id}` | Edicion de tarea. |
 | PATCH | `/api/tasks/{id}/status` | Cambio de estado. |
 
+## Meetings
+
+Controller: `backend/src/Kodvian.Core.Api/Controllers/MeetingsController.cs`
+
+Base route: `/api/meetings`
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| GET | `/api/meetings?from=&to=&projectId=&participantId=&priority=&status=` | Agenda visible para el usuario autenticado. |
+| GET | `/api/meetings/lookups` | Proyectos disponibles y usuarios activos. |
+| GET | `/api/meetings/{id}` | Detalle de reunión. |
+| POST | `/api/meetings` | Alta de reunión. |
+| PUT | `/api/meetings/{id}` | Edición o reprogramación de reunión. |
+| PATCH | `/api/meetings/{id}/cancel` | Cancelación conservando historial. |
+
+Las lecturas requieren `meetings.read`; las escrituras requieren `meetings.write`; cancelar requiere `meetings.cancel`.
+
 ## My Work
 
 Controller: `backend/src/Kodvian.Core.Api/Controllers/MyWorkController.cs`

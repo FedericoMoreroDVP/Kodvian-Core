@@ -20,6 +20,8 @@ public class KodvianDbContext : DbContext
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+    public DbSet<Meeting> Meetings => Set<Meeting>();
+    public DbSet<MeetingParticipant> MeetingParticipants => Set<MeetingParticipant>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<FinancialCategory> FinancialCategories => Set<FinancialCategory>();
     public DbSet<FinancialMovement> FinancialMovements => Set<FinancialMovement>();
@@ -98,6 +100,7 @@ public class KodvianDbContext : DbContext
             entity.Property(x => x.Nombre).IsRequired().HasMaxLength(200);
             entity.Property(x => x.Descripcion).HasMaxLength(2000);
             entity.Property(x => x.GoogleDriveFolderUrl).HasMaxLength(2048);
+            entity.Property(x => x.CalendarColor).IsRequired().HasMaxLength(7).HasDefaultValue("#5AB0FF");
             entity.Property(x => x.Estado).HasConversion<int>();
             entity.Property(x => x.Prioridad).HasConversion<int>();
             entity.Property(x => x.Presupuesto).HasColumnType("numeric(18,2)");
@@ -158,6 +161,33 @@ public class KodvianDbContext : DbContext
                 .WithMany(x => x.CreatedTasks)
                 .HasForeignKey(x => x.CreadoPorId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Meeting>(entity =>
+        {
+            entity.ToTable("Meetings", t => t.HasCheckConstraint("CK_Meetings_EndAfterStart", "\"Fin\" > \"Inicio\""));
+            entity.Property(x => x.Titulo).IsRequired().HasMaxLength(200);
+            entity.Property(x => x.Descripcion).HasMaxLength(2000);
+            entity.Property(x => x.Enlace).HasMaxLength(2048);
+            entity.Property(x => x.Ubicacion).HasMaxLength(300);
+            entity.Property(x => x.Prioridad).HasConversion<int>();
+            entity.Property(x => x.Estado).HasConversion<int>();
+            entity.HasIndex(x => x.ProyectoId);
+            entity.HasIndex(x => x.Inicio);
+            entity.HasIndex(x => new { x.ProyectoId, x.Inicio });
+            entity.HasIndex(x => x.CreadoPorId);
+            entity.HasOne(x => x.Proyecto).WithMany(x => x.Reuniones).HasForeignKey(x => x.ProyectoId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CreadoPor).WithMany(x => x.CreatedMeetings).HasForeignKey(x => x.CreadoPorId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<MeetingParticipant>(entity =>
+        {
+            entity.ToTable("MeetingParticipants");
+            entity.HasIndex(x => x.MeetingId);
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => new { x.MeetingId, x.UserId }).IsUnique();
+            entity.HasOne(x => x.Meeting).WithMany(x => x.Participantes).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany(x => x.MeetingParticipations).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<FinancialCategory>(entity =>

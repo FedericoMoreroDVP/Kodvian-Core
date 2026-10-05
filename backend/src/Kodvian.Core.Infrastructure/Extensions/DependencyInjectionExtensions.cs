@@ -9,6 +9,7 @@ using Kodvian.Core.Application.MyWork.Abstractions;
 using Kodvian.Core.Application.Projects.Abstractions;
 using Kodvian.Core.Application.Team.Abstractions;
 using Kodvian.Core.Application.Tasks.Abstractions;
+using Kodvian.Core.Application.Meetings.Abstractions;
 using Kodvian.Core.Infrastructure.Auth;
 using Kodvian.Core.Infrastructure.Persistence;
 using Kodvian.Core.Infrastructure.Storage;
@@ -51,6 +52,7 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ITeamUserService, TeamUserService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<IMeetingService, MeetingService>();
         services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
         services.AddScoped<UserAccessGuard>();
         services.AddScoped<Kodvian.Core.Application.Administration.IUserAdministrationService, UserAdministrationService>();

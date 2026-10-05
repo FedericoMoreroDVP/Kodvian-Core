@@ -12,6 +12,7 @@ export interface ProyectoListado {
   responsibleName?: string;
   status: EstadoProyecto;
   priority: PrioridadProyecto;
+  calendarColor: string;
   startDate?: string;
   estimatedDeliveryDate?: string;
   progressPercentage: number;
@@ -28,6 +29,7 @@ export interface ProyectoDetalle {
   responsibleName?: string;
   status: EstadoProyecto;
   priority: PrioridadProyecto;
+  calendarColor: string;
   startDate?: string;
   estimatedDeliveryDate?: string;
   closingDate?: string;
@@ -42,6 +44,7 @@ export interface ProyectoFormulario {
   clientId: string;
   name: string;
   description?: string;
+  calendarColor: string;
   responsibleId?: string | null;
   status: EstadoProyecto;
   priority: PrioridadProyecto;

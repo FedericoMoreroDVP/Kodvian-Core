@@ -14,6 +14,8 @@ public class User : BaseEntity
     public ICollection<Project> Projects { get; set; } = new List<Project>();
     public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
     public ICollection<TaskItem> CreatedTasks { get; set; } = new List<TaskItem>();
+    public ICollection<Meeting> CreatedMeetings { get; set; } = new List<Meeting>();
+    public ICollection<MeetingParticipant> MeetingParticipations { get; set; } = new List<MeetingParticipant>();
     public ICollection<FinancialMovement> FinancialMovementsCreated { get; set; } = new List<FinancialMovement>();
     public ICollection<DocumentFile> UploadedDocuments { get; set; } = new List<DocumentFile>();
     public ICollection<ProjectDocument> ProjectDocumentsCreated { get; set; } = new List<ProjectDocument>();

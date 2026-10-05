@@ -156,6 +156,7 @@ export class ProyectoDevelopersDialogComponent implements OnInit {
       clientId: this.projectDetail.clientId,
       name: this.projectDetail.name,
       description: this.projectDetail.description,
+      calendarColor: this.projectDetail.calendarColor,
       responsibleId: this.selectedAnalystId || null,
       status: this.projectDetail.status,
       priority: this.projectDetail.priority,

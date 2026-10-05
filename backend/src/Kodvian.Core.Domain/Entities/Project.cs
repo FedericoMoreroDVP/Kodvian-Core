@@ -8,6 +8,7 @@ public class Project : BaseEntity
     public string Nombre { get; set; } = string.Empty;
     public string? Descripcion { get; set; }
     public string? GoogleDriveFolderUrl { get; set; }
+    public string CalendarColor { get; set; } = "#5AB0FF";
     public Guid? ResponsableId { get; set; }
     public ProjectStatus Estado { get; set; } = ProjectStatus.Planificacion;
     public ProjectPriority Prioridad { get; set; } = ProjectPriority.Media;
@@ -20,6 +21,7 @@ public class Project : BaseEntity
     public Client? Cliente { get; set; }
     public User? Responsable { get; set; }
     public ICollection<TaskItem> Tareas { get; set; } = new List<TaskItem>();
+    public ICollection<Meeting> Reuniones { get; set; } = new List<Meeting>();
     public ICollection<ProjectDeveloperAssignment> DeveloperAssignments { get; set; } = new List<ProjectDeveloperAssignment>();
     public ICollection<ProjectDeveloperContract> DeveloperContracts { get; set; } = new List<ProjectDeveloperContract>();
     public ICollection<DocumentFile> Documents { get; set; } = new List<DocumentFile>();

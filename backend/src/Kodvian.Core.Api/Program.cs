@@ -140,6 +140,15 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("TasksWrite", policy =>
         policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.TasksWrite));
 
+    options.AddPolicy("MeetingsRead", policy =>
+        policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.MeetingsRead));
+
+    options.AddPolicy("MeetingsWrite", policy =>
+        policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.MeetingsWrite));
+
+    options.AddPolicy("MeetingsCancel", policy =>
+        policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.MeetingsCancel));
+
     options.AddPolicy("TeamRead", policy =>
         policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.TeamRead));
 

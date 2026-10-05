@@ -2,6 +2,7 @@ using System.Net.Mail;
 using Kodvian.Core.Application.Clients.Requests;
 using Kodvian.Core.Application.Developers.Requests;
 using Kodvian.Core.Application.Finances.Requests;
+using Kodvian.Core.Application.Meetings.Requests;
 using Kodvian.Core.Application.Projects.Requests;
 using Kodvian.Core.Application.Tasks.Requests;
 
@@ -49,6 +50,11 @@ internal static class RequestValidation
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return "El nombre del proyecto es obligatorio";
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.CalendarColor) && !System.Text.RegularExpressions.Regex.IsMatch(request.CalendarColor, "^#[0-9A-Fa-f]{6}$"))
+        {
+            return "El color de calendario no es válido";
         }
 
         if (!IsAllowed(request.Status, "Planificacion", "EnCurso", "Pausado", "Finalizado", "Cancelado", "Presupuestado"))
@@ -221,6 +227,22 @@ internal static class RequestValidation
             return "Ingresa un correo electrónico válido";
         }
 
+        return null;
+    }
+
+    public static string? Validate(MeetingUpsertRequestDto request)
+    {
+        if (request.ProjectId == Guid.Empty) return "El proyecto es obligatorio";
+        if (string.IsNullOrWhiteSpace(request.Title)) return "El título es obligatorio";
+        if (request.Title.Trim().Length > 200) return "El título no puede superar los 200 caracteres";
+        if (request.Description?.Length > 2000) return "La descripción no puede superar los 2000 caracteres";
+        if (request.Link?.Length > 2048) return "El enlace no puede superar los 2048 caracteres";
+        if (request.Location?.Length > 300) return "La ubicación no puede superar los 300 caracteres";
+        if (request.EndsAt <= request.StartsAt) return "La hora de finalización debe ser posterior al inicio";
+        if (!IsAllowed(request.Priority, "Baja", "Media", "Alta", "Urgente")) return "La prioridad de la reunión no es válida";
+        if (!IsAllowed(request.Status, "Programada", "Confirmada", "Realizada")) return "El estado de la reunión no es válido";
+        if (request.ParticipantIds.Any(x => x == Guid.Empty) || request.ParticipantIds.Distinct().Count() != request.ParticipantIds.Count)
+            return "Los participantes de la reunión no son válidos";
         return null;
     }
 

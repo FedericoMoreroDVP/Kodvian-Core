@@ -21,6 +21,7 @@ export const routes: Routes = [
       { path: 'equipo', canActivate: [permissionGuard], data: { permission: 'team.read' }, loadChildren: () => import('./modules/desarrolladores/desarrolladores.routes').then((m) => m.DESARROLLADORES_ROUTES) },
       { path: 'proyectos', canActivate: [permissionGuard], data: { permission: 'projects.read' }, loadChildren: () => import('./modules/proyectos/proyectos.routes').then((m) => m.PROYECTOS_ROUTES) },
       { path: 'tareas', canActivate: [permissionGuard], data: { permission: 'tasks.read' }, loadChildren: () => import('./modules/tareas/tareas.routes').then((m) => m.TAREAS_ROUTES) },
+      { path: 'agenda', canActivate: [permissionGuard], data: { permission: 'meetings.read' }, loadChildren: () => import('./modules/agenda/agenda.routes').then((m) => m.AGENDA_ROUTES) },
       { path: 'finanzas', canActivate: [permissionGuard], data: { permission: 'finances.read' }, loadChildren: () => import('./modules/finanzas/finanzas.routes').then((m) => m.FINANZAS_ROUTES) },
       { path: 'vision-financiera', canActivate: [permissionGuard], data: { permission: 'finances.read' }, loadChildren: () => import('./modules/vision-financiera/vision-financiera.routes').then(m => m.VISION_FINANCIERA_ROUTES) },
       { path: 'administracion', loadChildren: () => import('./modules/administracion/administracion.routes').then((m) => m.ADMINISTRACION_ROUTES) }

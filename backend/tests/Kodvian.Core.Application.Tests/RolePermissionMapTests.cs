@@ -14,7 +14,9 @@ public class RolePermissionMapTests
         Assert.DoesNotContain(PermissionCodes.ProjectsRead, permissions);
         Assert.DoesNotContain(PermissionCodes.TasksWrite, permissions);
         Assert.DoesNotContain(PermissionCodes.FinancesRead, permissions);
-        Assert.Equal(2, permissions.Count);
+        Assert.Contains(PermissionCodes.MeetingsRead, permissions);
+        Assert.DoesNotContain(PermissionCodes.MeetingsWrite, permissions);
+        Assert.Equal(3, permissions.Count);
     }
 
     [Fact]
@@ -36,6 +38,8 @@ public class RolePermissionMapTests
         Assert.DoesNotContain(PermissionCodes.FinancesRead, permissions);
         Assert.DoesNotContain(PermissionCodes.FinancesWrite, permissions);
         Assert.DoesNotContain(PermissionCodes.AdministrationRead, permissions);
+        Assert.Contains(PermissionCodes.MeetingsRead, permissions);
+        Assert.Contains(PermissionCodes.MeetingsWrite, permissions);
     }
 
     [Theory]
