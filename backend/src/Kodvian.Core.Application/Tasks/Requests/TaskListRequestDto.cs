@@ -12,4 +12,5 @@ public class TaskListRequestDto : PagedRequestDto
     public string? Priority { get; set; }
     public DateOnly? DueDateFrom { get; set; }
     public DateOnly? DueDateTo { get; set; }
+    public bool CompletedHistory { get; set; }
 }

@@ -13,6 +13,7 @@ public class TaskListItemDto
     public string Status { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public DateOnly? DueDate { get; set; }
+    public DateOnly? FinishedDate { get; set; }
     public decimal? EstimatedHours { get; set; }
     public decimal? RealHours { get; set; }
     public int KanbanOrder { get; set; }

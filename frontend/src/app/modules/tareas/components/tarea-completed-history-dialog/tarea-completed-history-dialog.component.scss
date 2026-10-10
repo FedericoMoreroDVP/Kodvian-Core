@@ -1,0 +1,13 @@
+:host { display: block; color: var(--kd-text-primary); }
+h2 { margin: 0; color: var(--kd-text-primary); }
+.description, .state { color: var(--kd-text-secondary); }
+mat-dialog-content { min-width: min(680px, calc(100vw - 48px)); max-height: min(58vh, 580px); }
+.history-list { display: grid; gap: 8px; }
+.history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; width: 100%; padding: 12px; border: 1px solid var(--kd-border-subtle); border-radius: 9px; background: rgba(20, 31, 42, .82); color: inherit; text-align: left; cursor: pointer; }
+.history-item:hover, .history-item:focus-visible { border-color: var(--brand-400); background: rgba(27, 43, 54, .98); outline: none; }
+.history-copy, .history-meta { display: grid; gap: 3px; }
+.history-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-copy span, .history-meta { color: var(--kd-text-secondary); font-size: 12px; }
+.history-meta { justify-items: end; white-space: nowrap; }
+mat-paginator { background: transparent; color: var(--kd-text-primary); }
+@media (max-width: 640px) { mat-dialog-content { min-width: 0; } .history-item { grid-template-columns: 1fr; gap: 8px; } .history-meta { justify-items: start; } }

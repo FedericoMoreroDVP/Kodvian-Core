@@ -31,12 +31,16 @@ public class TaskService : ITaskService
     {
         var query = BuildFilteredQuery(request);
 
-        var totalCount = await query.CountAsync(cancellationToken);
+        var orderedQuery = request.Status == DomainTaskStatus.Finalizada.ToString()
+            ? query.OrderByDescending(x => x.FechaFinalizacion).ThenByDescending(x => x.FechaCreacion)
+            : query.OrderBy(x => x.Estado).ThenBy(x => x.OrdenKanban).ThenByDescending(x => x.FechaCreacion);
 
-        var rows = await query
-            .OrderBy(x => x.Estado)
-            .ThenBy(x => x.OrdenKanban)
-            .ThenByDescending(x => x.FechaCreacion)
+        var resultQuery = request.CompletedHistory && request.Status == DomainTaskStatus.Finalizada.ToString()
+            ? orderedQuery.Skip(10)
+            : orderedQuery;
+        var totalCount = await resultQuery.CountAsync(cancellationToken);
+
+        var rows = await resultQuery
             .Skip((request.PageNumber - 1) * request.PageSize)
             .Take(request.PageSize)
             .Select(x => new
@@ -52,6 +56,7 @@ public class TaskService : ITaskService
                 Status = x.Estado,
                 Priority = x.Prioridad,
                 DueDate = x.FechaVencimiento,
+                FinishedDate = x.FechaFinalizacion,
                 EstimatedHours = x.HorasEstimadas,
                 RealHours = x.HorasReales,
                 KanbanOrder = x.OrdenKanban,
@@ -73,6 +78,7 @@ public class TaskService : ITaskService
                 Status = x.Status.ToString(),
                 Priority = x.Priority.ToString(),
                 DueDate = x.DueDate,
+                FinishedDate = x.FinishedDate,
                 EstimatedHours = x.EstimatedHours,
                 RealHours = x.RealHours,
                 KanbanOrder = x.KanbanOrder,
@@ -201,6 +207,7 @@ public class TaskService : ITaskService
     {
         var items = await BuildFilteredQuery(request)
             .OrderBy(x => x.Estado)
+            .ThenByDescending(x => x.Estado == DomainTaskStatus.Finalizada ? x.FechaFinalizacion : null)
             .ThenBy(x => x.OrdenKanban)
             .Select(x => new
             {

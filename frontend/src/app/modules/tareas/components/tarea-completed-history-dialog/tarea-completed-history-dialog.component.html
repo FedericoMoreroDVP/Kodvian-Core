@@ -1,0 +1,20 @@
+<h2 mat-dialog-title>Histórico de tareas finalizadas</h2>
+<mat-dialog-content>
+  <p class="description">Consultá las tareas finalizadas que no se muestran en el tablero.</p>
+  @if (loading) {
+    <p class="state">Cargando historial...</p>
+  } @else if (tasks.length === 0) {
+    <p class="state">No hay tareas finalizadas para los filtros actuales.</p>
+  } @else {
+    <div class="history-list">
+      @for (task of tasks; track task.id) {
+        <button type="button" class="history-item" (click)="openDetail(task.id)">
+          <span class="history-copy"><strong>{{ task.title }}</strong><span>{{ task.projectName }}</span></span>
+          <span class="history-meta"><span>{{ task.developerName || task.responsibleName || 'Sin responsable' }}</span><time>Finalizada: {{ task.finishedDate | date:'dd/MM/yyyy' }}</time></span>
+        </button>
+      }
+    </div>
+  }
+</mat-dialog-content>
+<mat-paginator [length]="total" [pageSize]="pageSize" [pageIndex]="pageNumber - 1" [pageSizeOptions]="[10, 20, 50]" (page)="changePage($event)"></mat-paginator>
+<mat-dialog-actions align="end"><button mat-button mat-dialog-close>Cerrar</button></mat-dialog-actions>

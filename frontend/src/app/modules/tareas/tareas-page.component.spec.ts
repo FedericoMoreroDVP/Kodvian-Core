@@ -21,16 +21,18 @@ describe('Tablero de tareas: movimientos', () => {
   let source: KanbanColumn;
   let target: KanbanColumn;
   let session: { user: { permissions: string[] } };
+  let dialog: jasmine.SpyObj<MatDialog>;
 
   beforeEach(() => {
     response = new Subject();
     api = jasmine.createSpyObj('TareasService', ['actualizarEstado', 'eliminar']);
     api.actualizarEstado.and.returnValue(response);
     api.eliminar.and.returnValue(of(undefined));
+    dialog = jasmine.createSpyObj<MatDialog>('dialog', ['open']);
     session = { user: { permissions: ['tasks.write'] } };
     TestBed.configureTestingModule({ providers: [FormBuilder,
       { provide: TareasService, useValue: api },
-      { provide: MatDialog, useValue: {} },
+       { provide: MatDialog, useValue: dialog },
       { provide: MatSnackBar, useValue: jasmine.createSpyObj('snack', ['open']) },
       { provide: ActivatedRoute, useValue: {} }, { provide: Router, useValue: {} },
       { provide: AuthSessionService, useValue: session }
@@ -87,6 +89,15 @@ describe('Tablero de tareas: movimientos', () => {
   it('no elimina una tarea que no está cancelada', () => {
     component.eliminar('task', 'EnCurso', 'Activa');
     expect(api.eliminar).not.toHaveBeenCalled();
+  });
+  it('limita las finalizadas visibles a diez y abre su histórico', () => {
+    const completed: KanbanColumn = {
+      status: 'Finalizada', title: '',
+      items: Array.from({ length: 11 }, (_, index) => ({ id: String(index), title: `Tarea ${index}`, projectName: 'Proyecto', priority: 'Media', kanbanOrder: index }))
+    };
+    expect(component.itemsForColumn(completed).length).toBe(10);
+    component.openCompletedHistory();
+    expect(dialog.open).toHaveBeenCalled();
   });
 });
 

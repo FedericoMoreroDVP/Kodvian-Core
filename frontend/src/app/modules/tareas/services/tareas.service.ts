@@ -54,6 +54,7 @@ export class TareasService {
     if (filtros.priority) params = params.set('priority', filtros.priority);
     if (filtros.dueDateFrom) params = params.set('dueDateFrom', filtros.dueDateFrom);
     if (filtros.dueDateTo) params = params.set('dueDateTo', filtros.dueDateTo);
+    if (filtros.completedHistory) params = params.set('completedHistory', true);
 
     return params;
   }

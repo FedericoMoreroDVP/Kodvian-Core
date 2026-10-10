@@ -261,6 +261,21 @@ h2 {
   user-select: none;
   -webkit-user-select: none;
 }
+
+.completed-column {
+  .kanban-card { margin-bottom: 6px; }
+}
+
+.compact-card {
+  padding: 8px 9px;
+  gap: 2px;
+
+  strong { font-size: 13px; }
+  > span { color: var(--kd-text-secondary); font-size: 12px; }
+  .kanban-actions button { min-height: 28px; padding-inline: 6px; font-size: 12px; }
+}
+
+.history-button { width: 100%; margin-top: 4px; color: var(--brand-300); }
 .kanban-card.cdk-drag-dragging { cursor: grabbing; }
 .kanban-card.saving { opacity: .65; }
 .kanban-col.cdk-drop-list-receiving, .kanban-col.cdk-drop-list-dragging { outline: 2px solid #18bd75; outline-offset: -2px; }

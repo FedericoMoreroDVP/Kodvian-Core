@@ -16,6 +16,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 
 import { TareaDetailDialogComponent } from './components/tarea-detail-dialog/tarea-detail-dialog.component';
+import { TareaCompletedHistoryDialogComponent } from './components/tarea-completed-history-dialog/tarea-completed-history-dialog.component';
 import { TareaFormDialogComponent } from './components/tarea-form-dialog/tarea-form-dialog.component';
 import { TareaStatusDialogComponent } from './components/tarea-status-dialog/tarea-status-dialog.component';
 import { compareDates, formatDateToIso } from '../../core/date.utils';
@@ -30,6 +31,7 @@ import { TareasService } from './services/tareas.service';
   styleUrl: './tareas-page.component.scss'
 })
 export class TareasPageComponent implements OnInit {
+  readonly completedCardLimit = 10;
   private readonly tareasService = inject(TareasService);
   private readonly fb = inject(FormBuilder);
   private readonly dialog = inject(MatDialog);
@@ -249,6 +251,18 @@ export class TareasPageComponent implements OnInit {
       dueDateFrom: formatDateToIso(this.filtrosForm.value.dueDateFrom) || undefined,
       dueDateTo: formatDateToIso(this.filtrosForm.value.dueDateTo) || undefined
     };
+  }
+
+  itemsForColumn(column: KanbanColumn): KanbanColumn['items'] {
+    return column.status === 'Finalizada' ? column.items.slice(0, this.completedCardLimit) : column.items;
+  }
+
+  openCompletedHistory(): void {
+    this.dialog.open(TareaCompletedHistoryDialogComponent, {
+      width: '760px',
+      maxWidth: 'calc(100vw - 24px)',
+      data: { filters: this.obtenerFiltros() }
+    });
   }
 
   eliminar(id: string, status: EstadoTarea, title: string): void {

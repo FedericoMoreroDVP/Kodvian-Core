@@ -142,18 +142,20 @@
     @if (canWrite) { <p class="drag-hint">Haz clic sobre una tarjeta y arrástrala manteniendo presionado el botón del mouse. En pantallas táctiles, mantén presionada la tarjeta antes de moverla.</p> }
     <div class="kanban-grid" cdkDropListGroup>
       @for (column of kanban; track column.status) {
-        <section class="kanban-col" cdkDropList [cdkDropListData]="column" [cdkDropListSortingDisabled]="true" [cdkDropListDisabled]="!canWrite || !!movingId || !!deletingId || cargando" (cdkDropListDropped)="moverTarjeta($event)">
+        <section class="kanban-col" [class.completed-column]="column.status === 'Finalizada'" cdkDropList [cdkDropListData]="column" [cdkDropListSortingDisabled]="true" [cdkDropListDisabled]="!canWrite || !!movingId || !!deletingId || cargando" (cdkDropListDropped)="moverTarjeta($event)">
           <h3>{{ mostrarEstado(column.status) }}</h3>
           @if (column.items.length === 0) {
             <p class="vacio">Sin tareas</p>
           }
-          @for (item of column.items; track item.id) {
-            <article class="kanban-card" cdkDrag [cdkDragData]="item" [cdkDragStartDelay]="{ mouse: 0, touch: 300 }" [cdkDragDisabled]="!canWrite || !!movingId || !!deletingId || cargando" [class.saving]="movingId === item.id || deletingId === item.id" [attr.aria-busy]="movingId === item.id || deletingId === item.id">
+          @for (item of itemsForColumn(column); track item.id) {
+            <article class="kanban-card" [class.compact-card]="column.status === 'Finalizada'" cdkDrag [cdkDragData]="item" [cdkDragStartDelay]="{ mouse: 0, touch: 300 }" [cdkDragDisabled]="!canWrite || !!movingId || !!deletingId || cargando" [class.saving]="movingId === item.id || deletingId === item.id" [attr.aria-busy]="movingId === item.id || deletingId === item.id">
               <strong>{{ item.title }}</strong>
               <span>{{ item.projectName }}</span>
-               <small>Desarrollador: {{ item.developerName || item.responsibleName || '-' }}</small>
-              <small>Prioridad: <span class="tag-priority">{{ item.priority }}</span></small>
-              <small>Vence: {{ item.dueDate || '-' }}</small>
+              @if (column.status !== 'Finalizada') {
+                <small>Desarrollador: {{ item.developerName || item.responsibleName || '-' }}</small>
+                <small>Prioridad: <span class="tag-priority">{{ item.priority }}</span></small>
+                <small>Vence: {{ item.dueDate || '-' }}</small>
+              }
                @if (movingId === item.id) { <small role="status">Guardando cambio…</small> }
                @if (deletingId === item.id) { <small role="status">Eliminando permanentemente…</small> }
               <div class="kanban-actions" (mousedown)="$event.stopPropagation()" (touchstart)="$event.stopPropagation()">
@@ -164,6 +166,9 @@
                 }
               </div>
             </article>
+          }
+          @if (column.status === 'Finalizada' && column.items.length > completedCardLimit) {
+            <button mat-button type="button" class="history-button" (click)="openCompletedHistory()">Ver historial ({{ column.items.length - completedCardLimit }})</button>
           }
         </section>
       }

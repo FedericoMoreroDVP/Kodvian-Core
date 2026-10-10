@@ -15,6 +15,7 @@ export interface TareaListado {
   status: EstadoTarea;
   priority: PrioridadTarea;
   dueDate?: string;
+  finishedDate?: string;
   estimatedHours?: number;
   realHours?: number;
   kanbanOrder: number;
@@ -74,6 +75,7 @@ export interface TareaFiltros {
   priority?: PrioridadTarea | '';
   dueDateFrom?: string;
   dueDateTo?: string;
+  completedHistory?: boolean;
 }
 
 export interface LookupItem {
