@@ -15,6 +15,7 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', canActivate: [permissionGuard], data: { permission: 'dashboard.read' }, loadChildren: () => import('./modules/dashboard/dashboard.routes').then((m) => m.DASHBOARD_ROUTES) },
+      { path: 'oficina-inteligente', canActivate: [permissionGuard], data: { permission: 'ai.office.use' }, loadComponent: () => import('./modules/intelligent-office/intelligent-office-page.component').then(m => m.IntelligentOfficePageComponent) },
       { path: 'mi-trabajo', canActivate: [permissionGuard], data: { permission: 'developer.work.read' }, loadChildren: () => import('./modules/mi-trabajo/mi-trabajo.routes').then((m) => m.MI_TRABAJO_ROUTES) },
       { path: 'clientes', canActivate: [permissionGuard], data: { permission: 'clients.read' }, loadChildren: () => import('./modules/clientes/clientes.routes').then((m) => m.CLIENTES_ROUTES) },
       { path: 'desarrolladores', pathMatch: 'full', redirectTo: 'equipo' },

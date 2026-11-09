@@ -83,6 +83,15 @@ Este documento mapea los modulos Angular con sus archivos principales.
 - Guard: `administrationGuard`.
 - Endpoint: `/api/users`.
 
+## Oficina Inteligente
+
+- Ruta: `/oficina-inteligente`.
+- Page: `frontend/src/app/modules/intelligent-office/intelligent-office-page.component.ts`.
+- Service y modelos: `intelligent-office.service.ts`, `intelligent-office.models.ts`.
+- Permiso de ruta: `ai.office.use` (Administrador durante el piloto).
+- Endpoint: `/api/ai/conversations`.
+- Las respuestas se presentan como texto y las fuentes tienen enlaces internos; no se renderiza HTML generado por el modelo.
+
 ## Regla para nuevos modulos
 
 1. Crear carpeta en `frontend/src/app/modules/<modulo>`.

@@ -18,6 +18,7 @@ public class MeetingService : IMeetingService
     public async Task<PagedResultDto<MeetingDto>> GetPagedAsync(Guid userId, bool isAdministrator, MeetingListRequestDto request, CancellationToken cancellationToken = default)
     {
         var query = await BuildAccessibleQueryAsync(userId, isAdministrator, cancellationToken);
+        if (request.ActiveOnly) query = query.Where(x => x.Activo);
         if (request.ProjectId.HasValue) query = query.Where(x => x.ProyectoId == request.ProjectId);
         if (request.ParticipantId.HasValue) query = query.Where(x => x.Participantes.Any(p => p.UserId == request.ParticipantId));
         if (!string.IsNullOrWhiteSpace(request.Priority) && Enum.TryParse<MeetingPriority>(request.Priority, true, out var priority)) query = query.Where(x => x.Prioridad == priority);

@@ -76,6 +76,14 @@ Este documento mapea cada modulo funcional con sus archivos backend principales.
 - Security: `RoleNames`, `PermissionCodes`, `RolePermissionMap`.
 - Entities: `User`, `Role`.
 
+## Oficina Inteligente
+
+- Controllers: `AiProviderConfigurationController`, `AiConversationsController`.
+- Application: `backend/src/Kodvian.Core.Application/Ai/**`.
+- Infrastructure: `AiProviderConfigurationService`, `OpenAiResponsesClient`, `AiConversationService`, `AiToolCatalog`, `AiAuditRetentionWorker`.
+- Persistence: `AiProviderConfiguration`, `AiConversation`, `AiMessage`, `AiRun`, `AiAuditEvent`.
+- El proveedor requiere clave cifrada, conexión verificada y aprobación vigente del Administrador para datos reales. Tools L0 revalidan permisos y sesión.
+
 ## Regla de mantenimiento
 
 Cuando se agregue un modulo:

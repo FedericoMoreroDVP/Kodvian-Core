@@ -42,7 +42,8 @@ public static class RolePermissionMap
                 PermissionCodes.FinancesRead,
                 PermissionCodes.FinancesWrite,
                 PermissionCodes.AdministrationRead,
-                PermissionCodes.AdministrationWrite
+                PermissionCodes.AdministrationWrite,
+                PermissionCodes.AiOfficeUse
             ],
             RoleNames.Operative =>
             [

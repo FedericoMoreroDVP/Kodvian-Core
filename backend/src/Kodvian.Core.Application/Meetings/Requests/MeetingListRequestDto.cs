@@ -10,4 +10,5 @@ public class MeetingListRequestDto : PagedRequestDto
     public string? Status { get; set; }
     public DateTime? From { get; set; }
     public DateTime? To { get; set; }
+    public bool ActiveOnly { get; set; }
 }

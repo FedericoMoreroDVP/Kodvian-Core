@@ -15,6 +15,9 @@ using Kodvian.Core.Infrastructure.Persistence;
 using Kodvian.Core.Infrastructure.Storage;
 using Kodvian.Core.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -23,10 +26,66 @@ namespace Kodvian.Core.Infrastructure.Extensions;
 
 public static class DependencyInjectionExtensions
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration, bool isDevelopment)
     {
         services.AddDbContext<KodvianDbContext>(options =>
             options.UseNpgsql(BuildConnectionString(configuration)));
+
+        var dataProtection = services.AddDataProtection()
+            .SetApplicationName("Kodvian.Core")
+            .PersistKeysToDbContext<KodvianDbContext>();
+        var certificateValue = configuration["AiEncryption:CertificateBase64"];
+        var certificatePassword = configuration["AiEncryption:CertificatePassword"];
+        if (string.IsNullOrWhiteSpace(certificateValue))
+        {
+            if (!isDevelopment)
+                throw new InvalidOperationException("AiEncryption:CertificateBase64 is required outside Development.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(certificatePassword))
+                throw new InvalidOperationException("AiEncryption:CertificatePassword is required when AiEncryption:CertificateBase64 is configured.");
+
+            byte[] certificateBytes;
+            try
+            {
+                certificateBytes = Convert.FromBase64String(certificateValue);
+            }
+            catch (FormatException exception)
+            {
+                throw new InvalidOperationException("AiEncryption:CertificateBase64 is not valid Base64.", exception);
+            }
+
+            X509Certificate2 certificate;
+            try
+            {
+                certificate = new X509Certificate2(certificateBytes, certificatePassword,
+                    X509KeyStorageFlags.EphemeralKeySet);
+            }
+            catch (CryptographicException exception)
+            {
+                throw new InvalidOperationException(
+                    "AiEncryption:CertificateBase64 could not be opened with AiEncryption:CertificatePassword.", exception);
+            }
+
+            if (!certificate.HasPrivateKey)
+                throw new InvalidOperationException("AiEncryption:CertificateBase64 must contain a PFX certificate with a private key.");
+
+            dataProtection.ProtectKeysWithCertificate(certificate);
+        }
+
+        services.AddHttpClient<OpenAiApiConnectionTester>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.openai.com/v1/");
+                client.Timeout = TimeSpan.FromSeconds(15);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddHttpClient<Kodvian.Core.Application.Ai.Abstractions.IAiResponsesClient, OpenAiResponsesClient>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.openai.com/v1/");
+                client.Timeout = TimeSpan.FromSeconds(30);
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
         services.Configure<StorageOptions>(configuration.GetSection("Storage"));
@@ -52,6 +111,10 @@ public static class DependencyInjectionExtensions
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ITeamUserService, TeamUserService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiProviderConfigurationService, AiProviderConfigurationService>();
+        services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiConversationService, AiConversationService>();
+        services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiToolExecutor, AiToolCatalog>();
+        services.AddHostedService<AiAuditRetentionWorker>();
         services.AddScoped<IMeetingService, MeetingService>();
         services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
         services.AddScoped<UserAccessGuard>();

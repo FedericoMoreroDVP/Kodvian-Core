@@ -255,6 +255,39 @@ Base route: `/api/users`
 | GET | `/api/users/roles` | Catálogo de roles admitidos. Solo administradores. |
 | PUT | `/api/users/{id}/roles` | Reemplaza los roles con `{ roles, expectedVersion }`. Solo administradores; conserva perfiles y asignaciones e invalida sesiones anteriores. |
 
+## AI Provider Configuration
+
+Controller: `backend/src/Kodvian.Core.Api/Controllers/AiProviderConfigurationController.cs`
+
+Base route: `/api/ai/provider-configuration`
+
+Todas las rutas requieren `AdministratorOnly`. La clave API nunca se devuelve.
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| GET | `/api/ai/provider-configuration` | Estado del proveedor, modelo, clave enmascarada y versión de configuración. |
+| PUT | `/api/ai/provider-configuration` | Guarda OpenAI, modelo y clave opcional; requiere `{ provider, model, apiKey, version }`. Clave vacía conserva la existente. |
+| POST | `/api/ai/provider-configuration/test` | Prueba el modelo configurado con una llamada mínima a Responses API; puede tener costo de API. |
+| DELETE | `/api/ai/provider-configuration?expectedVersion=...` | Quita la configuración y la credencial cifrada. |
+| POST | `/api/ai/provider-configuration/approve-live-data` | Registra la aprobación del Administrador con `{ acknowledgeTerms: true, termsVersion }`; requiere conexión verificada y `requiredLiveDataApprovalTermsVersion` vigente devuelta por GET. |
+| DELETE | `/api/ai/provider-configuration/approve-live-data` | Revoca la aprobación; nuevas consultas quedan bloqueadas. |
+
+## AI Conversations
+
+Controller: `backend/src/Kodvian.Core.Api/Controllers/AiConversationsController.cs`
+
+Base route: `/api/ai/conversations`
+
+Requiere `AiOfficeUse` (rol Administrador + `ai.office.use`). Las consultas verifican propiedad, sesión, permiso de dominio y allowlist.
+
+| Metodo | Ruta | Descripcion |
+|---|---|---|
+| GET | `/api/ai/conversations?pageNumber=&pageSize=` | Lista conversaciones del propietario autenticado. |
+| POST | `/api/ai/conversations` | Crea conversación privada. |
+| GET | `/api/ai/conversations/{id}` | Lee mensajes de una conversación propia. |
+| POST | `/api/ai/conversations/{id}/messages` | Envía consulta; solo herramientas L0 permitidas, máximo 10 solicitudes por minuto por instalación. |
+| DELETE | `/api/ai/conversations/{id}` | Elimina conversación, mensajes y ejecuciones; conserva auditoría saneada por 90 días. |
+
 Los usuarios devueltos incluyen `roles`, `isActive`, `developerId` y `sessionVersion`. `expectedVersion` se toma del listado para evitar sobrescribir cambios posteriores.
 
 ## Situación financiera y monedas

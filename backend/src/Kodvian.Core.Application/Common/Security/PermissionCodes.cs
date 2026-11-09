@@ -23,4 +23,5 @@ public static class PermissionCodes
     public const string AdministrationWrite = "administration.write";
     public const string DeveloperWorkRead = "developer.work.read";
     public const string DeveloperTasksStatusWrite = "developer.tasks.status.write";
+    public const string AiOfficeUse = "ai.office.use";
 }

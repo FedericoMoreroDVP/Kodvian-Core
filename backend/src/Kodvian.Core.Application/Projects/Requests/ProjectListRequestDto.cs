@@ -8,4 +8,5 @@ public class ProjectListRequestDto : PagedRequestDto
     public Guid? ClientId { get; set; }
     public string? Status { get; set; }
     public string? Priority { get; set; }
+    public bool ActiveOnly { get; set; }
 }
