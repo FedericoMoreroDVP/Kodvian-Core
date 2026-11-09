@@ -280,6 +280,8 @@ public class TaskService : ITaskService
             .AsNoTracking()
             .AsQueryable();
 
+        if (request.ActiveOnly) query = query.Where(x => x.Activo);
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = $"%{request.Search.Trim()}%";

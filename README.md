@@ -20,6 +20,7 @@ Base inicial de un sistema interno liviano para gestión de empresa de software.
   - `src/app/modules/tareas`
   - `src/app/modules/finanzas`
   - `src/app/modules/administracion`
+  - `src/app/modules/intelligent-office`
 - `docs/railway-readiness.md`: checklist de deploy en Railway
 
 ## Requisitos
@@ -129,6 +130,13 @@ Checklist detallado: [`docs/railway-readiness.md`](docs/railway-readiness.md).
 - `Storage__Region` (ej. `auto` en Cloudflare R2)
 - `Storage__ForcePathStyle=true` (recomendado para R2/MinIO)
 - `Storage__MaxPdfSizeMb` (opcional; default 10)
+
+**Protección de credenciales IA (Production)**
+
+- `AiEncryption__CertificateBase64` (PFX privado codificado en Base64)
+- `AiEncryption__CertificatePassword`
+
+El certificado se configura como secreto runtime en Railway; no incluirlo en Docker, archivos de configuración versionados ni base de datos. Ver [guía de configuración segura IA](docs/backend/ai-provider-configuration.md).
 
 En Development el storage es local (`Storage__Provider=Local`, `App_Data/files`).
 

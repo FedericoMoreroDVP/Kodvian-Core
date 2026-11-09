@@ -94,6 +94,7 @@ Definidos en `PermissionCodes.cs`:
 - `administration.write`.
 - `developer.work.read`.
 - `developer.tasks.status.write`.
+- `ai.office.use` (Administrador; habilita uso del módulo IA, no sustituye permisos de dominio).
 
 ## Mapa rol-permisos
 
@@ -156,6 +157,7 @@ Policies declaradas en `Program.cs`:
 - `ProjectsDocumentsDelete`.
 - `DeveloperWorkRead`.
 - `DeveloperTasksStatusWrite`.
+- `AiOfficeUse`.
 
 ## Acceso de desarrolladores
 
@@ -172,4 +174,7 @@ El rol `Analista` gestiona operacion de clientes, equipo, proyectos, documentos 
 - La visibilidad de botones en frontend no reemplaza autorizacion backend.
 - Para nuevas acciones de escritura o datos sensibles, crear policy o verificar permiso explicitamente.
 - `UsersController` aplica `AdministratorOnly`, lista usuarios y permite cambiar roles. El servicio vuelve a comprobar al actor y su versión antes de escribir.
+- La configuración del proveedor de IA está restringida a Administrador; la prueba y el guardado de credenciales ocurren exclusivamente en backend.
+- Las conversaciones IA requieren simultáneamente rol Administrador y `ai.office.use`; cada herramienta vuelve a verificar permisos de dominio y vigencia de sesión.
+- El permiso `ai.office.use` se incorpora en el JWT al iniciar sesión. Tras desplegar la versión que lo agrega, los administradores deben volver a iniciar sesión para recibir el nuevo claim.
 - Un administrador puede combinarse con Analista o Desarrollador. Los formularios de Equipo no pueden sobrescribir esos roles ni permitir que un no administrador modifique cuentas administradoras.

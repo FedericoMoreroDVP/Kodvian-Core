@@ -2,10 +2,11 @@ using Kodvian.Core.Application.Common.Security;
 using Kodvian.Core.Domain.Entities;
 using Kodvian.Core.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 
 namespace Kodvian.Core.Infrastructure.Persistence;
 
-public class KodvianDbContext : DbContext
+public class KodvianDbContext : DbContext, IDataProtectionKeyContext
 {
     public static readonly Guid AdministratorRoleId = Guid.Parse("95e52dc4-44f5-4b0b-aabf-4044f28cc55a");
     public static readonly Guid OperativeRoleId = Guid.Parse("a77176f8-d33a-4c23-b613-f2e73093e1b7");
@@ -38,10 +39,85 @@ public class KodvianDbContext : DbContext
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<AiProviderConfiguration> AiProviderConfigurations => Set<AiProviderConfiguration>();
+    public DbSet<AiProviderConfigurationAuditEvent> AiProviderConfigurationAuditEvents => Set<AiProviderConfigurationAuditEvent>();
+    public DbSet<AiConversation> AiConversations => Set<AiConversation>();
+    public DbSet<AiMessage> AiMessages => Set<AiMessage>();
+    public DbSet<AiRun> AiRuns => Set<AiRun>();
+    public DbSet<AiAuditEvent> AiAuditEvents => Set<AiAuditEvent>();
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        modelBuilder.Entity<AiProviderConfiguration>(entity =>
+        {
+            entity.ToTable("AiProviderConfigurations", t => t.HasCheckConstraint("CK_AiProviderConfigurations_Singleton", "\"Id\" = 1"));
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.Provider).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Model).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ProtectedApiKey).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.ApiKeyLastFour).HasMaxLength(4).IsRequired();
+            entity.Property(x => x.LiveDataApprovalTermsVersion).HasMaxLength(80);
+            entity.Property(x => x.LiveDataApprovedProvider).HasMaxLength(40);
+            entity.Property(x => x.LiveDataApprovedModel).HasMaxLength(100);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+        });
+        modelBuilder.Entity<AiProviderConfigurationAuditEvent>(entity =>
+        {
+            entity.ToTable("AiProviderConfigurationAuditEvents");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Provider).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Model).HasMaxLength(100);
+            entity.Property(x => x.TermsVersion).HasMaxLength(80);
+            entity.HasIndex(x => x.CreatedAtUtc);
+            entity.HasIndex(x => x.ActorUserId);
+        });
+        modelBuilder.Entity<AiConversation>(entity =>
+        {
+            entity.ToTable("AiConversations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.OwnerUserId, x.UpdatedAtUtc });
+        });
+        modelBuilder.Entity<AiMessage>(entity =>
+        {
+            entity.ToTable("AiMessages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Content).HasMaxLength(16000).IsRequired();
+            entity.Property(x => x.SourcesJson).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.TraceId).HasMaxLength(64);
+            entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
+            entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
+            entity.HasIndex(x => x.RunId);
+            entity.HasOne(x => x.Conversation).WithMany(x => x.Messages).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiRun>(entity =>
+        {
+            entity.ToTable("AiRuns");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Provider).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Model).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.TraceId).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => new { x.ConversationId, x.StartedAtUtc });
+            entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
+            entity.HasIndex(x => x.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'");
+            entity.HasOne(x => x.Conversation).WithMany(x => x.Runs).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiAuditEvent>(entity =>
+        {
+            entity.ToTable("AiAuditEvents");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ToolName).HasMaxLength(100);
+            entity.Property(x => x.Decision).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ReasonCode).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => x.CreatedAtUtc);
+            entity.HasIndex(x => x.ActorUserId);
+        });
         modelBuilder.Entity<FinanceSettings>(entity =>
         {
             entity.ToTable("FinanceSettings", t => t.HasCheckConstraint("CK_FinanceSettings_Singleton", "\"Id\" = 1"));

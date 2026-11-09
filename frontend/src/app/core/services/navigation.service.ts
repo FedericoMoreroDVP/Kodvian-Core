@@ -9,6 +9,7 @@ import { NavigationItem } from '../../shared/models/navigation-item.model';
 export class NavigationService {
   private readonly items: NavigationItem[] = [
     { label: 'Inicio', icon: 'home', route: '/dashboard', permission: 'dashboard.read' },
+    { label: 'Oficina Inteligente', icon: 'auto_awesome', route: '/oficina-inteligente', permission: 'ai.office.use' },
     { label: 'Mi trabajo', icon: 'work', route: '/mi-trabajo', permission: 'developer.work.read' },
     { label: 'Clientes', icon: 'groups', route: '/clientes', permission: 'clients.read' },
     { label: 'Equipo', icon: 'engineering', route: '/equipo', permission: 'team.read' },

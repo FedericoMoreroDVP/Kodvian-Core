@@ -79,7 +79,7 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, isDevelopment);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
@@ -158,6 +158,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdministratorOnly", policy =>
         policy.RequireRole(RoleNames.Administrator));
 
+    options.AddPolicy("AiOfficeUse", policy =>
+        policy.RequireRole(RoleNames.Administrator).RequireClaim(CustomClaimTypes.Permission, PermissionCodes.AiOfficeUse));
+
     options.AddPolicy("FinancesRead", policy =>
         policy.RequireRole(RoleNames.Administrator).RequireClaim(CustomClaimTypes.Permission, PermissionCodes.FinancesRead));
 
@@ -204,6 +207,20 @@ builder.Services.AddRateLimiter(options =>
     options.AddFixedWindowLimiter("AuthLogin", limiter =>
     {
         limiter.PermitLimit = 5;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.AddFixedWindowLimiter("AiProviderConnectionTest", limiter =>
+    {
+        limiter.PermitLimit = 3;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+        limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+    });
+    options.AddFixedWindowLimiter("AiConversationMessages", limiter =>
+    {
+        limiter.PermitLimit = 10;
         limiter.Window = TimeSpan.FromMinutes(1);
         limiter.QueueLimit = 0;
         limiter.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;

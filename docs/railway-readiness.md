@@ -89,6 +89,17 @@ Checklist de pendientes e implementación para desplegar Kodvian Core en Railway
 | `Storage__ForcePathStyle` | Recomendado | `true` para R2/MinIO |
 | `Storage__MaxPdfSizeMb` | No | Default 10 |
 
+### Protección de credenciales del proveedor IA
+
+La migración de configuración IA requiere estas variables runtime en el servicio API antes del deploy en Production:
+
+| Variable | Requerida | Descripción |
+|----------|-----------|-------------|
+| `AiEncryption__CertificateBase64` | Sí | Certificado PFX con clave privada, codificado en Base64; protege el anillo Data Protection persistido en PostgreSQL. |
+| `AiEncryption__CertificatePassword` | Sí | Contraseña del PFX. |
+
+Provisionar ambos valores en Railway, nunca en Dockerfile, código o repositorio. Proteger también un respaldo seguro del PFX y contraseña: sin ellos no se pueden descifrar las claves API almacenadas. Cambiar el certificado requiere una rotación coordinada; ver [configuración IA](backend/ai-provider-configuration.md).
+
 ## 6. Postgres + migraciones / seed
 
 - [x] Parseo de `DATABASE_URL` en Infrastructure

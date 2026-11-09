@@ -1,5 +1,6 @@
 ﻿using Kodvian.Core.Application.Common.Models;
 using Kodvian.Core.Application.Common.Files;
+using Kodvian.Core.Application.Ai;
 
 namespace Kodvian.Core.Api.Middleware;
 
@@ -23,6 +24,26 @@ public class ErrorHandlingMiddleware
         catch (UnauthorizedAccessException exception)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (AiProviderUnavailableException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (AiLiveDataApprovalRequiredException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (AiConversationConflictException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
+        }
+        catch (AiToolRejectedException exception)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(ApiResponseDto<object>.Fail(exception.Message));
         }
         catch (KeyNotFoundException exception)
