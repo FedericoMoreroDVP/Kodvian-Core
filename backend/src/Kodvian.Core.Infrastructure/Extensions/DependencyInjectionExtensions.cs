@@ -80,12 +80,20 @@ public static class DependencyInjectionExtensions
                 client.Timeout = TimeSpan.FromSeconds(15);
             })
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        services.AddHttpClient<Kodvian.Core.Application.Ai.Abstractions.IAiResponsesClient, OpenAiResponsesClient>(client =>
+        services.AddHttpClient<OpenAiResponsesClient>(client =>
             {
                 client.BaseAddress = new Uri("https://api.openai.com/v1/");
                 client.Timeout = TimeSpan.FromSeconds(30);
             })
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        // El SDK de Anthropic aplica su propio timeout por solicitud; el HttpClient solo pone un tope externo.
+        services.AddHttpClient<AnthropicMessagesClient>(client => client.Timeout = TimeSpan.FromSeconds(150))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddHttpClient<AnthropicConnectionTester>(client => client.Timeout = TimeSpan.FromSeconds(30))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiResponsesClient, AiResponsesClientRouter>();
+        services.AddScoped<IAiProviderConnectionTester, OpenAiConnectionTesterAdapter>();
+        services.AddScoped<IAiProviderConnectionTester>(sp => sp.GetRequiredService<AnthropicConnectionTester>());
 
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
         services.Configure<StorageOptions>(configuration.GetSection("Storage"));

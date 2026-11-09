@@ -13,7 +13,7 @@ namespace Kodvian.Core.Infrastructure.Services;
 public sealed class AiProviderConfigurationService(
     KodvianDbContext dbContext,
     IDataProtectionProvider dataProtectionProvider,
-    OpenAiApiConnectionTester connectionTester,
+    IEnumerable<IAiProviderConnectionTester> connectionTesters,
     ICurrentUser currentUser) : IAiProviderConfigurationService
 {
     private static readonly Regex ModelPattern = new("^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -44,6 +44,10 @@ public sealed class AiProviderConfigurationService(
         {
             throw new ArgumentException("La configuración cambió. Actualiza la página e intenta nuevamente.");
         }
+
+        var providerChanged = !isNew && entity.Provider != request.Provider;
+        if (providerChanged && string.IsNullOrWhiteSpace(request.ApiKey))
+            throw new ArgumentException("Ingresa la clave API del nuevo proveedor: la clave guardada pertenece a otro proveedor.");
 
         var changed = entity.Provider != request.Provider || entity.Model != request.Model;
         var credentialReplaced = false;
@@ -81,6 +85,8 @@ public sealed class AiProviderConfigurationService(
         var entity = await dbContext.AiProviderConfigurations.SingleOrDefaultAsync(cancellationToken)
             ?? throw new AiProviderUnavailableException("Configura primero el proveedor de IA.");
 
+        var connectionTester = connectionTesters.SingleOrDefault(x => x.Provider == entity.Provider)
+            ?? throw new AiProviderUnavailableException("El proveedor configurado no está disponible.");
         var (isSuccessful, message) = await connectionTester.TestAsync(
             _protector.Unprotect(entity.ProtectedApiKey), entity.Model, cancellationToken);
         entity.IsConnectionVerified = isSuccessful;
@@ -175,7 +181,7 @@ public sealed class AiProviderConfigurationService(
 
     private static void ValidateRequest(AiProviderConfigurationUpdateRequest request)
     {
-        if (!string.Equals(request.Provider, "OpenAI", StringComparison.Ordinal))
+        if (!AiProviders.IsSupported(request.Provider))
             throw new ArgumentException("El proveedor seleccionado no está disponible.");
         if (!ModelPattern.IsMatch(request.Model ?? string.Empty))
             throw new ArgumentException("Indica un identificador de modelo válido.");

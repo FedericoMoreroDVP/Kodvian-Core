@@ -6,7 +6,7 @@ La primera fase ofrece conversaciones privadas para Administradores y consultas 
 
 ## Configuración y aprobación de privacidad
 
-Desde Administración → Configurar proveedor de IA, un Administrador configura OpenAI, el modelo y la clave API. La clave se cifra en backend y nunca se devuelve al frontend. La prueba de conexión envía una solicitud mínima con `store: false` y puede generar un costo pequeño.
+Desde Administración → Configurar proveedor de IA, un Administrador elige el proveedor (OpenAI o Anthropic), el modelo y la clave API. La clave se cifra en backend y nunca se devuelve al frontend. Con OpenAI la prueba de conexión envía una solicitud mínima con `store: false` y puede generar un costo pequeño; con Anthropic consulta el modelo en la Models API, sin costo. Paso a paso: [guía de conexión](../guia-conectar-proveedor-ia.md).
 
 Antes de habilitar consultas con datos reales, el Administrador debe probar la conexión, revisar las condiciones de privacidad y retención del proveedor y configurar un límite de gasto en el proyecto API. La aprobación queda ligada al proveedor/modelo y se invalida al cambiar la clave o el modelo; también puede revocarse en cualquier momento. Sin aprobación vigente, las consultas quedan bloqueadas.
 

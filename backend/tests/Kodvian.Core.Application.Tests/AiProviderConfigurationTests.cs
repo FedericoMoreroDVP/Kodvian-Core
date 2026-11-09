@@ -68,6 +68,58 @@ public sealed class AiProviderConfigurationTests
     }
 
     [Fact]
+    public async Task AnthropicConnectionTestChecksTheModelWithTheStoredKeyWithoutGeneratingText()
+    {
+        await using var database = CreateDatabase();
+        string? apiKeyHeader = null;
+        HttpMethod? method = null;
+        string? path = null;
+        var handler = new StubHttpMessageHandler((request, _) =>
+        {
+            apiKeyHeader = request.Headers.Authorization?.ToString();
+            method = request.Method;
+            path = request.RequestUri?.AbsolutePath;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"type":"model","id":"claude-opus-5-5","display_name":"Claude Opus 5.5","created_at":"2026-01-01T00:00:00Z"}""", Encoding.UTF8, "application/json")
+            });
+        });
+        var service = CreateService(database, new EphemeralDataProtectionProvider(), handler);
+        await service.UpdateAsync(new AiProviderConfigurationUpdateRequest
+        {
+            Provider = "Anthropic", Model = "claude-opus-5-5", ApiKey = "sk-ant-test-key", Version = Guid.Empty
+        }, CancellationToken.None);
+
+        var result = await service.TestConnectionAsync(CancellationToken.None);
+
+        Assert.True(result.IsSuccessful);
+        Assert.Equal("Bearer sk-ant-test-key", apiKeyHeader);
+        Assert.Equal(HttpMethod.Get, method);
+        Assert.Equal("/v1/models/claude-opus-5-5", path);
+    }
+
+    [Fact]
+    public async Task AnthropicConnectionTestExplainsARejectedKey()
+    {
+        await using var database = CreateDatabase();
+        var handler = new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("""{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}""", Encoding.UTF8, "application/json")
+        }));
+        var service = CreateService(database, new EphemeralDataProtectionProvider(), handler);
+        await service.UpdateAsync(new AiProviderConfigurationUpdateRequest
+        {
+            Provider = "Anthropic", Model = "claude-opus-5-5", ApiKey = "sk-ant-wrong", Version = Guid.Empty
+        }, CancellationToken.None);
+
+        var result = await service.TestConnectionAsync(CancellationToken.None);
+
+        Assert.False(result.IsSuccessful);
+        Assert.Contains("clave", result.Message);
+        Assert.False((await database.AiProviderConfigurations.SingleAsync()).IsConnectionVerified);
+    }
+
+    [Fact]
     public async Task RejectsUnsupportedProviderAndStaleConfigurationVersion()
     {
         await using var database = CreateDatabase();
@@ -86,6 +138,32 @@ public sealed class AiProviderConfigurationTests
             Provider = "OpenAI", Model = "model-test-2", ApiKey = string.Empty, Version = Guid.Empty
         }, CancellationToken.None));
         Assert.NotEqual(Guid.Empty, saved.Version);
+    }
+
+    [Fact]
+    public async Task SwitchingProviderRequiresANewKeyAndResetsVerification()
+    {
+        await using var database = CreateDatabase();
+        var service = CreateService(database, new EphemeralDataProtectionProvider(), new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK))));
+        var saved = await service.UpdateAsync(new AiProviderConfigurationUpdateRequest
+        {
+            Provider = "OpenAI", Model = "model-test", ApiKey = ApiKey, Version = Guid.Empty
+        }, CancellationToken.None);
+        await service.TestConnectionAsync(CancellationToken.None);
+        saved = await service.GetAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync(new AiProviderConfigurationUpdateRequest
+        {
+            Provider = "Anthropic", Model = "claude-opus-5-5", ApiKey = string.Empty, Version = saved.Version
+        }, CancellationToken.None));
+
+        var switched = await service.UpdateAsync(new AiProviderConfigurationUpdateRequest
+        {
+            Provider = "Anthropic", Model = "claude-opus-5-5", ApiKey = "sk-ant-test-key", Version = saved.Version
+        }, CancellationToken.None);
+        Assert.Equal("Anthropic", switched.Provider);
+        Assert.False(switched.IsConnectionVerified);
+        Assert.False(switched.LiveDataApproved);
     }
 
     [Fact]
@@ -126,10 +204,11 @@ public sealed class AiProviderConfigurationTests
 
     private static AiProviderConfigurationService CreateService(
         KodvianDbContext database, IDataProtectionProvider dataProtection, HttpMessageHandler handler) =>
-        new(database, dataProtection, new OpenAiApiConnectionTester(new HttpClient(handler)
-        {
-            BaseAddress = new Uri("https://api.openai.com/v1/")
-        }), new TestCurrentUser());
+        new(database, dataProtection,
+        [
+            new OpenAiConnectionTesterAdapter(new OpenAiApiConnectionTester(new HttpClient(handler) { BaseAddress = new Uri("https://api.openai.com/v1/") })),
+            new AnthropicConnectionTester(new HttpClient(handler))
+        ], new TestCurrentUser());
 
     private sealed class TestCurrentUser : ICurrentUser
     {

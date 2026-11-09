@@ -31,6 +31,7 @@ Kodvian Core es un sistema interno liviano para gestionar una empresa de softwar
 - [Migraciones y seeding](backend/migrations-seeding.md): EF Core migrations, startup y datos iniciales.
 - [Riesgos operativos](backend/operational-risks.md): puntos sensibles para produccion y mantenimiento.
 - [Configuración segura del proveedor de IA](backend/ai-provider-configuration.md): almacenamiento cifrado, variables Railway y operación de credenciales.
+- [Guía: conectar OpenAI o Anthropic](guia-conectar-proveedor-ia.md): paso a paso para crear la clave de API y cargarla en Oficina Inteligente.
 
 ## Frontend
 

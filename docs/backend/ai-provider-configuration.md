@@ -2,7 +2,7 @@
 
 ## Estado actual
 
-La configuración del proveedor es por instalación y solo la administra un usuario con rol Administrador. La primera integración admite OpenAI. La clave se protege con ASP.NET Core Data Protection y se guarda cifrada en PostgreSQL; la API nunca la devuelve completa.
+La configuración del proveedor es por instalación y solo la administra un usuario con rol Administrador. Se admiten OpenAI y Anthropic (Claude), uno por vez. Paso a paso para conectarlos: [guía de conexión](../guia-conectar-proveedor-ia.md). La clave se protege con ASP.NET Core Data Protection y se guarda cifrada en PostgreSQL; la API nunca la devuelve completa.
 
 El anillo de claves de Data Protection persiste en la tabla `DataProtectionKeys`. En producción se cifra con un certificado PFX cuya clave privada se provisiona como variable runtime del servicio. El certificado y su contraseña no se guardan en la base de datos ni en el repositorio.
 

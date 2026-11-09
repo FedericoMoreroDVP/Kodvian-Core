@@ -21,7 +21,7 @@ public sealed class OpenAiResponsesClient(
     public async Task<AiModelResponseDto> CreateAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, CancellationToken cancellationToken)
     {
         var settings = await dbContext.AiProviderConfigurations.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
-        if (settings is null || settings.Version != expectedConfigurationVersion || !settings.IsConnectionVerified || !HasLiveDataApproval(settings))
+        if (settings is null || settings.Provider != AiProviders.OpenAI || settings.Version != expectedConfigurationVersion || !settings.IsConnectionVerified || !HasLiveDataApproval(settings))
             throw new AiProviderUnavailableException("El proveedor no está aprobado para procesar datos reales.");
 
         string apiKey;

@@ -31,7 +31,10 @@ public sealed class OpenAiResponsesClientTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var client = Assert.IsType<OpenAiResponsesClient>(scope.ServiceProvider.GetRequiredService<IAiResponsesClient>());
+        Assert.IsType<AiResponsesClientRouter>(scope.ServiceProvider.GetRequiredService<IAiResponsesClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<AnthropicMessagesClient>());
+        Assert.Equal(2, scope.ServiceProvider.GetServices<IAiProviderConnectionTester>().Select(x => x.Provider).Distinct().Count());
+        var client = scope.ServiceProvider.GetRequiredService<OpenAiResponsesClient>();
         var httpClient = (HttpClient)typeof(OpenAiResponsesClient)
             .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             .Single(x => x.FieldType == typeof(HttpClient))

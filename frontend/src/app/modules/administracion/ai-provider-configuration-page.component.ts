@@ -6,16 +6,17 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { AiProviderConfiguration } from './ai-provider-configuration.models';
+import { AI_PROVIDERS, AiProviderConfiguration, AiProviderId, AiProviderOption, providerOption } from './ai-provider-configuration.models';
 import { AiProviderConfigurationService } from './ai-provider-configuration.service';
 
 @Component({
   selector: 'app-ai-provider-configuration-page',
   standalone: true,
-  imports: [DatePipe, FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, RouterLink],
+  imports: [DatePipe, FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSelectModule, RouterLink],
   template: `
     <section class="configuration-page">
       <mat-card class="hero-card">
@@ -37,34 +38,36 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
           <form (ngSubmit)="save()" class="settings-form">
             <mat-form-field appearance="outline">
               <mat-label>Proveedor</mat-label>
-              <input matInput value="OpenAI" readonly aria-readonly="true" />
+              <mat-select name="provider" [(ngModel)]="provider" (selectionChange)="onProviderChange()">
+                @for (option of providers; track option.id) { <mat-option [value]="option.id">{{ option.label }}</mat-option> }
+              </mat-select>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Identificador del modelo</mat-label>
-              <input matInput name="model" [(ngModel)]="model" required maxlength="100" autocomplete="off" />
-              <mat-hint>Usa un modelo habilitado para la clave API de tu proyecto.</mat-hint>
+              <input matInput name="model" [(ngModel)]="model" required maxlength="100" autocomplete="off" [placeholder]="selectedProvider.modelPlaceholder" />
+              <mat-hint>{{ selectedProvider.modelHint }}</mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
-              <mat-label>{{ configuration.isConfigured ? 'Nueva clave API (opcional)' : 'Clave API' }}</mat-label>
-              <input matInput name="apiKey" [(ngModel)]="apiKey" [required]="!configuration.isConfigured" type="password" maxlength="512" autocomplete="new-password" />
-              @if (configuration.isConfigured) { <mat-hint>Déjala vacía para conservar la clave guardada.</mat-hint> }
+              <mat-label>{{ keyRequired ? 'Clave API' : 'Nueva clave API (opcional)' }}</mat-label>
+              <input matInput name="apiKey" [(ngModel)]="apiKey" [required]="keyRequired" type="password" maxlength="512" autocomplete="new-password" />
+              <mat-hint>{{ keyRequired && providerChanged ? 'Cambiaste de proveedor: ingresá la clave del nuevo proveedor.' : keyRequired ? selectedProvider.keyHint : 'Déjala vacía para conservar la clave guardada.' }}</mat-hint>
             </mat-form-field>
             <div class="actions">
-              <button mat-flat-button type="submit" [disabled]="busy || !model.trim()">Guardar configuración</button>
+              <button mat-flat-button type="submit" [disabled]="busy || !model.trim() || (keyRequired && !apiKey.trim())">Guardar configuración</button>
               <button mat-stroked-button type="button" (click)="testConnection()" [disabled]="busy || !configuration.isConfigured">Probar conexión</button>
               @if (configuration.isConfigured) { <button mat-button type="button" (click)="remove()" [disabled]="busy">Quitar proveedor</button> }
             </div>
           </form>
-          <p class="notice">La prueba envía una solicitud mínima al proveedor con el modelo seleccionado y puede generar un costo pequeño en la cuenta de API.</p>
+          <p class="notice">{{ selectedProvider.testNotice }}</p>
           @if (configuration.isConfigured) {
             <section class="privacy-approval" aria-labelledby="privacy-title">
               <h3 id="privacy-title">Uso de datos reales</h3>
-              <p>La consulta y los datos operativos mínimos necesarios se envían a OpenAI. La aplicación solicita que no se almacene el estado de las respuestas, pero pueden aplicar los controles de seguridad y retención del proveedor. Revisa sus condiciones y configura un límite de gasto en el proyecto API antes de habilitar este uso.</p>
+              <p>{{ savedProvider.privacyNotice }}</p>
               @if (configuration.liveDataApproved) {
                 <p class="message">Aprobado el {{ configuration.liveDataApprovedAtUtc | date:'short' }}. Si cambias la clave o el modelo, tendrás que aprobarlo de nuevo.</p>
                 <button mat-button type="button" (click)="revokeApproval()" [disabled]="busy">Revocar aprobación</button>
               } @else {
-                <label class="approval-label"><input type="checkbox" name="privacyAccepted" [(ngModel)]="privacyAccepted" /> Confirmo que revisé y aprobé las condiciones de privacidad y retención de OpenAI y configuré un límite de gasto para el proyecto API de esta instalación.</label>
+                <label class="approval-label"><input type="checkbox" name="privacyAccepted" [(ngModel)]="privacyAccepted" /> Confirmo que revisé y aprobé las condiciones de privacidad y retención de {{ savedProvider.company }} y configuré un límite de gasto para la cuenta de API de esta instalación.</label>
                 <button mat-flat-button type="button" (click)="approveLiveData()" [disabled]="busy || !configuration.isConnectionVerified || !privacyAccepted">Aprobar uso de datos reales</button>
               }
             </section>
@@ -95,7 +98,9 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
 })
 export class AiProviderConfigurationPageComponent implements OnInit {
   private readonly api = inject(AiProviderConfigurationService);
+  readonly providers = AI_PROVIDERS;
   configuration?: AiProviderConfiguration;
+  provider: AiProviderId = 'OpenAI';
   model = '';
   apiKey = '';
   privacyAccepted = false;
@@ -106,11 +111,30 @@ export class AiProviderConfigurationPageComponent implements OnInit {
 
   ngOnInit(): void { this.load(); }
 
+  get selectedProvider(): AiProviderOption { return providerOption(this.provider); }
+
+  get savedProvider(): AiProviderOption { return providerOption(this.configuration?.provider); }
+
+  get providerChanged(): boolean { return !!this.configuration?.isConfigured && this.configuration.provider !== this.provider; }
+
+  get keyRequired(): boolean { return !this.configuration?.isConfigured || this.providerChanged; }
+
+  onProviderChange(): void {
+    const previousDefaults = this.providers.map(x => x.defaultModel).filter(Boolean);
+    if (!this.model.trim() || previousDefaults.includes(this.model.trim()))
+      this.model = this.selectedProvider.defaultModel;
+    this.apiKey = '';
+  }
+
   load(): void {
     this.loading = true;
     this.error = '';
     this.api.get().pipe(finalize(() => this.loading = false)).subscribe({
-      next: value => { this.configuration = value; this.model = value.model ?? ''; },
+      next: value => {
+        this.configuration = value;
+        this.provider = providerOption(value.provider).id;
+        this.model = value.model ?? (value.isConfigured ? '' : this.selectedProvider.defaultModel);
+      },
       error: () => this.error = 'No se pudo cargar la configuración.'
     });
   }
@@ -120,7 +144,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
     this.busy = true;
     this.error = '';
     this.message = '';
-    this.api.save({ provider: 'OpenAI', model: this.model.trim(), apiKey: this.apiKey, version: this.configuration.version })
+    this.api.save({ provider: this.provider, model: this.model.trim(), apiKey: this.apiKey, version: this.configuration.version })
       .pipe(finalize(() => this.busy = false))
       .subscribe({
         next: value => {
@@ -128,7 +152,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
           this.apiKey = '';
           this.message = 'Configuración guardada. Prueba la conexión antes de habilitar el agente.';
         },
-        error: () => this.error = 'No se pudo guardar. Revisa el modelo y la clave API.'
+        error: err => this.error = err?.error?.message || 'No se pudo guardar. Revisa el modelo y la clave API.'
       });
   }
 
