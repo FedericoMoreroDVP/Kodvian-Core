@@ -1,93 +1,147 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { AiConversation, AiConversationDetail, AiMessage } from './intelligent-office.models';
+import { AiConversation, AiMessage, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService } from './intelligent-office.service';
+
+const SOURCE_LABELS: Record<string, string> = {
+  'dashboard.get_snapshot': 'Panel de indicadores',
+  'finance.get_summary': 'Finanzas',
+  'projects.list': 'Proyectos',
+  'tasks.list': 'Tareas',
+  'clients.list': 'Clientes',
+  'meetings.list': 'Agenda'
+};
 
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [DatePipe, FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, RouterLink],
+  imports: [DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
       <mat-card class="hero-card">
-        <div>
+        <div class="hero-icon" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
+        <div class="hero-text">
           <p class="eyebrow">Kodvian Core</p>
           <h2>Oficina Inteligente</h2>
-          <p>Consultas operativas con fuentes verificables. En esta etapa la IA solo puede leer información autorizada.</p>
+          <p class="hero-subtitle">Consultas operativas con fuentes verificables. En esta etapa la IA solo lee información autorizada.</p>
         </div>
-        <a mat-button routerLink="/administracion/configuracion-ia">Configuración del proveedor</a>
+        <a mat-stroked-button class="provider-link" routerLink="/administracion/configuracion-ia"><mat-icon>tune</mat-icon> Configuración del proveedor</a>
       </mat-card>
 
-      @if (pageError) { <p class="error" role="alert">{{ pageError }}</p> }
-      @if (pageMessage) { <p class="notice" role="status">{{ pageMessage }}</p> }
+      @if (pageError) { <p class="banner error" role="alert"><mat-icon>error_outline</mat-icon>{{ pageError }}</p> }
+      @if (pageMessage) { <p class="banner notice" role="status"><mat-icon>check_circle</mat-icon>{{ pageMessage }}</p> }
 
       <div class="workspace">
         <mat-card class="history-panel">
-          <div class="history-header"><h3>Conversaciones</h3><button mat-icon-button type="button" aria-label="Nueva conversación" (click)="newConversation()" [disabled]="busy"><mat-icon>add</mat-icon></button></div>
+          <button mat-flat-button color="primary" class="new-button" type="button" (click)="newConversation()" [disabled]="busy"><mat-icon>add</mat-icon> Nueva conversación</button>
+          <h3 class="history-title">Conversaciones</h3>
           @if (loadingList) { <mat-spinner diameter="28" aria-label="Cargando conversaciones" /> }
           <div class="conversation-list">
             @for (item of conversations; track item.id) {
               <button type="button" class="conversation-item" [class.selected]="item.id === activeConversation?.id" (click)="open(item)" [disabled]="busy">
-                <span class="conversation-title">{{ item.title }}</span>
-                <span class="conversation-meta">{{ item.updatedAtUtc | date:'short' }} · {{ item.messageCount }} mensajes</span>
+                <mat-icon class="conversation-icon">chat_bubble_outline</mat-icon>
+                <span class="conversation-body">
+                  <span class="conversation-title">{{ item.title }}</span>
+                  <span class="conversation-meta">{{ item.updatedAtUtc | date:'dd/MM HH:mm' }} · {{ item.messageCount }} mensajes</span>
+                </span>
               </button>
-            } @empty { @if (!loadingList) { <p class="muted">Todavía no hay conversaciones.</p> } }
+            } @empty { @if (!loadingList) { <p class="muted empty-history">Todavía no hay conversaciones. Escribí tu primera consulta a la derecha.</p> } }
           </div>
-          @if (conversations.length < totalConversations) { <button mat-button type="button" (click)="loadMoreConversations()" [disabled]="loadingList || busy">Cargar más conversaciones</button> }
-          @if (activeConversation) {
-            <button mat-button color="warn" type="button" (click)="deleteConversation()" [disabled]="busy">Eliminar conversación</button>
-          }
+          @if (conversations.length < totalConversations) { <button mat-button type="button" (click)="loadMoreConversations()" [disabled]="loadingList || busy">Cargar más</button> }
         </mat-card>
 
         <mat-card class="chat-panel">
           <div class="chat-header">
-            <div><h3>{{ activeConversation?.title ?? 'Nueva conversación' }}</h3><p class="muted">Las conversaciones se conservan hasta que las elimines.</p></div>
-            @if (busy) { <mat-spinner diameter="26" aria-label="Procesando consulta" /> }
+            <div class="chat-heading">
+              <h3>{{ activeConversation?.title ?? 'Nueva conversación' }}</h3>
+              <p class="muted">Las conversaciones se conservan hasta que las elimines.</p>
+            </div>
+            @if (activeConversation) {
+              <button mat-icon-button type="button" class="delete-button" aria-label="Eliminar conversación" matTooltip="Eliminar conversación" (click)="deleteConversation()" [disabled]="busy"><mat-icon>delete_outline</mat-icon></button>
+            }
           </div>
 
-          @if (chatError) { <p class="error" role="alert">{{ chatError }} @if (hasPendingRequest) { <button mat-button type="button" (click)="retryAsNewRun()" [disabled]="busy">Iniciar un nuevo intento</button> }</p> }
-          <div class="messages" aria-live="polite">
-            @if (activeConversation && messages.length < activeConversation.messageCount) { <p class="muted">Se muestran los últimos 200 mensajes de {{ activeConversation.messageCount }}.</p> }
+          @if (chatError) {
+            <div class="banner error" role="alert">
+              <mat-icon>error_outline</mat-icon><span>{{ chatError }}</span>
+              @if (hasPendingRequest) { <button mat-button type="button" (click)="retryAsNewRun()" [disabled]="busy">Reintentar</button> }
+            </div>
+          }
+
+          <div class="messages" #messageList aria-live="polite">
+            @if (activeConversation && messages.length < activeConversation.messageCount) { <p class="muted history-note">Se muestran los últimos 200 mensajes de {{ activeConversation.messageCount }}.</p> }
             @for (message of messages; track message.id) {
               <article class="message" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
-                <div class="message-label"><span>{{ message.role === 'user' ? 'Vos' : 'Oficina Inteligente' }} @if (message.traceId) { <small>Seguimiento {{ message.traceId }}</small> }</span><time>{{ message.createdAtUtc | date:'short' }}</time></div>
-                <p class="message-content">{{ message.content }}</p>
-                @if (message.sources.length) {
-                  <div class="sources">
-                    <strong>Fuentes</strong>
-                    @for (source of message.sources; track $index) {
-                      <span class="source-item">
-                        @if (source.link) { <a [href]="source.link">{{ source.toolName }}</a> } @else { {{ source.toolName }} }
-                        <span>{{ source.from && source.to ? (source.from + ' a ' + source.to) : '' }}</span>
-                        @if (source.currency) { <span>{{ source.currency }}</span> }
-                        <time>{{ source.asOfUtc | date:'short' }}</time>
-                      </span>
-                    }
+                @if (message.role === 'assistant') { <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div> }
+                <div class="bubble">
+                  <div class="message-label">
+                    <span>{{ message.role === 'user' ? 'Vos' : 'Oficina Inteligente' }}</span>
+                    <time [attr.title]="message.traceId ? 'Seguimiento ' + message.traceId : null">{{ message.createdAtUtc | date:'dd/MM HH:mm' }}</time>
                   </div>
-                }
+                  <p class="message-content">{{ message.content }}</p>
+                  @if (message.sources.length) {
+                    <div class="sources">
+                      <span class="sources-title"><mat-icon>verified</mat-icon> Fuentes</span>
+                      @for (source of message.sources; track $index) {
+                        @if (source.link) {
+                          <a class="source-chip" [href]="source.link" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</a>
+                        } @else {
+                          <span class="source-chip" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</span>
+                        }
+                      }
+                    </div>
+                  }
+                </div>
               </article>
             } @empty {
-              <div class="empty-chat"><mat-icon>auto_awesome</mat-icon><p>Preguntá por tareas, proyectos, reuniones o finanzas autorizadas.</p><p class="muted">Ejemplo: “¿Qué tareas vencen en los próximos siete días?”</p></div>
+              @if (!pendingContent) {
+                <div class="empty-chat">
+                  <div class="empty-icon"><mat-icon>auto_awesome</mat-icon></div>
+                  <h4>¿En qué te ayudo hoy?</h4>
+                  <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas. Cada respuesta indica de dónde salió el dato.</p>
+                  <div class="suggestions">
+                    @for (suggestion of suggestions; track suggestion.text) {
+                      <button type="button" class="suggestion" (click)="useSuggestion(suggestion.text)" [disabled]="busy">
+                        <mat-icon>{{ suggestion.icon }}</mat-icon><span>{{ suggestion.text }}</span>
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            }
+            @if (pendingContent) {
+              <article class="message user-message pending">
+                <div class="bubble">
+                  <div class="message-label"><span>Vos</span></div>
+                  <p class="message-content">{{ pendingContent }}</p>
+                </div>
+              </article>
+              <article class="message assistant-message">
+                <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
+                <div class="bubble thinking" role="status"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="sr-only">Consultando datos</span></div>
+              </article>
             }
           </div>
 
           <form class="composer" (ngSubmit)="send()">
-            <mat-form-field appearance="outline">
-              <mat-label>Escribí tu consulta</mat-label>
-              <textarea matInput name="message" [(ngModel)]="draft" maxlength="4000" rows="3" [disabled]="busy" placeholder="Consultas de solo lectura"></textarea>
-              <mat-hint align="end">{{ draft.length }} / 4000</mat-hint>
-            </mat-form-field>
-            <button mat-flat-button type="submit" [disabled]="busy || !draft.trim()"><mat-icon>send</mat-icon> Consultar</button>
+            <div class="composer-box" [class.disabled]="busy">
+              <textarea name="message" [(ngModel)]="draft" maxlength="4000" rows="2" [disabled]="busy" (keydown)="onComposerKeydown($event)"
+                aria-label="Escribí tu consulta" placeholder="Escribí tu consulta…"></textarea>
+              <button mat-flat-button color="primary" class="send-button" type="submit" [disabled]="busy || !draft.trim()" aria-label="Consultar">
+                @if (busy && pendingContent) { <mat-spinner diameter="18" /> } @else { <mat-icon>send</mat-icon> }
+                <span>Consultar</span>
+              </button>
+            </div>
+            <div class="composer-hint"><span>Enter para enviar · Shift + Enter para nueva línea</span><span>{{ draft.length }} / 4000</span></div>
           </form>
         </mat-card>
       </div>
@@ -96,55 +150,126 @@ import { IntelligentOfficeService } from './intelligent-office.service';
   styles: [`
     .office-page { display: grid; gap: 12px; min-width: 0; }
     .hero-card, .history-panel, .chat-panel { border: 1px solid var(--kd-border-subtle); border-radius: 16px; background: linear-gradient(180deg, rgba(17,26,36,.94), rgba(13,21,30,.98)); color: var(--text-100); }
-    .hero-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
-    .eyebrow { margin: 0 0 5px; color: var(--brand-300); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
-    h2 { margin: 0; color: var(--brand-300); font-size: 30px; }
-    h3 { margin: 0; font-size: 16px; color: var(--kd-text-secondary); }
-    .hero-card p:last-child, .muted { color: var(--text-300); }
-    .workspace { display: grid; grid-template-columns: minmax(220px, 290px) minmax(0, 1fr); gap: 12px; min-height: 65vh; }
-    .history-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-    .history-header, .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .conversation-list { display: grid; align-content: start; gap: 6px; overflow-y: auto; }
-    .conversation-item { display: grid; gap: 5px; width: 100%; padding: 10px; text-align: left; color: var(--text-100); background: transparent; border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
-    .conversation-item:hover, .conversation-item.selected { border-color: var(--kd-border-subtle); background: rgba(255,255,255,.04); }
-    .conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    mat-icon { flex-shrink: 0; }
+
+    .hero-card { display: flex; flex-direction: row; align-items: center; gap: 16px; padding: 18px 20px; }
+    .hero-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; color: var(--brand-300); background: rgba(34, 197, 94, .1); border: 1px solid rgba(34, 197, 94, .25); }
+    .hero-icon mat-icon { width: 28px; height: 28px; font-size: 28px; }
+    .hero-text { flex: 1; min-width: 0; }
+    .eyebrow { margin: 0 0 2px; color: var(--brand-300); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
+    h2 { margin: 0; color: var(--text-100); font-size: 24px; line-height: 1.2; }
+    .hero-subtitle { margin: 4px 0 0; color: var(--text-300); font-size: 13px; }
+    .provider-link { flex-shrink: 0; }
+
+    .banner { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+    .banner span { flex: 1; }
+    .error { color: #ffb4b4; background: rgba(255, 99, 99, .08); border: 1px solid rgba(255, 99, 99, .25); }
+    .notice { color: var(--brand-300); background: rgba(34, 197, 94, .08); border: 1px solid rgba(34, 197, 94, .25); }
+
+    .workspace { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 12px; height: calc(100vh - 290px); min-height: 520px; }
+    .history-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; }
+    .new-button { width: 100%; }
+    .history-title { margin: 6px 4px 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-300); }
+    .conversation-list { display: grid; align-content: start; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
+    .conversation-item { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 9px 10px; text-align: left; color: var(--text-100); background: transparent; border: 1px solid transparent; border-radius: 10px; cursor: pointer; font: inherit; }
+    .conversation-item:hover:not(:disabled) { background: rgba(255,255,255,.04); }
+    .conversation-item.selected { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .08); }
+    .conversation-item:disabled { cursor: default; }
+    .conversation-icon { width: 18px; height: 18px; font-size: 18px; margin-top: 1px; color: var(--text-300); }
+    .conversation-item.selected .conversation-icon { color: var(--brand-300); }
+    .conversation-body { display: grid; gap: 3px; min-width: 0; }
+    .conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
     .conversation-meta { color: var(--text-300); font-size: 11px; }
-    .chat-panel { display: flex; flex-direction: column; min-width: 0; padding: 16px; }
-    .chat-header { padding-bottom: 10px; border-bottom: 1px solid var(--kd-border-subtle); }
-    .chat-header p { margin: 5px 0 0; font-size: 12px; }
-    .messages { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 300px; max-height: 58vh; padding: 14px 2px; overflow-y: auto; }
-    .message { max-width: min(900px, 92%); padding: 12px 14px; border: 1px solid var(--kd-border-subtle); border-radius: 12px; overflow-wrap: anywhere; }
-    .user-message { align-self: flex-end; background: rgba(50, 94, 80, .28); }
-    .assistant-message { align-self: flex-start; background: rgba(255,255,255,.025); }
-    .message-label { display: flex; justify-content: space-between; gap: 12px; color: var(--kd-text-secondary); font-size: 12px; font-weight: 600; }
-    time, .source-item { color: var(--text-300); font-size: 11px; }
-    .message-content { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.5; }
-    .sources { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; padding-top: 9px; border-top: 1px solid var(--kd-border-subtle); }
-    .source-item { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.04); }
-    .source-item a { color: var(--brand-300); }
-    .empty-chat { margin: auto; text-align: center; color: var(--text-100); }
-    .empty-chat mat-icon { color: var(--brand-300); }
-    .composer { display: flex; align-items: flex-end; gap: 12px; border-top: 1px solid var(--kd-border-subtle); padding-top: 12px; }
-    .composer mat-form-field { flex: 1; }
-    .error { color: #ff9b9b; }
-    .notice { color: var(--brand-300); }
+    .empty-history { margin: 4px; font-size: 13px; }
+
+    .chat-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; overflow: hidden; }
+    .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--kd-border-subtle); }
+    .chat-heading { min-width: 0; }
+    .chat-heading h3 { margin: 0; font-size: 15px; color: var(--text-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-heading p { margin: 3px 0 0; font-size: 12px; }
+    .delete-button { color: var(--text-300); }
+    .delete-button:hover { color: #ffb4b4; }
+    .chat-panel > .banner { margin: 12px 18px 0; }
+    .muted { color: var(--text-300); }
+
+    .messages { display: flex; flex: 1; flex-direction: column; gap: 16px; min-height: 0; padding: 18px; overflow-y: auto; scroll-behavior: smooth; }
+    .history-note { align-self: center; margin: 0; font-size: 12px; }
+    .message { display: flex; gap: 10px; max-width: min(820px, 88%); }
+    .user-message { align-self: flex-end; }
+    .assistant-message { align-self: flex-start; }
+    .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; color: var(--brand-300); background: rgba(34, 197, 94, .12); }
+    .avatar mat-icon { width: 17px; height: 17px; font-size: 17px; }
+    .bubble { min-width: 0; padding: 10px 14px; border-radius: 14px; overflow-wrap: anywhere; }
+    .user-message .bubble { background: rgba(34, 197, 94, .14); border: 1px solid rgba(34, 197, 94, .28); border-bottom-right-radius: 4px; }
+    .assistant-message .bubble { background: rgba(255,255,255,.035); border: 1px solid var(--kd-border-subtle); border-top-left-radius: 4px; }
+    .pending .bubble { opacity: .75; }
+    .message-label { display: flex; justify-content: space-between; gap: 16px; color: var(--text-300); font-size: 11px; font-weight: 600; }
+    time { color: var(--text-300); font-size: 11px; font-weight: 400; }
+    .message-content { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.55; font-size: 14px; color: var(--text-100); }
+    .sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--kd-border-subtle); }
+    .sources-title { display: inline-flex; align-items: center; gap: 4px; color: var(--text-300); font-size: 11px; font-weight: 600; }
+    .sources-title mat-icon { width: 14px; height: 14px; font-size: 14px; color: var(--brand-300); }
+    .source-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; color: var(--text-100); background: rgba(255,255,255,.05); border: 1px solid var(--kd-border-subtle); text-decoration: none; }
+    a.source-chip { color: var(--brand-300); }
+    a.source-chip:hover { border-color: rgba(34, 197, 94, .45); }
+
+    .thinking { display: flex; align-items: center; gap: 5px; padding: 14px 16px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-300); animation: blink 1.2s infinite ease-in-out; }
+    .dot:nth-child(2) { animation-delay: .2s; }
+    .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+    .empty-chat { display: flex; flex-direction: column; align-items: center; margin: auto; max-width: 620px; text-align: center; }
+    .empty-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 12px; border-radius: 50%; color: var(--brand-300); background: rgba(34, 197, 94, .1); }
+    .empty-icon mat-icon { width: 28px; height: 28px; font-size: 28px; }
+    .empty-chat h4 { margin: 0; font-size: 18px; color: var(--text-100); }
+    .empty-chat > p { margin: 6px 0 18px; font-size: 13px; }
+    .suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
+    .suggestion { display: flex; align-items: center; gap: 10px; padding: 11px 12px; text-align: left; font: inherit; font-size: 13px; color: var(--text-100); background: rgba(255,255,255,.03); border: 1px solid var(--kd-border-subtle); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .suggestion:hover:not(:disabled) { border-color: rgba(34, 197, 94, .45); background: rgba(34, 197, 94, .06); }
+    .suggestion mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--brand-300); }
+
+    .composer { padding: 12px 18px 14px; border-top: 1px solid var(--kd-border-subtle); }
+    .composer-box { display: flex; align-items: flex-end; gap: 10px; padding: 8px 8px 8px 14px; border: 1px solid var(--kd-border-subtle); border-radius: 14px; background: rgba(0,0,0,.18); transition: border-color .15s; }
+    .composer-box:focus-within { border-color: rgba(34, 197, 94, .55); }
+    .composer-box.disabled { opacity: .7; }
+    .composer-box textarea { flex: 1; min-height: 40px; max-height: 160px; padding: 9px 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text-100); font: inherit; font-size: 14px; line-height: 1.45; field-sizing: content; }
+    .composer-box textarea::placeholder { color: var(--text-300); }
+    .send-button { flex-shrink: 0; height: 40px; border-radius: 10px; }
+    .send-button:disabled { background: rgba(255,255,255,.06) !important; color: var(--text-300) !important; }
+    .send-button mat-spinner { display: inline-block; margin-right: 6px; }
+    .composer-hint { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 0 4px; color: var(--text-300); font-size: 11px; }
+
     @media (max-width: 760px) {
-      .hero-card { align-items: flex-start; flex-direction: column; }
-      .workspace { grid-template-columns: 1fr; }
-      .history-panel { max-height: 220px; }
-      .conversation-list { max-height: 140px; }
-      .messages { max-height: 52vh; }
-      .composer { align-items: stretch; flex-direction: column; }
-      .composer button { align-self: flex-end; }
+      .hero-card { flex-wrap: wrap; }
+      .provider-link { width: 100%; }
+      .workspace { grid-template-columns: 1fr; height: auto; }
+      .history-panel { max-height: 240px; }
+      .messages { min-height: 360px; max-height: 60vh; }
+      .message { max-width: 100%; }
+      .suggestions { grid-template-columns: 1fr; }
+      .composer-hint span:first-child { display: none; }
     }
   `]
 })
-export class IntelligentOfficePageComponent implements OnInit {
+export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked {
   private readonly api = inject(IntelligentOfficeService);
+  @ViewChild('messageList') private messageList?: ElementRef<HTMLElement>;
+  private shouldScroll = false;
+
+  readonly suggestions = [
+    { icon: 'event_busy', text: '¿Qué tareas vencen en los próximos siete días?' },
+    { icon: 'folder_open', text: '¿Cómo vienen los proyectos activos?' },
+    { icon: 'payments', text: 'Resumen de ingresos y egresos del último mes' },
+    { icon: 'calendar_month', text: '¿Qué reuniones tengo esta semana?' }
+  ];
+
   conversations: AiConversation[] = [];
   activeConversation?: AiConversation;
   messages: AiMessage[] = [];
   draft = '';
+  pendingContent = '';
   loadingList = true;
   totalConversations = 0;
   private conversationPage = 1;
@@ -156,7 +281,32 @@ export class IntelligentOfficePageComponent implements OnInit {
 
   ngOnInit(): void { this.loadConversations(); }
 
+  ngAfterViewChecked(): void {
+    if (!this.shouldScroll || !this.messageList) return;
+    this.shouldScroll = false;
+    const element = this.messageList.nativeElement;
+    element.scrollTop = element.scrollHeight;
+  }
+
   get hasPendingRequest(): boolean { return this.pendingRequest !== null; }
+
+  sourceLabel(source: AiSourceReference): string { return SOURCE_LABELS[source.toolName] ?? source.toolName; }
+
+  sourceDetail(source: AiSourceReference): string {
+    const parts = [source.from && source.to ? `${source.from} a ${source.to}` : '', source.currency ?? '', `Dato al ${new Date(source.asOfUtc).toLocaleString('es-AR')}`];
+    return parts.filter(Boolean).join(' · ');
+  }
+
+  useSuggestion(text: string): void {
+    this.draft = text;
+    this.send();
+  }
+
+  onComposerKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    this.send();
+  }
 
   loadConversations(reset = true): void {
     this.loadingList = true;
@@ -184,6 +334,7 @@ export class IntelligentOfficePageComponent implements OnInit {
         this.activeConversation = { ...conversation, title: detail.title, updatedAtUtc: detail.updatedAtUtc, messageCount: detail.messageCount };
         this.conversations = this.conversations.map(x => x.id === conversation.id ? this.activeConversation! : x);
         this.messages = detail.messages;
+        this.shouldScroll = true;
       },
       error: () => this.chatError = 'No se pudo abrir la conversación.'
     });
@@ -210,6 +361,15 @@ export class IntelligentOfficePageComponent implements OnInit {
     if (!content || this.busy) return;
     this.busy = true;
     this.chatError = '';
+    this.pageMessage = '';
+    this.pendingContent = content;
+    this.draft = '';
+    this.shouldScroll = true;
+    const fail = (message: string): void => {
+      this.chatError = message;
+      this.draft = content;
+      this.pendingContent = '';
+    };
     const submit = (conversation: AiConversation): void => {
       this.activeConversation = conversation;
       if (!this.pendingRequest || this.pendingRequest.content !== content)
@@ -221,23 +381,24 @@ export class IntelligentOfficePageComponent implements OnInit {
       this.api.send(conversation.id, content, clientRequestId).pipe(finalize(() => this.busy = false)).subscribe({
         next: result => {
           this.pendingRequest = null;
+          this.pendingContent = '';
           const userWasLoaded = this.messages.some(x => x.id === result.userMessage.id);
           const assistantWasLoaded = this.messages.some(x => x.id === result.assistantMessage.id);
           this.messages = [...this.messages.filter(x => x.id !== result.userMessage.id && x.id !== result.assistantMessage.id), result.userMessage, result.assistantMessage];
-          this.draft = '';
           this.conversations = this.conversations.map(x => x.id === conversation.id
             ? { ...x, title: x.title === 'Nueva conversación' ? content.slice(0, 120) : x.title, updatedAtUtc: result.assistantMessage.createdAtUtc, messageCount: x.messageCount + (userWasLoaded ? 0 : 1) + (assistantWasLoaded ? 0 : 1) }
             : x);
           this.activeConversation = this.conversations.find(x => x.id === conversation.id) ?? this.activeConversation;
+          this.shouldScroll = true;
         },
-        error: error => { this.chatError = IntelligentOfficeService.errorMessage(error); this.reloadActive(); }
+        error: error => { fail(IntelligentOfficeService.errorMessage(error)); this.reloadActive(); }
       });
     };
 
     if (this.activeConversation) submit(this.activeConversation);
     else this.api.create().subscribe({
-      next: conversation => { this.conversations = [conversation, ...this.conversations]; submit(conversation); },
-      error: () => { this.busy = false; this.chatError = 'No se pudo iniciar la conversación.'; }
+      next: conversation => { this.conversations = [conversation, ...this.conversations]; this.totalConversations++; submit(conversation); },
+      error: () => { this.busy = false; fail('No se pudo iniciar la conversación.'); }
     });
   }
 
@@ -266,7 +427,7 @@ export class IntelligentOfficePageComponent implements OnInit {
   private reloadActive(): void {
     if (!this.activeConversation) return;
     this.api.get(this.activeConversation.id).subscribe({
-      next: detail => this.messages = detail.messages,
+      next: detail => { this.messages = detail.messages; this.shouldScroll = true; },
       error: () => undefined
     });
   }

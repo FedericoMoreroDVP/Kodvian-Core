@@ -45,6 +45,41 @@ describe('Oficina Inteligente', () => {
     expect(fixture.nativeElement.textContent).toContain('Encontré tareas. <script>alert(1)</script>');
     expect(fixture.nativeElement.querySelector('script')).toBeNull();
     expect(fixture.nativeElement.querySelector('a[href="/tareas"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/tareas"]').textContent).toContain('Tareas');
     fixture.destroy();
+  });
+
+  it('envía una sugerencia y muestra la consulta mientras espera la respuesta', () => {
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [], pageNumber: 1, pageSize: 50, totalCount: 0 } });
+    fixture.detectChanges();
+
+    const suggestion: HTMLButtonElement = fixture.nativeElement.querySelector('.suggestion');
+    suggestion.click();
+    fixture.detectChanges();
+    http.expectOne('/api/ai/conversations').flush({ data: { id: 'conversation-1', title: 'Nueva conversación', createdAtUtc: '2026-11-07T12:00:00Z', updatedAtUtc: '2026-11-07T12:00:00Z', messageCount: 0 } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.pending').textContent).toContain(fixture.componentInstance.suggestions[0].text);
+    expect(fixture.nativeElement.querySelector('.thinking')).not.toBeNull();
+    const sent = http.expectOne('/api/ai/conversations/conversation-1/messages');
+    sent.flush({ message: 'El proveedor no está disponible.' }, { status: 503, statusText: 'Service Unavailable' });
+    http.expectOne('/api/ai/conversations/conversation-1').flush({ data: { id: 'conversation-1', title: 'Nueva conversación', createdAtUtc: '2026-11-07T12:00:00Z', updatedAtUtc: '2026-11-07T12:00:00Z', messageCount: 0, messages: [] } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.pending')).toBeNull();
+    expect(fixture.componentInstance.draft).toBe(fixture.componentInstance.suggestions[0].text);
+    fixture.destroy();
+  });
+
+  it('Enter envía y Shift + Enter no', () => {
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    const component = fixture.componentInstance;
+    spyOn(component, 'send');
+    component.onComposerKeydown(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true }));
+    expect(component.send).not.toHaveBeenCalled();
+    component.onComposerKeydown(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(component.send).toHaveBeenCalledTimes(1);
   });
 });
