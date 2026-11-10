@@ -1,4 +1,4 @@
-import { Component, HostListener, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { Router, RouterOutlet } from '@angular/router';
 
@@ -18,32 +18,24 @@ export class MainLayoutComponent {
   private readonly authSession = inject(AuthSessionService);
   private readonly router = inject(Router);
 
-  isMobile = this.detectMobile();
-  sidenavOpened = !this.isMobile;
-
-  @HostListener('window:resize')
-  onResize(): void {
-    this.isMobile = this.detectMobile();
-    this.sidenavOpened = !this.isMobile;
-  }
+  /** El menú arranca oculto y queda oculto entre navegaciones: se abre solo con la hamburguesa. */
+  sidenavOpened = false;
 
   toggleSidebar(): void {
     this.sidenavOpened = !this.sidenavOpened;
   }
 
+  onOpenedChange(opened: boolean): void {
+    this.sidenavOpened = opened;
+  }
+
   onSidebarItemSelected(): void {
-    if (this.isMobile) {
-      this.sidenavOpened = false;
-    }
+    this.sidenavOpened = false;
   }
 
   cerrarSesion(): void {
     this.authSession.logout().subscribe(() => {
       void this.router.navigate(['/login']);
     });
-  }
-
-  private detectMobile(): boolean {
-    return window.matchMedia('(max-width: 960px)').matches;
   }
 }

@@ -70,6 +70,10 @@ describe('Oficina Inteligente: pantalla', () => {
     http.expectOne('/api/ai/conversations/c1').flush({ data: { ...conversation, messages: [] } });
     fixture.detectChanges();
 
+    // La lista de conversaciones se puede ocultar; en este test se abre explícitamente.
+    if (!fixture.componentInstance.showHistory) fixture.componentInstance.toggleHistory();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-ai-conversation-list')).not.toBeNull();
     (fixture.nativeElement.querySelector('.pin-button') as HTMLButtonElement).click();
     const pin = http.expectOne(req => req.method === 'PATCH' && req.url === '/api/ai/conversations/c1');
     expect(pin.request.body).toEqual({ isPinned: true });

@@ -10,6 +10,8 @@
 }
 
 .layout-shell mat-sidenav {
+  width: 300px;
+  max-width: 86vw;
   border-right: 1px solid var(--kd-border-subtle);
   background: var(--kd-sidebar);
 }

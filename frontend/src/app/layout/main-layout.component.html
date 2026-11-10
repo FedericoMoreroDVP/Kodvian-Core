@@ -1,10 +1,13 @@
-<mat-sidenav-container class="layout-shell">
-  <mat-sidenav [mode]="isMobile ? 'over' : 'side'" [opened]="sidenavOpened" [disableClose]="!isMobile" (closedStart)="sidenavOpened = false">
+<mat-sidenav-container class="layout-shell" [hasBackdrop]="true">
+  <!-- El menú se abre como panel superpuesto con fondo oscuro y se oculta solo al elegir una opción,
+       al hacer click afuera o con Esc; así el contenido usa siempre todo el ancho. -->
+  <mat-sidenav #sidenav id="main-sidenav" mode="over" [opened]="sidenavOpened" (openedChange)="onOpenedChange($event)"
+    [autoFocus]="'first-tabbable'" aria-label="Menú principal">
     <app-sidebar (itemSelected)="onSidebarItemSelected()"></app-sidebar>
   </mat-sidenav>
 
   <mat-sidenav-content>
-    <app-header (menuClick)="toggleSidebar()" (logoutClick)="cerrarSesion()"></app-header>
+    <app-header [menuExpanded]="sidenavOpened" (menuClick)="toggleSidebar()" (logoutClick)="cerrarSesion()"></app-header>
     <main class="content">
       <router-outlet></router-outlet>
     </main>

@@ -1,5 +1,6 @@
 <mat-toolbar class="app-header">
-  <button mat-icon-button aria-label="Abrir menú" title="Abrir menú" (click)="menuClick.emit()">
+  <button mat-icon-button [attr.aria-label]="menuExpanded ? 'Cerrar menú' : 'Abrir menú'" [attr.title]="menuExpanded ? 'Cerrar menú' : 'Abrir menú'"
+    aria-controls="main-sidenav" [attr.aria-expanded]="menuExpanded" (click)="menuClick.emit()">
     <mat-icon>menu</mat-icon>
   </button>
 

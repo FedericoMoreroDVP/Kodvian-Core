@@ -1,8 +1,8 @@
 import { DatePipe } from '@angular/common';
-import { AfterViewChecked, Component, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewChecked, Component, ElementRef, HostListener, OnInit, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
+
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -12,6 +12,7 @@ import { finalize } from 'rxjs';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { AiActionCardComponent, isActionable } from './ai-action-card.component';
 import { AiBriefingComponent } from './ai-briefing.component';
+import { AiConversationListComponent } from './ai-conversation-list.component';
 import { AiMessageExtrasComponent } from './ai-message-extras.component';
 import { AiPreferencesComponent } from './ai-preferences.component';
 import { AiVoiceButtonComponent } from './ai-voice-button.component';
@@ -53,245 +54,202 @@ interface Suggestion {
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [AiActionCardComponent, AiBriefingComponent, AiMessageExtrasComponent, AiPreferencesComponent, AiVoiceButtonComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
+  imports: [AiActionCardComponent, AiBriefingComponent, AiConversationListComponent, AiMessageExtrasComponent, AiPreferencesComponent, AiVoiceButtonComponent, DatePipe, FormsModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
-      <mat-card class="hero-card">
-        <div class="hero-icon" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
-        <div class="hero-text">
-          <p class="eyebrow">Kodvian Core</p>
-          <h2>Oficina Inteligente</h2>
-          <p class="hero-subtitle">Consultá datos con fuentes verificables y pedí acciones como agendar tareas o reuniones. Nada se crea sin tu confirmación.</p>
-        </div>
-        @if (isAdministrator) { <a mat-stroked-button class="provider-link" routerLink="/administracion/configuracion-ia"><mat-icon>tune</mat-icon> Configuración del proveedor</a> }
-      </mat-card>
+      <header class="office-bar">
+        <button mat-icon-button type="button" class="history-toggle" [attr.aria-expanded]="showHistory" aria-controls="ai-conversations"
+          [attr.aria-label]="showHistory ? 'Ocultar conversaciones' : 'Mostrar conversaciones'" [matTooltip]="showHistory ? 'Ocultar conversaciones' : 'Conversaciones'"
+          (click)="toggleHistory()"><mat-icon>{{ showHistory ? 'menu_open' : 'forum' }}</mat-icon></button>
+        <mat-icon class="spark" aria-hidden="true">auto_awesome</mat-icon>
+        <h2>Oficina Inteligente</h2>
+        <span class="bar-subtitle">Nada se crea sin tu confirmación</span>
+        <span class="bar-spacer"></span>
+        <button mat-icon-button type="button" aria-label="Preferencias del asistente" matTooltip="Preferencias del asistente" (click)="showPreferences = !showPreferences"><mat-icon>tune</mat-icon></button>
+        @if (isAdministrator) {
+          <a mat-icon-button class="provider-link" routerLink="/administracion/configuracion-ia" aria-label="Configuración del proveedor" matTooltip="Configuración del proveedor"><mat-icon>settings</mat-icon></a>
+        }
+      </header>
 
       @if (pageError) { <p class="banner error" role="alert"><mat-icon>error_outline</mat-icon>{{ pageError }}</p> }
       @if (pageMessage) { <p class="banner notice" role="status"><mat-icon>check_circle</mat-icon>{{ pageMessage }}</p> }
 
-      <div class="workspace">
-        <mat-card class="history-panel">
-          <button mat-flat-button color="primary" class="new-button" type="button" (click)="newConversation()" [disabled]="busy"><mat-icon>add</mat-icon> Nueva conversación</button>
-          <h3 class="history-title">Conversaciones</h3>
-          <input class="history-search" type="search" name="search" [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Buscar conversaciones…" aria-label="Buscar conversaciones" maxlength="100" />
-          @if (loadingList) { <mat-spinner diameter="28" aria-label="Cargando conversaciones" /> }
-          <div class="conversation-list">
-            @for (item of conversations; track item.id) {
-              <div class="conversation-row" [class.selected]="item.id === activeConversation?.id">
-                <button type="button" class="conversation-item" (click)="open(item)" [disabled]="busy">
-                  <mat-icon class="conversation-icon">{{ item.isPinned ? 'push_pin' : 'chat_bubble_outline' }}</mat-icon>
-                  <span class="conversation-body">
-                    <span class="conversation-title">{{ item.title }}</span>
-                    <span class="conversation-meta">{{ item.updatedAtUtc | date:'dd/MM HH:mm' }} · {{ item.messageCount }} mensajes</span>
-                  </span>
-                </button>
-                <button type="button" class="pin-button" [class.pinned]="item.isPinned" [attr.aria-label]="item.isPinned ? 'Desfijar conversación' : 'Fijar conversación'"
-                  [matTooltip]="item.isPinned ? 'Desfijar' : 'Fijar arriba'" (click)="togglePin(item)" [disabled]="busy"><mat-icon>push_pin</mat-icon></button>
-              </div>
-            } @empty { @if (!loadingList) { <p class="muted empty-history">{{ search.trim() ? 'No hay conversaciones que coincidan.' : 'Todavía no hay conversaciones. Escribí tu primera consulta a la derecha.' }}</p> } }
-          </div>
-          @if (conversations.length < totalConversations) { <button mat-button type="button" (click)="loadMoreConversations()" [disabled]="loadingList || busy">Cargar más</button> }
-        </mat-card>
+      <div class="workspace" [class.with-history]="showHistory">
+        @if (showHistory) {
+          @if (isNarrow) { <div class="drawer-backdrop" (click)="toggleHistory()" aria-hidden="true"></div> }
+          <app-ai-conversation-list id="ai-conversations" class="history-panel" [conversations]="conversations" [activeId]="activeConversation?.id"
+            [loading]="loadingList" [busy]="busy" [total]="totalConversations" [search]="search"
+            (open)="openFromList($event)" (newConversation)="newConversation()" (togglePin)="togglePin($event)"
+            (searchChange)="search = $event; onSearchChange()" (loadMore)="loadMoreConversations()" (closed)="toggleHistory()" />
+        }
 
-        <mat-card class="chat-panel">
+        <div class="chat-panel">
           <div class="chat-header">
-            <div class="chat-heading">
-              @if (renaming && activeConversation) {
-                <input class="rename-input" name="title" [(ngModel)]="titleDraft" maxlength="120" aria-label="Nuevo título" (keydown.enter)="saveTitle()" (keydown.escape)="renaming = false" (blur)="saveTitle()" />
-              } @else {
-                <h3>
-                  {{ activeConversation?.title ?? 'Nueva conversación' }}
-                  @if (activeConversation) { <button type="button" class="rename-button" aria-label="Renombrar conversación" matTooltip="Renombrar" (click)="startRename()"><mat-icon>edit</mat-icon></button> }
-                </h3>
-              }
-              <p class="muted">Las conversaciones se conservan hasta que las elimines.</p>
-            </div>
-            <div class="chat-actions">
-              <button mat-icon-button type="button" class="preferences-button" aria-label="Preferencias del asistente" matTooltip="Preferencias del asistente" (click)="showPreferences = !showPreferences"><mat-icon>tune</mat-icon></button>
+            @if (renaming && activeConversation) {
+              <input class="rename-input" name="title" [(ngModel)]="titleDraft" maxlength="120" aria-label="Nuevo título" (keydown.enter)="saveTitle()" (keydown.escape)="renaming = false" (blur)="saveTitle()" />
+            } @else {
+              <h3>{{ activeConversation?.title ?? 'Nueva conversación' }}</h3>
               @if (activeConversation) {
-                <button mat-icon-button type="button" class="delete-button" aria-label="Eliminar conversación" matTooltip="Eliminar conversación" (click)="deleteConversation()" [disabled]="busy"><mat-icon>delete_outline</mat-icon></button>
+                <button mat-icon-button type="button" class="small-icon" aria-label="Renombrar conversación" matTooltip="Renombrar" (click)="startRename()"><mat-icon>edit</mat-icon></button>
+                <button mat-icon-button type="button" class="small-icon delete-button" aria-label="Eliminar conversación" matTooltip="Eliminar conversación" (click)="deleteConversation()" [disabled]="busy"><mat-icon>delete_outline</mat-icon></button>
               }
-            </div>
+            }
           </div>
-          @if (showPreferences) { <app-ai-preferences (closed)="showPreferences = false" /> }
-
+          @if (showPreferences) { <div class="thread-width"><app-ai-preferences (closed)="showPreferences = false" /></div> }
           @if (chatError) {
-            <div class="banner error" role="alert">
+            <div class="banner error thread-width" role="alert">
               <mat-icon>error_outline</mat-icon><span>{{ chatError }}</span>
               @if (hasPendingRequest) { <button mat-button type="button" (click)="retryAsNewRun()" [disabled]="busy">Reintentar</button> }
             </div>
           }
 
           <div class="messages" #messageList aria-live="polite">
-            @if (activeConversation && messages.length < activeConversation.messageCount) { <p class="muted history-note">Se muestran los últimos 200 mensajes de {{ activeConversation.messageCount }}.</p> }
-            @for (message of messages; track message.id) {
-              <article class="message" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
-                @if (message.role === 'assistant') { <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div> }
-                <div class="bubble">
-                  <div class="message-label">
-                    <span>{{ message.role === 'user' ? 'Vos' : 'Oficina Inteligente' }}</span>
-                    <time [attr.title]="message.traceId ? 'Seguimiento ' + message.traceId : null">{{ message.createdAtUtc | date:'dd/MM HH:mm' }}</time>
-                  </div>
-                  @if (message.role === 'assistant') {
-                    <div class="message-content markdown" [innerHTML]="renderMarkdown(message.content)"></div>
-                  } @else {
-                    <p class="message-content">{{ message.content }}</p>
-                  }
-                  @if (actionableCount(message) > 1) {
-                    <div class="batch-bar">
-                      <span>{{ actionableCount(message) }} acciones listas</span>
-                      <button mat-flat-button color="primary" type="button" class="confirm-all" (click)="confirmAll(message)" [disabled]="busy || !!actionInProgress">
-                        @if (actionInProgress === message.id) { <mat-spinner diameter="16" /> } @else { <mat-icon>done_all</mat-icon> }
-                        Confirmar todas
-                      </button>
+            <div class="thread">
+              @if (activeConversation && messages.length < activeConversation.messageCount) { <p class="muted history-note">Se muestran los últimos 200 mensajes de {{ activeConversation.messageCount }}.</p> }
+              @for (message of messages; track message.id) {
+                <article class="message" [class.user-message]="message.role === 'user'" [class.assistant-message]="message.role === 'assistant'">
+                  @if (message.role === 'assistant') { <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div> }
+                  <div class="bubble">
+                    <div class="message-label">
+                      <span>{{ message.role === 'user' ? 'Vos' : 'Oficina Inteligente' }}</span>
+                      <time [attr.title]="message.traceId ? 'Seguimiento ' + message.traceId : null">{{ message.createdAtUtc | date:'dd/MM HH:mm' }}</time>
                     </div>
-                  }
-                  @for (action of message.pendingActions ?? []; track action.id) {
-                    <app-ai-action-card [action]="action" [disabled]="busy || !!actionInProgress" [inProgress]="actionInProgress === action.id"
-                      (confirm)="confirmAction($event)" (cancel)="cancelAction($event)" (undo)="undoAction($event)" />
-                  }
-                  @if (message.sources.length) {
-                    <div class="sources">
-                      <span class="sources-title"><mat-icon>verified</mat-icon> Fuentes</span>
-                      @for (source of message.sources; track $index) {
-                        @if (source.link) {
-                          <a class="source-chip" [href]="source.link" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</a>
-                        } @else {
-                          <span class="source-chip" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</span>
+                    @if (message.role === 'assistant') {
+                      <div class="message-content markdown" [innerHTML]="renderMarkdown(message.content)"></div>
+                    } @else {
+                      <p class="message-content">{{ message.content }}</p>
+                    }
+                    @if (actionableCount(message) > 1) {
+                      <div class="batch-bar">
+                        <span>{{ actionableCount(message) }} acciones listas</span>
+                        <button mat-flat-button color="primary" type="button" class="confirm-all" (click)="confirmAll(message)" [disabled]="busy || !!actionInProgress">
+                          @if (actionInProgress === message.id) { <mat-spinner diameter="16" /> } @else { <mat-icon>done_all</mat-icon> }
+                          Confirmar todas
+                        </button>
+                      </div>
+                    }
+                    @for (action of message.pendingActions ?? []; track action.id) {
+                      <app-ai-action-card [action]="action" [disabled]="busy || !!actionInProgress" [inProgress]="actionInProgress === action.id"
+                        (confirm)="confirmAction($event)" (cancel)="cancelAction($event)" (undo)="undoAction($event)" />
+                    }
+                    @if (message.sources.length) {
+                      <div class="sources">
+                        <span class="sources-title"><mat-icon>verified</mat-icon> Fuentes</span>
+                        @for (source of message.sources; track $index) {
+                          @if (source.link) {
+                            <a class="source-chip" [href]="source.link" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</a>
+                          } @else {
+                            <span class="source-chip" [attr.title]="sourceDetail(source)">{{ sourceLabel(source) }}</span>
+                          }
                         }
+                      </div>
+                    } @else if (message.role === 'assistant' && message.grounded === false) {
+                      <p class="ungrounded" matTooltip="Esta respuesta no consultó datos de Kodvian."><mat-icon>info_outline</mat-icon> Sin datos consultados</p>
+                    }
+                    @if (message.role === 'assistant') { <app-ai-message-extras [message]="message" (rate)="rate(message, $event)" /> }
+                  </div>
+                </article>
+              } @empty {
+                @if (!pendingContent) {
+                  <div class="empty-chat">
+                    @if (briefing) { <app-ai-briefing [briefing]="briefing" (ask)="useFollowup($event)" /> }
+                    <h4><mat-icon>auto_awesome</mat-icon> ¿En qué te ayudo hoy?</h4>
+                    <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas, o pedime que agende algo. Las acciones esperan tu confirmación.</p>
+                    <div class="suggestions">
+                      @for (suggestion of suggestions; track suggestion.text) {
+                        <button type="button" class="suggestion" (click)="useSuggestion(suggestion)" [disabled]="busy">
+                          <mat-icon>{{ suggestion.icon }}</mat-icon><span>{{ suggestion.text }}</span>
+                        </button>
                       }
                     </div>
-                  } @else if (message.role === 'assistant' && message.grounded === false) {
-                    <p class="ungrounded" matTooltip="Esta respuesta no consultó datos de Kodvian.">
-                      <mat-icon>info_outline</mat-icon> Sin datos consultados
-                    </p>
-                  }
-                  @if (message.role === 'assistant') { <app-ai-message-extras [message]="message" (rate)="rate(message, $event)" /> }
-                </div>
-              </article>
-            } @empty {
-              @if (!pendingContent) {
-                <div class="empty-chat">
-                  @if (briefing) { <app-ai-briefing [briefing]="briefing" (ask)="useFollowup($event)" /> }
-                  <div class="empty-icon"><mat-icon>auto_awesome</mat-icon></div>
-                  <h4>¿En qué te ayudo hoy?</h4>
-                  <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas, o pedime que agende algo. Cada respuesta indica de dónde salió el dato y las acciones esperan tu confirmación.</p>
-                  <div class="suggestions">
-                    @for (suggestion of suggestions; track suggestion.text) {
-                      <button type="button" class="suggestion" (click)="useSuggestion(suggestion)" [disabled]="busy">
-                        <mat-icon>{{ suggestion.icon }}</mat-icon><span>{{ suggestion.text }}</span>
-                      </button>
-                    }
                   </div>
+                }
+              }
+              @if (pendingContent) {
+                <article class="message user-message pending">
+                  <div class="bubble">
+                    <div class="message-label"><span>Vos</span></div>
+                    <p class="message-content">{{ pendingContent }}</p>
+                  </div>
+                </article>
+                <article class="message assistant-message">
+                  <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
+                  @if (visibleStreamingText) {
+                    <div class="bubble streaming">
+                      <div class="message-label"><span>Oficina Inteligente</span></div>
+                      <div class="message-content markdown" [innerHTML]="renderMarkdown(visibleStreamingText)"></div>
+                      <span class="stream-cursor" aria-hidden="true"></span>
+                    </div>
+                  } @else {
+                    <div class="bubble thinking" role="status">
+                      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                      <span class="progress-label">{{ progressLabel || 'Pensando…' }}</span>
+                    </div>
+                  }
+                </article>
+              }
+              @if (!busy && lastAssistantSuggestions.length) {
+                <div class="followups" aria-label="Sugerencias para seguir">
+                  @for (suggestion of lastAssistantSuggestions; track suggestion) {
+                    <button type="button" class="followup" (click)="useFollowup(suggestion)"><mat-icon>subdirectory_arrow_right</mat-icon>{{ suggestion }}</button>
+                  }
                 </div>
               }
-            }
-            @if (pendingContent) {
-              <article class="message user-message pending">
-                <div class="bubble">
-                  <div class="message-label"><span>Vos</span></div>
-                  <p class="message-content">{{ pendingContent }}</p>
-                </div>
-              </article>
-              <article class="message assistant-message">
-                <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
-                @if (visibleStreamingText) {
-                  <div class="bubble streaming">
-                    <div class="message-label"><span>Oficina Inteligente</span></div>
-                    <div class="message-content markdown" [innerHTML]="renderMarkdown(visibleStreamingText)"></div>
-                    <span class="stream-cursor" aria-hidden="true"></span>
-                  </div>
-                } @else {
-                  <div class="bubble thinking" role="status">
-                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                    <span class="progress-label">{{ progressLabel || 'Pensando…' }}</span>
-                  </div>
-                }
-              </article>
-            }
-            @if (!busy && lastAssistantSuggestions.length) {
-              <div class="followups" aria-label="Sugerencias para seguir">
-                @for (suggestion of lastAssistantSuggestions; track suggestion) {
-                  <button type="button" class="followup" (click)="useFollowup(suggestion)"><mat-icon>subdirectory_arrow_right</mat-icon>{{ suggestion }}</button>
-                }
-              </div>
-            }
+            </div>
           </div>
 
           <form class="composer" (ngSubmit)="send()">
-            <div class="composer-box" [class.disabled]="busy">
-              <textarea #composerInput name="message" [(ngModel)]="draft" maxlength="4000" rows="2" [disabled]="busy" (keydown)="onComposerKeydown($event)"
+            <div class="composer-box thread-width" [class.disabled]="busy">
+              <textarea #composerInput name="message" [(ngModel)]="draft" maxlength="4000" rows="1" [disabled]="busy" (keydown)="onComposerKeydown($event)" (input)="autoGrow()"
                 aria-label="Escribí tu consulta" placeholder="Escribí tu consulta…"></textarea>
               <app-ai-voice-button [disabled]="busy" (transcript)="onVoice($event)" (failed)="chatError = $event" />
               <button mat-flat-button color="primary" class="send-button" type="submit" [disabled]="busy || !draft.trim()" aria-label="Consultar">
                 @if (busy && pendingContent) { <mat-spinner diameter="18" /> } @else { <mat-icon>send</mat-icon> }
-                <span>Consultar</span>
+                <span class="send-label">Consultar</span>
               </button>
             </div>
-            <div class="composer-hint"><span>Enter para enviar · Shift + Enter para nueva línea</span><span>{{ draft.length }} / 4000</span></div>
+            <div class="composer-hint thread-width"><span>Enter para enviar · Shift + Enter para nueva línea</span><span>{{ draft.length }} / 4000</span></div>
           </form>
-        </mat-card>
+        </div>
       </div>
     </section>
   `,
   styles: [`
-    .office-page { display: grid; gap: 12px; min-width: 0; }
-    .hero-card, .history-panel, .chat-panel { border: 1px solid var(--kd-border-subtle); border-radius: 16px; background: linear-gradient(180deg, rgba(17,26,36,.94), rgba(13,21,30,.98)); color: var(--text-100); }
+    :host { display: block; }
     mat-icon { flex-shrink: 0; }
-
-    .hero-card { display: flex; flex-direction: row; align-items: center; gap: 16px; padding: 18px 20px; }
-    .hero-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; color: var(--brand-300); background: rgba(34, 197, 94, .1); border: 1px solid rgba(34, 197, 94, .25); }
-    .hero-icon mat-icon { width: 28px; height: 28px; font-size: 28px; }
-    .hero-text { flex: 1; min-width: 0; }
-    .eyebrow { margin: 0 0 2px; color: var(--brand-300); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; }
-    h2 { margin: 0; color: var(--text-100); font-size: 24px; line-height: 1.2; }
-    .hero-subtitle { margin: 4px 0 0; color: var(--text-300); font-size: 13px; }
-    .provider-link { flex-shrink: 0; }
-
-    .banner { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+    .office-page { display: flex; flex-direction: column; gap: 8px; height: calc(100dvh - 120px); min-height: 460px; min-width: 0; }
+    .office-bar { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-100); }
+    .office-bar h2 { margin: 0; font-size: 17px; white-space: nowrap; }
+    .spark { color: var(--brand-300); }
+    .bar-subtitle { overflow: hidden; color: var(--text-300); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-spacer { flex: 1; }
+    .office-bar button, .office-bar a { color: var(--text-300); }
+    .banner { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; box-sizing: border-box; }
     .banner span { flex: 1; }
     .error { color: #ffb4b4; background: rgba(255, 99, 99, .08); border: 1px solid rgba(255, 99, 99, .25); }
     .notice { color: var(--brand-300); background: rgba(34, 197, 94, .08); border: 1px solid rgba(34, 197, 94, .25); }
-
-    .workspace { display: grid; grid-template-columns: minmax(220px, 280px) minmax(0, 1fr); gap: 12px; height: calc(100vh - 290px); min-height: 520px; }
-    .history-panel { display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; }
-    .new-button { width: 100%; }
-    .history-title { margin: 6px 4px 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-300); }
-    .conversation-list { display: grid; align-content: start; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
-    .conversation-item { display: flex; flex: 1; min-width: 0; align-items: flex-start; gap: 10px; padding: 9px 10px; text-align: left; color: var(--text-100); background: transparent; border: 0; border-radius: 10px; cursor: pointer; font: inherit; }
-    .conversation-item:hover:not(:disabled) { background: rgba(255,255,255,.04); }
-    .conversation-row { display: flex; align-items: center; border: 1px solid transparent; border-radius: 10px; }
-    .conversation-row.selected { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .08); }
-    .pin-button { display: grid; place-items: center; width: 28px; height: 28px; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-300); cursor: pointer; opacity: 0; }
-    .conversation-row:hover .pin-button, .pin-button.pinned, .pin-button:focus-visible { opacity: 1; }
-    .pin-button.pinned { color: var(--brand-300); }
-    .pin-button mat-icon, .rename-button mat-icon { width: 16px; height: 16px; font-size: 16px; }
-    .history-search, .rename-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--kd-border-subtle); background: rgba(0,0,0,.2); color: var(--text-100); font: inherit; font-size: 13px; }
-    .rename-button { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--text-300); cursor: pointer; vertical-align: middle; }
-    .conversation-item:disabled { cursor: default; }
-    .conversation-icon { width: 18px; height: 18px; font-size: 18px; margin-top: 1px; color: var(--text-300); }
-    .conversation-row.selected .conversation-icon { color: var(--brand-300); }
-    .conversation-body { display: grid; gap: 3px; min-width: 0; }
-    .conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-    .conversation-meta { color: var(--text-300); font-size: 11px; }
-    .empty-history { margin: 4px; font-size: 13px; }
-
-    .chat-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 0; overflow: hidden; }
-    .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--kd-border-subtle); }
-    .chat-heading { min-width: 0; }
-    .chat-heading h3 { margin: 0; font-size: 15px; color: var(--text-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .chat-heading p { margin: 3px 0 0; font-size: 12px; }
-    .chat-actions { display: flex; gap: 2px; flex-shrink: 0; }
-    .delete-button, .preferences-button { color: var(--text-300); }
-    .delete-button:hover { color: #ffb4b4; }
-    .chat-panel > .banner { margin: 12px 18px 0; }
     .muted { color: var(--text-300); }
 
-    .messages { display: flex; flex: 1; flex-direction: column; gap: 16px; min-height: 0; padding: 18px; overflow-y: auto; scroll-behavior: smooth; }
+    .workspace { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; flex: 1; min-height: 0; }
+    .workspace.with-history { grid-template-columns: 260px minmax(0, 1fr); }
+    .history-panel, .chat-panel { border: 1px solid var(--kd-border-subtle); border-radius: 16px; background: linear-gradient(180deg, rgba(17,26,36,.94), rgba(13,21,30,.98)); color: var(--text-100); min-height: 0; }
+    .chat-panel { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    .chat-header { display: flex; align-items: center; gap: 2px; min-height: 48px; padding: 4px 10px 4px 18px; border-bottom: 1px solid var(--kd-border-subtle); }
+    .chat-header h3 { margin: 0 6px 0 0; overflow: hidden; color: var(--text-100); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+    .small-icon { color: var(--text-300); transform: scale(.85); }
+    .delete-button:hover { color: #ffb4b4; }
+    .rename-input { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--kd-border-subtle); background: rgba(0,0,0,.2); color: var(--text-100); font: inherit; font-size: 13px; }
+    .thread-width, .thread { width: 100%; max-width: 900px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+    .chat-panel > .thread-width { margin-top: 10px; padding: 0 16px; }
+    .chat-panel > .banner.thread-width { width: calc(100% - 32px); padding: 8px 12px; }
+
+    .messages { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; padding: 18px 16px; }
+    .thread { display: flex; flex-direction: column; gap: 18px; }
     .history-note { align-self: center; margin: 0; font-size: 12px; }
-    .message { display: flex; gap: 10px; max-width: min(820px, 88%); }
-    .user-message { align-self: flex-end; }
-    .assistant-message { align-self: flex-start; }
+    .message { display: flex; gap: 10px; min-width: 0; }
+    .user-message { align-self: flex-end; max-width: 78%; }
+    .assistant-message { align-self: stretch; }
+    .assistant-message .bubble { flex: 1; }
     .avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; color: var(--brand-300); background: rgba(34, 197, 94, .12); }
     .avatar mat-icon { width: 17px; height: 17px; font-size: 17px; }
     .bubble { min-width: 0; padding: 10px 14px; border-radius: 14px; overflow-wrap: anywhere; }
@@ -299,75 +257,72 @@ interface Suggestion {
     .assistant-message .bubble { background: rgba(255,255,255,.035); border: 1px solid var(--kd-border-subtle); border-top-left-radius: 4px; }
     .pending .bubble { opacity: .75; }
     .message-label { display: flex; justify-content: space-between; gap: 16px; color: var(--text-300); font-size: 11px; font-weight: 600; }
-    time { color: var(--text-300); font-size: 11px; font-weight: 400; }
-    .message-content { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.55; font-size: 14px; color: var(--text-100); }
+    time { font-weight: 400; }
+    .message-content { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.6; font-size: 14.5px; color: var(--text-100); }
+    .message-content.markdown { white-space: normal; }
+    .markdown ::ng-deep :is(p, ul, ol) { margin: 0 0 8px; }
+    .markdown ::ng-deep > :last-child { margin-bottom: 0; }
+    .markdown ::ng-deep :is(ul, ol) { padding-left: 20px; }
+    .markdown ::ng-deep .md-heading { margin-top: 4px; font-weight: 700; }
+    .markdown ::ng-deep code { padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,.07); font-size: 12.5px; }
+    .markdown ::ng-deep .md-table { overflow-x: auto; margin: 4px 0 8px; }
+    .markdown ::ng-deep table { border-collapse: collapse; font-size: 13px; }
+    .markdown ::ng-deep :is(th, td) { padding: 5px 10px; border: 1px solid var(--kd-border-subtle); text-align: left; white-space: nowrap; }
+    .markdown ::ng-deep th { color: var(--text-300); background: rgba(255,255,255,.03); }
     .sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--kd-border-subtle); }
-    .sources-title { display: inline-flex; align-items: center; gap: 4px; color: var(--text-300); font-size: 11px; font-weight: 600; }
-    .sources-title mat-icon { width: 14px; height: 14px; font-size: 14px; color: var(--brand-300); }
+    .sources-title, .ungrounded { display: inline-flex; align-items: center; gap: 4px; color: var(--text-300); font-size: 11px; }
+    .sources-title mat-icon, .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
+    .sources-title mat-icon { color: var(--brand-300); }
+    .ungrounded { margin: 8px 0 0; }
     .source-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; color: var(--text-100); background: rgba(255,255,255,.05); border: 1px solid var(--kd-border-subtle); text-decoration: none; }
     a.source-chip { color: var(--brand-300); }
-    a.source-chip:hover { border-color: rgba(34, 197, 94, .45); }
-    .markdown :is(p, ul, ol) { margin: 0 0 8px; }
-    .markdown > :last-child { margin-bottom: 0; }
-    .markdown :is(ul, ol) { padding-left: 20px; }
-    .markdown li { margin: 2px 0; }
-    .markdown .md-heading { margin-top: 4px; font-weight: 700; }
-    .markdown code { padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,.07); font-size: 12.5px; }
-    .markdown .md-table { overflow-x: auto; margin: 4px 0 8px; }
-    .markdown table { border-collapse: collapse; font-size: 13px; }
-    .markdown :is(th, td) { padding: 5px 10px; border: 1px solid var(--kd-border-subtle); text-align: left; white-space: nowrap; }
-    .markdown th { color: var(--text-300); font-weight: 600; background: rgba(255,255,255,.03); }
-    .assistant-message .message-content.markdown { white-space: normal; }
-
-
     .batch-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 13px; background: rgba(34, 197, 94, .08); }
-    .batch-bar mat-spinner { display: inline-block; margin-right: 6px; }
-    .ungrounded { display: inline-flex; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--text-300); font-size: 11px; }
-    .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
+    .batch-bar mat-spinner, .send-button mat-spinner { display: inline-block; margin-right: 6px; }
 
-    .thinking { display: flex; align-items: center; gap: 5px; padding: 14px 16px; }
+    .thinking { display: flex; align-items: center; gap: 5px; align-self: flex-start; padding: 14px 16px; }
     .progress-label { margin-left: 6px; color: var(--text-300); font-size: 12px; }
     .stream-cursor { display: inline-block; width: 7px; height: 14px; margin-top: 4px; background: var(--brand-300); animation: blink 1s infinite; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-300); animation: blink 1.2s infinite ease-in-out; }
+    .dot:nth-child(2) { animation-delay: .2s; }
+    .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
     .followups { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 40px; }
     .followup { display: inline-flex; align-items: center; gap: 4px; padding: 6px 11px; border-radius: 999px; font: inherit; font-size: 12px; color: var(--brand-300); background: rgba(34, 197, 94, .06); border: 1px solid rgba(34, 197, 94, .3); cursor: pointer; }
     .followup:hover { background: rgba(34, 197, 94, .12); }
     .followup mat-icon { width: 15px; height: 15px; font-size: 15px; }
-    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-300); animation: blink 1.2s infinite ease-in-out; }
-    .dot:nth-child(2) { animation-delay: .2s; }
-    .dot:nth-child(3) { animation-delay: .4s; }
-    @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
-    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-    .empty-chat { display: flex; flex-direction: column; align-items: center; margin: auto; max-width: 620px; text-align: center; }
-    .empty-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 12px; border-radius: 50%; color: var(--brand-300); background: rgba(34, 197, 94, .1); }
-    .empty-icon mat-icon { width: 28px; height: 28px; font-size: 28px; }
-    .empty-chat h4 { margin: 0; font-size: 18px; color: var(--text-100); }
-    .empty-chat > p { margin: 6px 0 18px; font-size: 13px; }
-    .suggestions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
-    .suggestion { display: flex; align-items: center; gap: 10px; padding: 11px 12px; text-align: left; font: inherit; font-size: 13px; color: var(--text-100); background: rgba(255,255,255,.03); border: 1px solid var(--kd-border-subtle); border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+    .empty-chat { display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .empty-chat h4 { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 18px; color: var(--text-100); }
+    .empty-chat h4 mat-icon { color: var(--brand-300); }
+    .empty-chat > p { margin: 6px 0 16px; font-size: 13px; }
+    .suggestions { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; width: 100%; }
+    .suggestion { display: flex; align-items: center; gap: 10px; padding: 11px 12px; text-align: left; font: inherit; font-size: 13px; color: var(--text-100); background: rgba(255,255,255,.03); border: 1px solid var(--kd-border-subtle); border-radius: 12px; cursor: pointer; }
     .suggestion:hover:not(:disabled) { border-color: rgba(34, 197, 94, .45); background: rgba(34, 197, 94, .06); }
-    .suggestion mat-icon { width: 20px; height: 20px; font-size: 20px; color: var(--brand-300); }
+    .suggestion mat-icon { color: var(--brand-300); }
 
-    .composer { padding: 12px 18px 14px; border-top: 1px solid var(--kd-border-subtle); }
-    .composer-box { display: flex; align-items: flex-end; gap: 10px; padding: 8px 8px 8px 14px; border: 1px solid var(--kd-border-subtle); border-radius: 14px; background: rgba(0,0,0,.18); transition: border-color .15s; }
+    .composer { padding: 10px 16px 12px; border-top: 1px solid var(--kd-border-subtle); }
+    .composer-box { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border: 1px solid var(--kd-border-subtle); border-radius: 14px; background: rgba(0,0,0,.18); }
     .composer-box:focus-within { border-color: rgba(34, 197, 94, .55); }
     .composer-box.disabled { opacity: .7; }
-    .composer-box textarea { flex: 1; min-height: 40px; max-height: 160px; padding: 9px 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text-100); font: inherit; font-size: 14px; line-height: 1.45; field-sizing: content; }
+    .composer-box textarea { flex: 1; min-height: 40px; max-height: 200px; padding: 9px 0; resize: none; border: 0; outline: 0; background: transparent; color: var(--text-100); font: inherit; font-size: 14.5px; line-height: 1.45; field-sizing: content; box-sizing: border-box; }
     .composer-box textarea::placeholder { color: var(--text-300); }
     .send-button { flex-shrink: 0; height: 40px; border-radius: 10px; }
     .send-button:disabled { background: rgba(255,255,255,.06) !important; color: var(--text-300) !important; }
-    .send-button mat-spinner { display: inline-block; margin-right: 6px; }
-    .composer-hint { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; padding: 0 4px; color: var(--text-300); font-size: 11px; }
+    .composer-hint { display: flex; justify-content: space-between; gap: 12px; margin-top: 5px; padding: 0 4px; color: var(--text-300); font-size: 11px; }
 
+    @media (max-width: 900px) {
+      .workspace.with-history { grid-template-columns: minmax(0, 1fr); }
+      .drawer-backdrop { position: absolute; inset: 0; z-index: 5; border-radius: 16px; background: rgba(4, 8, 12, .55); }
+      .history-panel { position: absolute; z-index: 6; top: 0; bottom: 0; left: 0; width: min(300px, 86%); box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+    }
     @media (max-width: 760px) {
-      .hero-card { flex-wrap: wrap; }
-      .provider-link { width: 100%; }
-      .workspace { grid-template-columns: 1fr; height: auto; }
-      .history-panel { max-height: 240px; }
-      .messages { min-height: 360px; max-height: 60vh; }
-      .message { max-width: 100%; }
-      .suggestions { grid-template-columns: 1fr; }
-      .composer-hint span:first-child { display: none; }
+      .office-page { height: calc(100dvh - 94px); }
+      .bar-subtitle, .send-label, .composer-hint span:first-child { display: none; }
+      .user-message { max-width: 90%; }
+      .avatar { display: none; }
+      .followups { margin-left: 0; }
+      .messages { padding: 12px 10px; }
+      .composer { padding: 8px 10px 10px; }
     }
   `]
 })
@@ -432,6 +387,36 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
 
   briefing: AiBriefing | null = null;
   showPreferences = false;
+  /** En pantallas chicas la lista de conversaciones es un panel desplegable. */
+  isNarrow = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
+  /** Lista de conversaciones visible; se recuerda entre visitas (en pantallas chicas arranca oculta). */
+  showHistory = !this.isNarrow && readHistoryPreference();
+
+  toggleHistory(): void {
+    this.showHistory = !this.showHistory;
+    if (!this.isNarrow) writeHistoryPreference(this.showHistory);
+  }
+
+  openFromList(conversation: AiConversation): void {
+    this.open(conversation);
+    if (this.isNarrow) this.showHistory = false;
+  }
+
+  /** Respaldo para navegadores sin field-sizing: el cuadro de texto crece con el contenido hasta 200 px. */
+  autoGrow(): void {
+    const input = this.composerInput?.nativeElement;
+    if (!input || CSS.supports?.('field-sizing', 'content')) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+  }
+
+  @HostListener('window:resize')
+  onResize(): void {
+    const narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
+    if (narrow === this.isNarrow) return;
+    this.isNarrow = narrow;
+    this.showHistory = !narrow && readHistoryPreference();
+  }
   search = '';
   renaming = false;
   titleDraft = '';
@@ -768,4 +753,14 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
       error: () => undefined
     });
   }
+}
+
+const HISTORY_KEY = 'kd.ai.historyOpen';
+
+function readHistoryPreference(): boolean {
+  try { return globalThis.localStorage?.getItem(HISTORY_KEY) !== 'false'; } catch { return true; }
+}
+
+function writeHistoryPreference(open: boolean): void {
+  try { globalThis.localStorage?.setItem(HISTORY_KEY, String(open)); } catch { /* sin almacenamiento disponible */ }
 }
