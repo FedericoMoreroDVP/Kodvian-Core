@@ -25,7 +25,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kodvian.Core.Infrastructure.Services;
 
-public sealed class AiToolCatalog(
+public sealed partial class AiToolCatalog(
     IClientService clients,
     IProjectService projects,
     ITaskService tasks,
@@ -43,6 +43,12 @@ public sealed class AiToolCatalog(
     private static readonly string[] MeetingStatuses = Enum.GetNames<MeetingStatus>();
     private static readonly string[] Priorities = ["Baja", "Media", "Alta", "Urgente"];
     private static readonly string[] NewTaskStatuses = ["Pendiente", "EnCurso"];
+    // Declarados acá (y no en los archivos parciales) para que estén inicializados antes que Definitions.
+    private static readonly string[] MovementTypes = ["Ingreso", "Egreso"];
+    private static readonly string[] MovementStatuses = ["Pendiente", "Cobrado", "Pagado", "Vencido", "Anulado"];
+    private static readonly string[] CurrencyOptions = ["ARS", "USD"];
+    private static readonly string[] PendingKinds = ["cobros", "pagos", "todos"];
+    private static readonly string[] DayScopes = ["todo", "mio"];
     private static readonly TimeZoneInfo BuenosAiresTimeZone = ResolveBuenosAiresTimeZone();
     private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-AR");
     private const string LocalDateTimePattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$";
@@ -63,6 +69,19 @@ public sealed class AiToolCatalog(
             [("from", DateSchema()), ("to", DateSchema()), ("projectId", GuidSchema()), ("status", EnumSchema(MeetingStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "people.list", Description = "Busca personas por nombre para asignar tareas o invitar a reuniones. Devuelve usuarios activos (sirven como responsable de tarea y como participantes de reunión) y desarrolladores activos (sirven como desarrollador asignado de una tarea). Solo id y nombre.", RequiredPermissions = [], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
+        new() { Name = "finance.list_movements", Description = "Lista movimientos financieros (ingresos y egresos) de un período de hasta 90 días, por defecto los últimos 30. Filtra por tipo, estado, moneda, cliente, proyecto o texto (descripción, cliente, proveedor o categoría). Devuelve totales por moneda y tipo de todo el filtro. Excluye anulados salvo que se pidan.", RequiredPermissions = [PermissionCodes.FinancesRead], Parameters = ObjectSchema(
+            [("from", DateSchema()), ("to", DateSchema()), ("type", EnumSchema(MovementTypes)), ("status", EnumSchema(MovementStatuses)), ("currency", EnumSchema(CurrencyOptions)),
+             ("search", StringSchema(100)), ("clientId", GuidSchema()), ("projectId", GuidSchema()), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
+        new() { Name = "finance.list_pending", Description = "Cobros y pagos pendientes o vencidos, ordenados por vencimiento, con días de atraso, totales por moneda (y cuánto está vencido) y receivablesByClient: cuánto debe cada cliente (sirve para \"¿quién me debe?\"). kind: cobros, pagos o todos.", RequiredPermissions = [PermissionCodes.FinancesRead], Parameters = ObjectSchema(
+            [("kind", EnumSchema(PendingKinds)), ("overdueOnly", BooleanSchema()), ("dueUntil", DateSchema()), ("currency", EnumSchema(CurrencyOptions)), ("clientId", GuidSchema()), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
+        new() { Name = "finance.compare_months", Description = "Compara ingresos, egresos y resultado por moneda entre dos meses (por defecto el actual contra el anterior), con variación porcentual y las categorías de gasto que más cambiaron.", RequiredPermissions = [PermissionCodes.FinancesRead], Parameters = ObjectSchema(
+            [("year", IntegerSchema(2000, 2100)), ("month", IntegerSchema(1, 12)), ("compareYear", IntegerSchema(2000, 2100)), ("compareMonth", IntegerSchema(1, 12))], []) },
+        new() { Name = "my_day.get", Description = "Arma el día: tareas que vencen y tareas atrasadas, reuniones del día (hora de Buenos Aires) y cobros/pagos que vencen o están vencidos. Por defecto hoy. scope: todo (toda la empresa) o mio (solo lo asignado al usuario). Usalo para \"¿qué tengo hoy?\".", RequiredPermissions = [], Parameters = ObjectSchema(
+            [("date", DateSchema()), ("scope", EnumSchema(DayScopes))], []) },
+        new() { Name = "projects.get", Description = "Ficha de un proyecto: estado, avance, fechas y días a la entrega, responsable, desarrolladores asignados, cantidad de tareas por estado, tareas atrasadas, próximas tareas, próximas reuniones y, con permiso de finanzas, cobrado/pagado y pendiente por moneda. Requiere projectId de projects.list.", RequiredPermissions = [PermissionCodes.ProjectsRead], Parameters = ObjectSchema(
+            [("projectId", GuidSchema())], ["projectId"]) },
+        new() { Name = "clients.get", Description = "Ficha de un cliente: estado, proyectos con avance, próximas reuniones y, con permiso de finanzas, saldo pendiente y vencido por moneda y fecha del último cobro. No incluye datos de contacto ni fiscales. Requiere clientId de clients.list.", RequiredPermissions = [PermissionCodes.ClientsRead], Parameters = ObjectSchema(
+            [("clientId", GuidSchema())], ["clientId"]) },
         new() { Name = "tasks.create", RequiresConfirmation = true, Description = "Prepara la creación de una tarea para que el usuario la confirme; no la crea. Requiere projectId (de projects.list) y title. Asigná con developerId (desarrollador de people.list) o responsibleUserId (usuario de people.list), no ambos. Fechas en yyyy-MM-dd.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
             [("projectId", GuidSchema()), ("title", StringSchema(200)), ("description", StringSchema(2000)), ("startDate", DateSchema()), ("dueDate", DateSchema()),
              ("priority", EnumSchema(Priorities)), ("status", EnumSchema(NewTaskStatuses)), ("developerId", GuidSchema()), ("responsibleUserId", GuidSchema())], ["projectId", "title"]) },
@@ -144,6 +163,12 @@ public sealed class AiToolCatalog(
                 "clients.list" => await ClientsAsync(arguments, now, cancellationToken),
                 "meetings.list" => await MeetingsAsync(actor, arguments, now, cancellationToken),
                 "people.list" => await PeopleAsync(arguments, now, cancellationToken),
+                "finance.list_movements" => await FinanceMovementsAsync(arguments, now, cancellationToken),
+                "finance.list_pending" => await FinancePendingAsync(arguments, now, cancellationToken),
+                "finance.compare_months" => await FinanceCompareAsync(arguments, now, cancellationToken),
+                "my_day.get" => await MyDayAsync(actor, arguments, now, cancellationToken),
+                "projects.get" => await ProjectDetailAsync(actor, arguments, now, cancellationToken),
+                "clients.get" => await ClientDetailAsync(actor, arguments, now, cancellationToken),
                 _ => throw new AiToolRejectedException("La herramienta solicitada no está habilitada.")
             }, cancellationToken);
 

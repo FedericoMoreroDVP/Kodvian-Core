@@ -200,6 +200,145 @@ public sealed class AiToolCatalogTests
         Assert.Equal("Juan Dev", output["developers"]![0]!["Name"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task PendingFinanceGroupsReceivablesByClientWithDaysOverdue()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone));
+        var category = new FinancialCategory { Name = "Servicios", MovementType = FinancialMovementType.Ingreso };
+        var acme = new Client { CommercialName = "Acme" };
+        var beta = new Client { CommercialName = "Beta" };
+        db.AddRange(category, acme, beta);
+        db.FinancialMovements.AddRange(
+            Movement(category, acme.Id, 1000, "ARS", FinancialMovementStatus.Pendiente, today.AddDays(-20)),
+            Movement(category, acme.Id, 500, "ARS", FinancialMovementStatus.Vencido, today.AddDays(-5)),
+            Movement(category, beta.Id, 300, "USD", FinancialMovementStatus.Pendiente, today.AddDays(10)),
+            Movement(category, beta.Id, 999, "ARS", FinancialMovementStatus.Cobrado, today.AddDays(-30)));
+        db.SaveChanges();
+
+        var result = await CreateCatalog(db).ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "finance.list_pending", new JsonObject { ["kind"] = "cobros" }, CancellationToken.None);
+        var output = result.Data["result"]!;
+
+        var byClient = output["receivablesByClient"]!.AsArray();
+        Assert.Equal("Acme", byClient[0]!["client"]!.GetValue<string>());
+        Assert.Equal(1500m, byClient[0]!["total"]!.GetValue<decimal>());
+        Assert.Equal(20, byClient[0]!["maxDaysOverdue"]!.GetValue<int>());
+        Assert.Equal(3, output["items"]!.AsArray().Count);
+        var ars = output["totals"]!.AsArray().Single(x => x!["Currency"]!.GetValue<string>() == "ARS");
+        Assert.Equal(1500m, ars!["overdue"]!.GetValue<decimal>());
+    }
+
+    [Fact]
+    public async Task MovementsCanBeSearchedAndReturnTotalsForTheWholeFilter()
+    {
+        await using var db = CreateDatabase();
+        var (actor, _) = SeedProject(db);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone));
+        var category = new FinancialCategory { Name = "Hosting", MovementType = FinancialMovementType.Egreso };
+        db.Add(category);
+        db.FinancialMovements.AddRange(
+            Movement(category, null, 100, "USD", FinancialMovementStatus.Pagado, today.AddDays(-2), FinancialMovementType.Egreso, "Servidor AWS"),
+            Movement(category, null, 50, "USD", FinancialMovementStatus.Pagado, today.AddDays(-3), FinancialMovementType.Egreso, "Dominio"),
+            Movement(category, null, 70, "USD", FinancialMovementStatus.Anulado, today.AddDays(-3), FinancialMovementType.Egreso, "Anulado"));
+        db.SaveChanges();
+
+        var result = await CreateCatalog(db).ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "finance.list_movements",
+            new JsonObject { ["search"] = "hosting", ["pageSize"] = 1 }, CancellationToken.None);
+        var output = result.Data["result"]!;
+
+        Assert.Single(output["items"]!.AsArray());
+        Assert.Equal(150m, output["totals"]![0]!["total"]!.GetValue<decimal>());
+        Assert.NotEmpty(result.Data["warnings"]!.AsArray());
+    }
+
+    [Fact]
+    public async Task CompareMonthsShowsChangeAndCategoryDifferences()
+    {
+        await using var db = CreateDatabase();
+        var (actor, _) = SeedProject(db);
+        var category = new FinancialCategory { Name = "Sueldos", MovementType = FinancialMovementType.Egreso };
+        db.Add(category);
+        db.FinancialMovements.AddRange(
+            Movement(category, null, 200, "ARS", FinancialMovementStatus.Pagado, new DateOnly(2026, 9, 10), FinancialMovementType.Egreso, settled: new DateOnly(2026, 9, 10)),
+            Movement(category, null, 300, "ARS", FinancialMovementStatus.Pagado, new DateOnly(2026, 10, 10), FinancialMovementType.Egreso, settled: new DateOnly(2026, 10, 10)));
+        db.SaveChanges();
+
+        var result = await CreateCatalog(db).ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "finance.compare_months",
+            new JsonObject { ["year"] = 2026, ["month"] = 10 }, CancellationToken.None);
+        var output = result.Data["result"]!;
+
+        Assert.Equal(9, output["comparedWith"]!["month"]!.GetValue<int>());
+        var ars = output["differences"]!.AsArray().Single(x => x!["currency"]!.GetValue<string>() == "ARS")!;
+        Assert.Equal(100m, ars["expense"]!["change"]!.GetValue<decimal>());
+        Assert.Equal(50m, ars["expense"]!["changePercent"]!.GetValue<decimal>());
+        Assert.Equal("Sueldos", output["expenseCategoryChanges"]![0]!["category"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task MyDayJoinsTasksMeetingsAndFinanceForToday()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone));
+        var category = new FinancialCategory { Name = "Servicios", MovementType = FinancialMovementType.Ingreso };
+        db.Add(category);
+        db.Tasks.AddRange(
+            new TaskItem { Titulo = "Hoy", ProyectoId = project.Id, CreadoPorId = actor.UserId, FechaVencimiento = today },
+            new TaskItem { Titulo = "Atrasada", ProyectoId = project.Id, CreadoPorId = actor.UserId, FechaVencimiento = today.AddDays(-3) },
+            new TaskItem { Titulo = "Terminada", ProyectoId = project.Id, CreadoPorId = actor.UserId, FechaVencimiento = today, Estado = Kodvian.Core.Domain.Enums.TaskStatus.Finalizada });
+        var noonUtc = TimeZoneInfo.ConvertTimeToUtc(today.ToDateTime(new TimeOnly(12, 0)), AiSystemPromptBuilder.BuenosAiresTimeZone);
+        db.Meetings.Add(new Meeting { ProyectoId = project.Id, CreadoPorId = actor.UserId, Titulo = "Daily", Inicio = noonUtc, Fin = noonUtc.AddMinutes(30) });
+        db.FinancialMovements.Add(Movement(category, null, 400, "ARS", FinancialMovementStatus.Pendiente, today));
+        db.SaveChanges();
+
+        var result = await CreateCatalog(db).ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "my_day.get", new JsonObject(), CancellationToken.None);
+        var output = result.Data["result"]!;
+
+        Assert.Equal("Hoy", output["tasksDueToday"]!.AsArray().Single()!["title"]!.GetValue<string>());
+        Assert.Equal(3, output["overdueTasks"]!.AsArray().Single()!["daysOverdue"]!.GetValue<int>());
+        Assert.Equal("12:00", output["meetings"]!.AsArray().Single()!["starts"]!.GetValue<string>());
+        Assert.Single(output["financeDueToday"]!.AsArray());
+    }
+
+    [Fact]
+    public async Task ProjectAndClientDetailsAggregateWithoutPrivateClientData()
+    {
+        await using var db = CreateDatabase();
+        var actor = AdminActor();
+        var client = new Client { CommercialName = "Cliente Visible", TaxId = "30-11111111-1", ContactEmail = "privado@example.test", Notes = "Nota secreta" };
+        var project = new Project { ClienteId = client.Id, Nombre = "Portal", PorcentajeAvance = 40, FechaEntregaEstimada = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(10) };
+        var category = new FinancialCategory { Name = "Servicios", MovementType = FinancialMovementType.Ingreso };
+        db.AddRange(client, project, category, new User { Id = actor.UserId, FullName = "Admin", Email = "admin@example.test" });
+        db.Tasks.Add(new TaskItem { Titulo = "Atrasada", ProyectoId = project.Id, CreadoPorId = actor.UserId, FechaVencimiento = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-4) });
+        var pending = Movement(category, client.Id, 800, "USD", FinancialMovementStatus.Pendiente, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1));
+        pending.ProjectId = project.Id;
+        db.FinancialMovements.Add(pending);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var projectResult = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "projects.get", new JsonObject { ["projectId"] = project.Id.ToString() }, CancellationToken.None);
+        var projectOutput = projectResult.Data["result"]!;
+        Assert.Equal(40, projectOutput["project"]!["progress"]!.GetValue<int>());
+        Assert.Single(projectOutput["overdueTasks"]!.AsArray());
+        Assert.Equal(800m, projectOutput["finance"]![0]!["pending"]!.GetValue<decimal>());
+
+        var clientResult = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "clients.get", new JsonObject { ["clientId"] = client.Id.ToString() }, CancellationToken.None);
+        var json = clientResult.Data.ToJsonString();
+        Assert.Contains("Portal", json);
+        Assert.DoesNotContain("30-11111111-1", json);
+        Assert.DoesNotContain("privado@example.test", json);
+        Assert.DoesNotContain("Nota secreta", json);
+        Assert.Equal(800m, clientResult.Data["result"]!["receivables"]![0]!["total"]!.GetValue<decimal>());
+    }
+
+    private static FinancialMovement Movement(FinancialCategory category, Guid? clientId, decimal amount, string currency, FinancialMovementStatus status, DateOnly date,
+        FinancialMovementType type = FinancialMovementType.Ingreso, string description = "Movimiento", DateOnly? settled = null) => new()
+    {
+        CategoryId = category.Id, ClientId = clientId, Amount = amount, Currency = currency, Status = status, MovementDate = date, DueDate = date,
+        MovementType = type, Description = description, CreatedById = Guid.NewGuid(), SettlementDate = settled
+    };
+
     private static (AiExecutionContext Actor, Project Project) SeedProject(KodvianDbContext db)
     {
         var actor = AdminActor();

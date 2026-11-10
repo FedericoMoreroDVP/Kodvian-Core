@@ -23,7 +23,13 @@ const SOURCE_LABELS: Record<string, string> = {
   'clients.list': 'Clientes',
   'meetings.list': 'Agenda',
   'meetings.create': 'Agenda',
-  'people.list': 'Equipo'
+  'people.list': 'Equipo',
+  'finance.list_movements': 'Movimientos',
+  'finance.list_pending': 'Cobros y pagos',
+  'finance.compare_months': 'Comparación mensual',
+  'my_day.get': 'Mi día',
+  'projects.get': 'Proyecto',
+  'clients.get': 'Cliente'
 };
 
 const ACTION_ICONS: Record<string, string> = {
@@ -386,12 +392,12 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
   private shouldScroll = false;
 
   readonly suggestions: Suggestion[] = [
-    { icon: 'event_busy', text: '¿Qué tareas vencen en los próximos siete días?' },
+    { icon: 'today', text: '¿Qué tengo hoy?' },
     { icon: 'add_task', text: 'Agendá una tarea para mañana en el proyecto ', prefill: true },
     { icon: 'calendar_month', text: '¿Qué reuniones tengo esta semana?' },
     { icon: 'event', text: 'Agendá una reunión el jueves a las 10 con ', prefill: true },
-    { icon: 'payments', text: 'Resumen de ingresos y egresos de este mes' },
-    { icon: 'folder_open', text: '¿Cómo vienen los proyectos activos?' }
+    { icon: 'compare_arrows', text: 'Compará los gastos de este mes con el anterior' },
+    { icon: 'request_quote', text: '¿Quién me debe?' }
   ];
 
   actionInProgress: string | null = null;
