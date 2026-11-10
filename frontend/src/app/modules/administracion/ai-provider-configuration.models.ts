@@ -2,6 +2,7 @@ export interface AiProviderConfiguration {
   isConfigured: boolean;
   provider: string;
   model: string | null;
+  fastModel?: string | null;
   apiKeyHint: string | null;
   isConnectionVerified: boolean;
   lastConnectionTestAtUtc: string | null;

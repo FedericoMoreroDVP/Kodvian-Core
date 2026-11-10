@@ -23,6 +23,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="AiEvals/evals.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Kodvian.Core.Application\Kodvian.Core.Application.csproj" />
     <ProjectReference Include="..\..\src\Kodvian.Core.Infrastructure\Kodvian.Core.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Kodvian.Core.Api\Kodvian.Core.Api.csproj" />

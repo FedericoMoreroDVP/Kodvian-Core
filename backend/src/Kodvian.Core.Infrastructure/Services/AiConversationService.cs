@@ -126,6 +126,7 @@ public sealed class AiConversationService(
             .Select(x => new { x.Id, x.Title, x.CreatedAtUtc, x.UpdatedAtUtc, MessageCount = x.Messages.Count })
             .SingleOrDefaultAsync(cancellationToken);
         if (conversation is null) return null;
+        await RecoverStaleActionsAsync(actor, conversationId, cancellationToken);
         var messages = await dbContext.AiMessages.AsNoTracking().Where(x => x.ConversationId == conversationId)
             .OrderByDescending(x => x.CreatedAtUtc).Take(200).OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
         var messageIds = messages.Select(x => x.Id).ToArray();
@@ -157,6 +158,12 @@ public sealed class AiConversationService(
         var provider = await providerConfiguration.GetAsync(cancellationToken);
         if (!provider.IsConfigured || !provider.IsConnectionVerified) throw new AiProviderUnavailableException("Configura y verifica el proveedor antes de usar la Oficina Inteligente.");
         if (!provider.LiveDataApproved) throw new AiLiveDataApprovalRequiredException();
+        // Tope de gasto mensual propio: con el 100% consumido el asistente queda pausado hasta el mes siguiente o hasta ampliar el tope.
+        var budget = await AiUsageService.GetBudgetStatusAsync(dbContext, cancellationToken);
+        if (budget.Level == "exceeded")
+            throw new AiProviderUnavailableException($"Se alcanzó el tope mensual de gasto en IA (USD {budget.MonthlyBudgetUsd:0.##}). Un Administrador puede ampliarlo en Uso de IA.");
+        var usageSettings = await AiUsageService.LoadSettingsAsync(dbContext, cancellationToken);
+        var tier = AiModelSelection.Choose(content, !string.IsNullOrWhiteSpace(provider.FastModel));
 
         var conversation = await dbContext.AiConversations.SingleOrDefaultAsync(
             x => x.Id == conversationId && x.OwnerUserId == actor.UserId, cancellationToken);
@@ -203,7 +210,7 @@ public sealed class AiConversationService(
             ActorUserId = actor.UserId,
             ClientRequestId = request.ClientRequestId,
             Provider = provider.Provider,
-            Model = provider.Model ?? string.Empty,
+            Model = (tier == AiModelTier.Fast ? provider.FastModel : provider.Model) ?? string.Empty,
             ProviderConfigurationVersion = provider.Version,
             StartedAtUtc = now,
             TraceId = Guid.NewGuid().ToString("N")
@@ -242,6 +249,7 @@ public sealed class AiConversationService(
             throw;
         }
 
+        using var modelScope = AiModelSelection.Use(tier);
         var sources = new List<AiSourceReferenceDto>();
         // Las propuestas se guardan recién al final, junto con el mensaje del asistente: si la ejecución falla no queda ninguna colgada.
         var pendingActions = new List<AiPendingAction>();
@@ -386,6 +394,7 @@ public sealed class AiConversationService(
                 VisualJson = visual?.ToJsonString(),
                 CreatedAtUtc = DateTime.UtcNow
             };
+            run.EstimatedCostUsd = AiUsageService.EstimateCost(usageSettings, tier, run.InputTokens, run.OutputTokens);
             run.Status = partial ? "Partial" : "Completed";
             run.ToolCallCount = toolCalls;
             run.FinishedAtUtc = DateTime.UtcNow;
@@ -409,6 +418,7 @@ public sealed class AiConversationService(
         }
         catch (Exception exception)
         {
+            run.EstimatedCostUsd = AiUsageService.EstimateCost(usageSettings, tier, run.InputTokens, run.OutputTokens);
             run.Status = exception is OperationCanceledException ? "Cancelled" : "Failed";
             run.FinishedAtUtc = DateTime.UtcNow;
             dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = run.Id, Decision = run.Status, ReasonCode = SafeReasonCode(exception), CreatedAtUtc = DateTime.UtcNow });
@@ -530,6 +540,7 @@ public sealed class AiConversationService(
     {
         // Se marca en ejecución antes de escribir: el token de concurrencia evita que dos confirmaciones creen la tarea dos veces.
         action.Status = "Executing";
+        action.ExecutionStartedAtUtc = DateTime.UtcNow;
         action.Version = Guid.NewGuid();
         try
         {
@@ -586,6 +597,38 @@ public sealed class AiConversationService(
         var value = pageContext?.Trim();
         if (string.IsNullOrEmpty(value) || value.Length > 120 || !value.StartsWith('/') || value.StartsWith("//", StringComparison.Ordinal)) return null;
         return value.All(c => char.IsLetterOrDigit(c) || c is '/' or '-' or '_') ? value : null;
+    }
+
+    internal static readonly TimeSpan StaleExecutionAfter = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Una acción que quedó "Procesando" (por ejemplo, se cayó el servidor a mitad de camino) no se puede reintentar
+    /// a ciegas porque no se sabe si llegó a escribir: se marca como no completada y se pide revisar la pantalla.
+    /// </summary>
+    private async Task RecoverStaleActionsAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken)
+    {
+        var cutoff = DateTime.UtcNow - StaleExecutionAfter;
+        var stale = await dbContext.AiPendingActions
+            .Where(x => x.ConversationId == conversationId && x.Status == "Executing" && (x.ExecutionStartedAtUtc == null || x.ExecutionStartedAtUtc < cutoff))
+            .ToListAsync(cancellationToken);
+        if (stale.Count == 0) return;
+        foreach (var action in stale)
+        {
+            action.Status = "Failed";
+            action.ResolvedAtUtc = DateTime.UtcNow;
+            action.ResultMessage = "No pude confirmar si se completó porque se cortó a mitad de camino. Revisá la pantalla correspondiente antes de volver a pedirla.";
+            action.Version = Guid.NewGuid();
+            dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = action.RunId, ToolName = action.ToolName, Decision = "Failed", ReasonCode = "stale_action_recovered", CreatedAtUtc = DateTime.UtcNow });
+        }
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Otra solicitud la resolvió al mismo tiempo: se deja como quedó.
+            foreach (var action in stale) dbContext.Entry(action).State = EntityState.Detached;
+        }
     }
 
     internal static readonly TimeSpan UndoWindow = TimeSpan.FromMinutes(15);

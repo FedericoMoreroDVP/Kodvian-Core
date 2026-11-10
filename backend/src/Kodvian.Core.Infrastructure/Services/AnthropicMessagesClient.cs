@@ -55,7 +55,7 @@ public sealed class AnthropicMessagesClient(
         var (system, messages) = ToAnthropicMessages(input);
         var parameters = new MessageCreateParams
         {
-            Model = settings.Model,
+            Model = AiModelSelection.Resolve(settings.Model, settings.FastModel),
             MaxTokens = MaxOutputTokens,
             System = system,
             Messages = messages,
@@ -337,5 +337,6 @@ internal static class AiProviderApproval
         && settings.LiveDataApprovedByUserId.HasValue
         && settings.LiveDataApprovedAtUtc.HasValue
         && settings.LiveDataApprovedProvider == settings.Provider
-        && settings.LiveDataApprovedModel == settings.Model;
+        && settings.LiveDataApprovedModel == settings.Model
+        && settings.LiveDataApprovedFastModel == settings.FastModel;
 }

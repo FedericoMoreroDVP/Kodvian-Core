@@ -48,6 +48,11 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
               <mat-hint>{{ selectedProvider.modelHint }}</mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
+              <mat-label>Modelo rápido (opcional)</mat-label>
+              <input matInput name="fastModel" [(ngModel)]="fastModel" maxlength="100" autocomplete="off" placeholder="Ej.: un modelo más chico del mismo proveedor" />
+              <mat-hint>Se usa para consultas simples (más rápido y barato). Las acciones y los análisis siempre usan el modelo principal.</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
               <mat-label>{{ keyRequired ? 'Clave API' : 'Nueva clave API (opcional)' }}</mat-label>
               <input matInput name="apiKey" [(ngModel)]="apiKey" [required]="keyRequired" type="password" maxlength="512" autocomplete="new-password" />
               <mat-hint>{{ keyRequired && providerChanged ? 'Cambiaste de proveedor: ingresá la clave del nuevo proveedor.' : keyRequired ? selectedProvider.keyHint : 'Déjala vacía para conservar la clave guardada.' }}</mat-hint>
@@ -56,6 +61,7 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
               <button mat-flat-button type="submit" [disabled]="busy || !model.trim() || (keyRequired && !apiKey.trim())">Guardar configuración</button>
               <button mat-stroked-button type="button" (click)="testConnection()" [disabled]="busy || !configuration.isConfigured || hasUnsavedChanges">Probar conexión</button>
               @if (configuration.isConfigured) { <button mat-button type="button" (click)="remove()" [disabled]="busy">Quitar proveedor</button> }
+              <a mat-button routerLink="/administracion/uso-ia">Uso y costos</a>
             </div>
           </form>
           @if (configuration.isConfigured && hasUnsavedChanges) { <p class="warning" role="status">Hay cambios sin guardar. Guardá la configuración antes de probar la conexión.</p> }
@@ -105,6 +111,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
   configuration?: AiProviderConfiguration;
   provider: AiProviderId = 'OpenAI';
   model = '';
+  fastModel = '';
   apiKey = '';
   privacyAccepted = false;
   loading = true;
@@ -122,7 +129,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
 
   get hasUnsavedChanges(): boolean {
     if (!this.configuration?.isConfigured) return false;
-    return this.providerChanged || this.model.trim() !== (this.configuration.model ?? '') || this.apiKey.trim() !== '';
+    return this.providerChanged || this.model.trim() !== (this.configuration.model ?? '') || this.fastModel.trim() !== (this.configuration.fastModel ?? '') || this.apiKey.trim() !== '';
   }
 
   get looksLikeWorkspaceId(): boolean { return /^wrkspc_/i.test(this.model.trim()); }
@@ -144,6 +151,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
         this.configuration = value;
         this.provider = providerOption(value.provider).id;
         this.model = value.model ?? (value.isConfigured ? '' : this.selectedProvider.defaultModel);
+        this.fastModel = value.fastModel ?? '';
       },
       error: () => this.error = 'No se pudo cargar la configuración.'
     });
@@ -154,7 +162,7 @@ export class AiProviderConfigurationPageComponent implements OnInit {
     this.busy = true;
     this.error = '';
     this.message = '';
-    this.api.save({ provider: this.provider, model: this.model.trim(), apiKey: this.apiKey, version: this.configuration.version })
+    this.api.save({ provider: this.provider, model: this.model.trim(), fastModel: this.fastModel.trim() || null, apiKey: this.apiKey, version: this.configuration.version })
       .pipe(finalize(() => this.busy = false))
       .subscribe({
         next: value => {

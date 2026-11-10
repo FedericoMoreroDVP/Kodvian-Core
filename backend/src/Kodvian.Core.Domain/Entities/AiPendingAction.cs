@@ -20,6 +20,8 @@ public sealed class AiPendingAction
     public string Status { get; set; } = "Pending";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAtUtc { get; set; }
+    /// <summary>Cuándo empezó a ejecutarse (para recuperar acciones que quedaron trabadas en "Procesando").</summary>
+    public DateTime? ExecutionStartedAtUtc { get; set; }
     public DateTime? ResolvedAtUtc { get; set; }
     public string? ResultMessage { get; set; }
     public string? ResultLink { get; set; }

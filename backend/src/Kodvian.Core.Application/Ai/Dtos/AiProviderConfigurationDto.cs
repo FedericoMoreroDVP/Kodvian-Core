@@ -5,6 +5,7 @@ public sealed class AiProviderConfigurationDto
     public bool IsConfigured { get; init; }
     public string Provider { get; init; } = "OpenAI";
     public string? Model { get; init; }
+    public string? FastModel { get; init; }
     public string? ApiKeyHint { get; init; }
     public bool IsConnectionVerified { get; init; }
     public DateTime? LastConnectionTestAtUtc { get; init; }
@@ -20,6 +21,8 @@ public sealed class AiProviderConfigurationUpdateRequest
 {
     public string Provider { get; set; } = "OpenAI";
     public string Model { get; set; } = string.Empty;
+    /// <summary>Modelo rápido opcional para consultas simples (vacío = usar siempre Model).</summary>
+    public string? FastModel { get; set; }
     public string? ApiKey { get; set; }
     public Guid Version { get; set; }
 }

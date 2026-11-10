@@ -150,6 +150,21 @@ public sealed class AiBriefingService(KodvianDbContext dbContext, ISessionValida
                 });
         }
 
+        if (isAdministrator)
+        {
+            var budget = await AiUsageService.GetBudgetStatusAsync(dbContext, cancellationToken);
+            if (budget.Level != "ok")
+                alerts.Add(new AiAlertDto
+                {
+                    Kind = "ai_budget",
+                    Severity = budget.Level == "exceeded" ? "critical" : "warning",
+                    Title = budget.Level == "exceeded" ? "Se alcanzó el tope mensual de IA" : $"Ya se usó el {budget.UsedPercent:0}% del tope mensual de IA",
+                    Detail = $"Gasto estimado del mes: USD {budget.MonthSpendUsd:0.00} de USD {budget.MonthlyBudgetUsd:0.00}." + (budget.Level == "exceeded" ? " El asistente queda pausado hasta ampliar el tope." : string.Empty),
+                    Prompt = "¿Qué puedo hacer para gastar menos en la IA?",
+                    Link = "/administracion/uso-ia"
+                });
+        }
+
         var hour = nowLocal.Hour;
         var firstName = user?.FullName?.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         var salutation = hour < 12 ? "Buen día" : hour < 20 ? "Buenas tardes" : "Buenas noches";

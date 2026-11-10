@@ -14,6 +14,8 @@ public sealed class AiRun
     public int ToolCallCount { get; set; }
     public int InputTokens { get; set; }
     public int OutputTokens { get; set; }
+    /// <summary>Costo estimado en USD con los precios cargados al momento de la ejecución (null si no había precios).</summary>
+    public decimal? EstimatedCostUsd { get; set; }
     public DateTime StartedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? FinishedAtUtc { get; set; }
     public AiConversation? Conversation { get; set; }

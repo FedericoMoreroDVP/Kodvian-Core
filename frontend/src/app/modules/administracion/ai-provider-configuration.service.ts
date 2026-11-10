@@ -15,7 +15,7 @@ export class AiProviderConfigurationService {
       .pipe(map(response => response.data));
   }
 
-  save(request: { provider: string; model: string; apiKey: string; version: string }): Observable<AiProviderConfiguration> {
+  save(request: { provider: string; model: string; fastModel?: string | null; apiKey: string; version: string }): Observable<AiProviderConfiguration> {
     return this.http.put<ApiResponse<AiProviderConfiguration>>(this.url, request, { withCredentials: true })
       .pipe(map(response => response.data));
   }

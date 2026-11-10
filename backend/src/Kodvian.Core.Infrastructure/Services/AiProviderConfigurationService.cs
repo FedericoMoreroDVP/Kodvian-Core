@@ -50,6 +50,10 @@ public sealed class AiProviderConfigurationService(
             throw new ArgumentException("Ingresa la clave API del nuevo proveedor: la clave guardada pertenece a otro proveedor.");
 
         var changed = entity.Provider != request.Provider || entity.Model != request.Model;
+        var fastModel = string.IsNullOrWhiteSpace(request.FastModel) ? null : request.FastModel.Trim();
+        // Cambiar el modelo rápido no exige volver a probar la conexión, pero sí volver a aprobar el uso de datos reales.
+        var fastModelChanged = !isNew && entity.FastModel != fastModel;
+        entity.FastModel = fastModel;
         var credentialReplaced = false;
         entity.Provider = request.Provider;
         entity.Model = request.Model;
@@ -67,6 +71,7 @@ public sealed class AiProviderConfigurationService(
             throw new ArgumentException("Ingresa la clave API del proveedor.");
         }
 
+        if (fastModelChanged && !changed) ClearLiveDataApproval(entity);
         if (changed)
         {
             entity.IsConnectionVerified = false;
@@ -118,6 +123,7 @@ public sealed class AiProviderConfigurationService(
         entity.LiveDataApprovedAtUtc = DateTime.UtcNow;
         entity.LiveDataApprovedProvider = entity.Provider;
         entity.LiveDataApprovedModel = entity.Model;
+        entity.LiveDataApprovedFastModel = entity.FastModel;
         entity.Version = Guid.NewGuid();
         entity.UpdatedAtUtc = DateTime.UtcNow;
         AddAudit("live_data_approved", entity.Provider, entity.Model, false, true, AiPrivacyPolicy.CurrentTermsVersion);
@@ -185,6 +191,8 @@ public sealed class AiProviderConfigurationService(
             throw new ArgumentException("El proveedor seleccionado no está disponible.");
         if (!ModelPattern.IsMatch(request.Model ?? string.Empty))
             throw new ArgumentException("Indica un identificador de modelo válido.");
+        if (!string.IsNullOrWhiteSpace(request.FastModel) && !ModelPattern.IsMatch(request.FastModel.Trim()))
+            throw new ArgumentException("Indica un identificador válido para el modelo rápido.");
         if (request.ApiKey is { Length: > 512 })
             throw new ArgumentException("La clave API supera el largo permitido.");
         if (request.ApiKey is not null && request.ApiKey.Any(char.IsControl))
@@ -196,7 +204,8 @@ public sealed class AiProviderConfigurationService(
         && entity.LiveDataApprovedByUserId.HasValue
         && entity.LiveDataApprovedAtUtc.HasValue
         && entity.LiveDataApprovedProvider == entity.Provider
-        && entity.LiveDataApprovedModel == entity.Model;
+        && entity.LiveDataApprovedModel == entity.Model
+        && entity.LiveDataApprovedFastModel == entity.FastModel;
 
     private static void ClearLiveDataApproval(AiProviderConfiguration entity)
     {
@@ -205,6 +214,7 @@ public sealed class AiProviderConfigurationService(
         entity.LiveDataApprovedAtUtc = null;
         entity.LiveDataApprovedProvider = null;
         entity.LiveDataApprovedModel = null;
+        entity.LiveDataApprovedFastModel = null;
     }
 
     private static AiProviderConfigurationDto Map(AiProviderConfiguration? entity) => new()
@@ -212,6 +222,7 @@ public sealed class AiProviderConfigurationService(
         IsConfigured = entity is not null && !string.IsNullOrWhiteSpace(entity.ProtectedApiKey),
         Provider = entity?.Provider ?? "OpenAI",
         Model = entity?.Model,
+        FastModel = entity?.FastModel,
         ApiKeyHint = entity is null ? null : $"••••{entity.ApiKeyLastFour}",
         IsConnectionVerified = entity?.IsConnectionVerified ?? false,
         LastConnectionTestAtUtc = entity?.LastConnectionTestAtUtc,

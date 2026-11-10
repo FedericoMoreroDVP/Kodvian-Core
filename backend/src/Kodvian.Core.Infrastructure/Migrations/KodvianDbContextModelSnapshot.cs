@@ -195,6 +195,9 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<DateTime?>("ExecutionStartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("ExpiresAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -268,6 +271,10 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(4)
                         .HasColumnType("character varying(4)");
 
+                    b.Property<string>("FastModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<bool>("IsConnectionVerified")
                         .HasColumnType("boolean");
 
@@ -283,6 +290,10 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
                     b.Property<Guid?>("LiveDataApprovedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("LiveDataApprovedFastModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("LiveDataApprovedModel")
                         .HasMaxLength(100)
@@ -382,6 +393,9 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("EstimatedCostUsd")
+                        .HasColumnType("numeric(14,6)");
+
                     b.Property<DateTime?>("FinishedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -426,12 +440,48 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .IsUnique()
                         .HasFilter("\"Status\" = 'Running'");
 
+                    b.HasIndex("StartedAtUtc");
+
                     b.HasIndex("ConversationId", "ClientRequestId")
                         .IsUnique();
 
                     b.HasIndex("ConversationId", "StartedAtUtc");
 
                     b.ToTable("AiRuns", (string)null);
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiUsageSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("FastInputUsdPerMillion")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<decimal?>("FastOutputUsdPerMillion")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<decimal?>("InputUsdPerMillion")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<decimal?>("MonthlyBudgetUsd")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("OutputUsdPerMillion")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AiUsageSettings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AiUsageSettings_Singleton", "\"Id\" = 1");
+                        });
                 });
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiUserPreference", b =>

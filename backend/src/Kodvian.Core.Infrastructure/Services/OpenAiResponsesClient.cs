@@ -45,7 +45,7 @@ public sealed class OpenAiResponsesClient(
         {
             Content = JsonContent.Create(new
             {
-                model = settings.Model,
+                model = AiModelSelection.Resolve(settings.Model, settings.FastModel),
                 input,
                 tools,
                 tool_choice = "auto",
@@ -183,5 +183,6 @@ public sealed class OpenAiResponsesClient(
         && settings.LiveDataApprovedByUserId.HasValue
         && settings.LiveDataApprovedAtUtc.HasValue
         && settings.LiveDataApprovedProvider == settings.Provider
-        && settings.LiveDataApprovedModel == settings.Model;
+        && settings.LiveDataApprovedModel == settings.Model
+        && settings.LiveDataApprovedFastModel == settings.FastModel;
 }

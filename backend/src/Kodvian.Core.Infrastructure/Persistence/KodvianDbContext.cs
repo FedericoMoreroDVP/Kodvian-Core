@@ -47,6 +47,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AiAuditEvent> AiAuditEvents => Set<AiAuditEvent>();
     public DbSet<AiPendingAction> AiPendingActions => Set<AiPendingAction>();
     public DbSet<AiUserPreference> AiUserPreferences => Set<AiUserPreference>();
+    public DbSet<AiUsageSettings> AiUsageSettings => Set<AiUsageSettings>();
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -63,6 +64,8 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.LiveDataApprovalTermsVersion).HasMaxLength(80);
             entity.Property(x => x.LiveDataApprovedProvider).HasMaxLength(40);
             entity.Property(x => x.LiveDataApprovedModel).HasMaxLength(100);
+            entity.Property(x => x.FastModel).HasMaxLength(100);
+            entity.Property(x => x.LiveDataApprovedFastModel).HasMaxLength(100);
             entity.Property(x => x.Version).IsConcurrencyToken();
         });
         modelBuilder.Entity<AiProviderConfigurationAuditEvent>(entity =>
@@ -109,9 +112,21 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.Model).HasMaxLength(100).IsRequired();
             entity.Property(x => x.TraceId).HasMaxLength(64).IsRequired();
             entity.HasIndex(x => new { x.ConversationId, x.StartedAtUtc });
+            entity.Property(x => x.EstimatedCostUsd).HasColumnType("numeric(14,6)");
+            entity.HasIndex(x => x.StartedAtUtc);
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
             entity.HasIndex(x => x.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'");
             entity.HasOne(x => x.Conversation).WithMany(x => x.Runs).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiUsageSettings>(entity =>
+        {
+            entity.ToTable("AiUsageSettings", t => t.HasCheckConstraint("CK_AiUsageSettings_Singleton", "\"Id\" = 1"));
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.InputUsdPerMillion).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.OutputUsdPerMillion).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.FastInputUsdPerMillion).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.FastOutputUsdPerMillion).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.MonthlyBudgetUsd).HasColumnType("numeric(12,2)");
         });
         modelBuilder.Entity<AiUserPreference>(entity =>
         {
