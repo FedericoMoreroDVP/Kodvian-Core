@@ -26,7 +26,63 @@ public sealed partial class AiToolCatalog
         "meetings.cancel" => PrepareMeetingCancelAsync(args, ct),
         "finance.create_movement" => PrepareMovementAsync(args, now, ct),
         "clients.create_prospect" => PrepareProspectAsync(args, ct),
+        "preferences.update" => PreparePreferencesAsync(actor, args, ct),
         _ => throw new AiToolRejectedException("La acción solicitada no está habilitada.")
+    };
+
+    private async Task<AiActionProposalDto> PreparePreferencesAsync(AiExecutionContext actor, JsonObject args, CancellationToken ct)
+    {
+        var current = await AiPreferencesService.LoadAsync(dbContext, actor.UserId, ct);
+        var clear = GetBool(args, "clearNotes") ?? false;
+        var requested = new AiUserPreferencesDto
+        {
+            PreferredCurrency = GetString(args, "preferredCurrency", 3) ?? current.PreferredCurrency,
+            DefaultMeetingMinutes = GetInt(args, "defaultMeetingMinutes") ?? current.DefaultMeetingMinutes,
+            DefaultTaskPriority = GetString(args, "defaultTaskPriority", 20) ?? current.DefaultTaskPriority,
+            ResponseStyle = GetString(args, "responseStyle", 20) ?? current.ResponseStyle,
+            DefaultScope = GetString(args, "defaultScope", 10) ?? current.DefaultScope,
+            Notes = clear ? null : GetString(args, "notes", AiPreferenceRules.MaxNotesLength) ?? current.Notes
+        };
+        AiUserPreferencesDto normalized;
+        try { normalized = AiPreferenceRules.Normalize(requested); }
+        catch (ArgumentException exception) { throw new AiToolRejectedException(exception.Message); }
+
+        var details = new List<AiActionDetailDto>();
+        void Changed(string label, string? before, string? after)
+        {
+            if (!string.Equals(before, after, StringComparison.Ordinal)) details.Add(Detail(label, $"{before ?? "sin preferencia"} → {after ?? "sin preferencia"}"));
+        }
+        Changed("Moneda", current.PreferredCurrency, normalized.PreferredCurrency);
+        Changed("Duración de reuniones", current.DefaultMeetingMinutes?.ToString(CultureInfo.InvariantCulture), normalized.DefaultMeetingMinutes?.ToString(CultureInfo.InvariantCulture));
+        Changed("Prioridad de tareas", current.DefaultTaskPriority, normalized.DefaultTaskPriority);
+        Changed("Estilo de respuesta", current.ResponseStyle, normalized.ResponseStyle);
+        Changed("Alcance", current.DefaultScope, normalized.DefaultScope);
+        Changed("Indicaciones", current.Notes, normalized.Notes);
+        if (details.Count == 0) throw new AiToolRejectedException("Esas preferencias ya están guardadas.");
+
+        var arguments = new JsonObject();
+        if (normalized.PreferredCurrency is not null) arguments["preferredCurrency"] = normalized.PreferredCurrency;
+        if (normalized.DefaultMeetingMinutes is not null) arguments["defaultMeetingMinutes"] = normalized.DefaultMeetingMinutes;
+        if (normalized.DefaultTaskPriority is not null) arguments["defaultTaskPriority"] = normalized.DefaultTaskPriority;
+        if (normalized.ResponseStyle is not null) arguments["responseStyle"] = normalized.ResponseStyle;
+        if (normalized.DefaultScope is not null) arguments["defaultScope"] = normalized.DefaultScope;
+        if (normalized.Notes is not null) arguments["notes"] = normalized.Notes;
+        else arguments["clearNotes"] = true;
+        return new AiActionProposalDto { ToolName = "preferences.update", Title = "Guardar preferencias", Summary = "Recordar estas preferencias para las próximas respuestas.", Details = details, Arguments = arguments };
+    }
+
+    private static JsonObject PreferencesSnapshot(AiUserPreferencesDto preferences) => new()
+    {
+        ["preferredCurrency"] = preferences.PreferredCurrency, ["defaultMeetingMinutes"] = preferences.DefaultMeetingMinutes,
+        ["defaultTaskPriority"] = preferences.DefaultTaskPriority, ["responseStyle"] = preferences.ResponseStyle,
+        ["defaultScope"] = preferences.DefaultScope, ["notes"] = preferences.Notes
+    };
+
+    private static AiUserPreferencesDto PreferencesFromSnapshot(JsonObject snapshot) => new()
+    {
+        PreferredCurrency = snapshot["preferredCurrency"]?.GetValue<string>(), DefaultMeetingMinutes = snapshot["defaultMeetingMinutes"]?.GetValue<int>(),
+        DefaultTaskPriority = snapshot["defaultTaskPriority"]?.GetValue<string>(), ResponseStyle = snapshot["responseStyle"]?.GetValue<string>(),
+        DefaultScope = snapshot["defaultScope"]?.GetValue<string>(), Notes = snapshot["notes"]?.GetValue<string>()
     };
 
     private async Task<AiActionProposalDto> PrepareTaskUpdateAsync(JsonObject args, CancellationToken ct)
@@ -359,6 +415,23 @@ public sealed partial class AiToolCatalog
                     Source = Source("clients.create_prospect", "Kodvian.Core.Application.Clients", now, null, null, null, "/clientes")
                 };
             }
+            case "preferences.update":
+            {
+                var before = await AiPreferencesService.LoadAsync(dbContext, actor.UserId, ct);
+                var after = AiPreferenceRules.Normalize(new AiUserPreferencesDto
+                {
+                    PreferredCurrency = GetString(args, "preferredCurrency", 3), DefaultMeetingMinutes = GetInt(args, "defaultMeetingMinutes"),
+                    DefaultTaskPriority = GetString(args, "defaultTaskPriority", 20), ResponseStyle = GetString(args, "responseStyle", 20),
+                    DefaultScope = GetString(args, "defaultScope", 10), Notes = GetString(args, "notes", AiPreferenceRules.MaxNotesLength)
+                });
+                await AiPreferencesService.SaveAsync(dbContext, actor.UserId, after, ct);
+                return new AiActionOutcomeDto
+                {
+                    Message = "Listo, guardé tus preferencias. Las voy a tener en cuenta desde la próxima respuesta.",
+                    EntityId = actor.UserId,
+                    UndoData = new JsonObject { ["before"] = PreferencesSnapshot(before), ["after"] = PreferencesSnapshot(after) }
+                };
+            }
             default:
                 throw new AiToolRejectedException("La acción solicitada no está habilitada.");
         }
@@ -442,6 +515,14 @@ public sealed partial class AiToolCatalog
                 request.Location = before["location"]?.GetValue<string>();
                 await meetings.UpdateAsync(actor.UserId, true, entityId, request, ct);
                 return new AiActionOutcomeDto { Message = $"Listo, «{request.Title}» volvió a su horario original.", Link = "/agenda", Source = Source("meetings.update", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda") };
+            }
+            case "preferences.update":
+            {
+                if (entityId != actor.UserId) throw new AiToolRejectedException("Estas preferencias no son tuyas.");
+                var current = await AiPreferencesService.LoadAsync(dbContext, actor.UserId, ct);
+                if (!JsonNode.DeepEquals(PreferencesSnapshot(current), undoData["after"])) throw new AiToolRejectedException("Las preferencias cambiaron después; revisalas desde Preferencias.");
+                await AiPreferencesService.SaveAsync(dbContext, actor.UserId, PreferencesFromSnapshot(undoData["before"]!.AsObject()), ct);
+                return new AiActionOutcomeDto { Message = "Listo, tus preferencias volvieron a como estaban." };
             }
             default:
                 throw new AiToolRejectedException("Esta acción no se puede deshacer.");

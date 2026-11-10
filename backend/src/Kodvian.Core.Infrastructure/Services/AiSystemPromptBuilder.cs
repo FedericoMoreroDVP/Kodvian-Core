@@ -20,7 +20,7 @@ public static class AiSystemPromptBuilder
         catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time"); }
     }
 
-    public static string Build(DateTime utcNow, TimeZoneInfo timeZone, string? userName, IReadOnlyCollection<AiToolDefinitionDto> tools)
+    public static string Build(DateTime utcNow, TimeZoneInfo timeZone, string? userName, IReadOnlyCollection<AiToolDefinitionDto> tools, AiUserPreferencesDto? preferences = null)
     {
         var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc), timeZone);
         var builder = new StringBuilder();
@@ -33,6 +33,26 @@ public static class AiSystemPromptBuilder
         if (!string.IsNullOrWhiteSpace(userName))
             builder.Append(CultureInfo.InvariantCulture, $"- Estás hablando con {userName.Trim()}.\n");
         builder.Append('\n');
+
+        if (preferences is { IsEmpty: false })
+        {
+            builder.Append("Preferencias del usuario (respetalas salvo que pida otra cosa):\n");
+            if (preferences.PreferredCurrency is not null)
+                builder.Append(CultureInfo.InvariantCulture, $"- Mostrá primero los montos en {preferences.PreferredCurrency} (igual separando ARS y USD, sin sumarlas).\n");
+            if (preferences.DefaultMeetingMinutes is not null)
+                builder.Append(CultureInfo.InvariantCulture, $"- Si no indica duración, sus reuniones duran {preferences.DefaultMeetingMinutes} minutos.\n");
+            if (preferences.DefaultTaskPriority is not null)
+                builder.Append(CultureInfo.InvariantCulture, $"- Si no indica prioridad, sus tareas son de prioridad {preferences.DefaultTaskPriority}.\n");
+            if (preferences.ResponseStyle == "breve") builder.Append("- Prefiere respuestas muy breves: lo esencial primero, sin introducciones.\n");
+            if (preferences.ResponseStyle == "detallado") builder.Append("- Prefiere respuestas detalladas, con contexto y desglose.\n");
+            if (preferences.DefaultScope == "mio") builder.Append("- Cuando pregunta por \"lo que tengo\" o \"mi día\", se refiere solo a lo que tiene asignado (scope mio).\n");
+            if (preferences.DefaultScope == "todo") builder.Append("- Cuando pregunta por el día o la semana, se refiere a toda la empresa (scope todo).\n");
+            if (!string.IsNullOrWhiteSpace(preferences.Notes))
+                builder.Append(CultureInfo.InvariantCulture, $"- Indicaciones propias del usuario: {preferences.Notes.Trim()}\n");
+            builder.Append('\n');
+        }
+
+        builder.Append("Memoria: tus mensajes anteriores pueden terminar con [Referencias consultadas en este turno …] con los ids de lo que ya buscaste. Usalos para no volver a buscar lo mismo, pero confirmá los datos actuales con herramientas antes de afirmar algo. Si el usuario pide recordar una preferencia (moneda, duración de reuniones, prioridad, estilo), proponé guardarla con preferences.update.\n\n");
 
         var reads = tools.Where(x => !x.RequiresConfirmation).Select(x => x.Name).ToArray();
         var writes = tools.Where(x => x.RequiresConfirmation).Select(x => x.Name).ToArray();

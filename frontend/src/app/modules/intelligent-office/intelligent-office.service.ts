@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 
 import { ApiResponse } from '../../core/auth/auth.models';
-import { AiActionBatchResolution, AiActionResolution, AiBriefing, AiConversation, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
+import { AiActionBatchResolution, AiActionResolution, AiBriefing, AiConversation, AiUserPreferences, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
 
 /** El streaming no está disponible: hay que usar el envío común. */
 export class StreamUnavailableError extends Error {
@@ -38,6 +38,14 @@ export class IntelligentOfficeService {
   create(): Observable<AiConversation> {
     return this.http.post<ApiResponse<AiConversation>>(this.baseUrl, {}, { withCredentials: true })
       .pipe(map(response => response.data));
+  }
+
+  getPreferences(): Observable<AiUserPreferences> {
+    return this.http.get<ApiResponse<AiUserPreferences>>('/api/ai/preferences', { withCredentials: true }).pipe(map(response => response.data));
+  }
+
+  savePreferences(preferences: AiUserPreferences): Observable<AiUserPreferences> {
+    return this.http.put<ApiResponse<AiUserPreferences>>('/api/ai/preferences', preferences, { withCredentials: true }).pipe(map(response => response.data));
   }
 
   /** Resumen del día y alertas (sin IA). */

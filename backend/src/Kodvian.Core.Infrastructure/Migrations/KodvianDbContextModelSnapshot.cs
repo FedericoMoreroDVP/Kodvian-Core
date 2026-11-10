@@ -108,6 +108,10 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(16000)
                         .HasColumnType("character varying(16000)");
 
+                    b.Property<string>("ContextJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid");
 
@@ -415,6 +419,43 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.HasIndex("ConversationId", "StartedAtUtc");
 
                     b.ToTable("AiRuns", (string)null);
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiUserPreference", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("DefaultMeetingMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultScope")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("DefaultTaskPriority")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("PreferredCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("ResponseStyle")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("AiUserPreferences", (string)null);
                 });
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.Client", b =>

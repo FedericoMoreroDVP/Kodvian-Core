@@ -192,6 +192,8 @@ public sealed class AiConversationService(
         var sources = new List<AiSourceReferenceDto>();
         // Las propuestas se guardan recién al final, junto con el mensaje del asistente: si la ejecución falla no queda ninguna colgada.
         var pendingActions = new List<AiPendingAction>();
+        // Memoria entre turnos: tipo, nombre e id de lo consultado, para retomarlo en las próximas preguntas.
+        var references = new List<AiContextReferences.Reference>();
         var partial = false;
         try
         {
@@ -260,7 +262,11 @@ public sealed class AiConversationService(
                     try
                     {
                         var execution = await toolExecutor.ExecuteAsync(actor, run.Id, provider.Version, run.TraceId, toolName, arguments, cancellationToken);
-                        if (execution.Source is not null) sources.Add(execution.Source);
+                        if (execution.Source is not null)
+                        {
+                            sources.Add(execution.Source);
+                            references.AddRange(AiContextReferences.Extract(toolName, execution.Data));
+                        }
                         var output = execution.Data;
                         if (execution.Proposal is not null)
                         {
@@ -321,6 +327,7 @@ public sealed class AiConversationService(
                 SourcesJson = JsonSerializer.Serialize(uniqueSources),
                 Grounded = grounded,
                 SuggestionsJson = JsonSerializer.Serialize(suggestions),
+                ContextJson = AiContextReferences.Serialize(references),
                 CreatedAtUtc = DateTime.UtcNow
             };
             run.Status = partial ? "Partial" : "Completed";
@@ -659,16 +666,18 @@ public sealed class AiConversationService(
     private async Task<JsonArray> BuildInputAsync(AiExecutionContext actor, Guid conversationId, IReadOnlyCollection<AiToolDefinitionDto> tools, CancellationToken cancellationToken)
     {
         var userName = await dbContext.Users.AsNoTracking().Where(x => x.Id == actor.UserId).Select(x => x.FullName).SingleOrDefaultAsync(cancellationToken);
-        var systemPrompt = AiSystemPromptBuilder.Build(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone, userName, tools);
+        var preferences = await AiPreferencesService.LoadAsync(dbContext, actor.UserId, cancellationToken);
+        var systemPrompt = AiSystemPromptBuilder.Build(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone, userName, tools, preferences);
         var recent = await dbContext.AiMessages.AsNoTracking().Where(x => x.ConversationId == conversationId)
             .OrderByDescending(x => x.CreatedAtUtc).Take(MaxHistoryMessages)
-            .Select(x => new { x.Role, x.Content, x.CreatedAtUtc }).ToListAsync(cancellationToken);
+            .Select(x => new { x.Role, x.Content, x.ContextJson, x.CreatedAtUtc }).ToListAsync(cancellationToken);
         var history = new List<(string Role, string Content)>();
         var historyCharacters = 0;
         foreach (var message in recent)
         {
             if (history.Count > 0 && historyCharacters + message.Content.Length > MaxHistoryCharacters) break;
-            history.Add((message.Role, message.Content));
+            var note = message.Role == "assistant" ? AiContextReferences.ToHistoryNote(message.ContextJson) : null;
+            history.Add((message.Role, note is null ? message.Content : message.Content + "\n\n" + note));
             historyCharacters += message.Content.Length;
         }
         history.Reverse();

@@ -102,7 +102,10 @@ public sealed partial class AiToolCatalog(
             [("type", EnumSchema(MovementTypes)), ("amount", NumberSchema(0.01m, 1_000_000_000m)), ("currency", EnumSchema(CurrencyOptions)), ("description", StringSchema(300)), ("category", StringSchema(100)),
              ("date", DateSchema()), ("settled", BooleanSchema()), ("dueDate", DateSchema()), ("clientId", GuidSchema()), ("projectId", GuidSchema())], ["type", "amount", "currency", "description"]) },
         new() { Name = "clients.create_prospect", RequiresConfirmation = true, Description = "Prepara el alta de un cliente en estado Prospecto para que el usuario la confirme. Requiere el nombre comercial; serviceType opcional.", RequiredPermissions = [PermissionCodes.ClientsRead, PermissionCodes.ClientsWrite], Parameters = ObjectSchema(
-            [("name", StringSchema(160)), ("serviceType", StringSchema(120))], ["name"]) }
+            [("name", StringSchema(160)), ("serviceType", StringSchema(120))], ["name"]) },
+        new() { Name = "preferences.update", RequiresConfirmation = true, Description = "Prepara guardar preferencias personales del usuario para que las confirme: moneda que se muestra primero, duración por defecto de reuniones, prioridad por defecto de tareas, estilo de respuesta (breve o detallado), alcance por defecto (todo o mio) e indicaciones libres. Solo enviá lo que cambia.", RequiredPermissions = [], Parameters = ObjectSchema(
+            [("preferredCurrency", EnumSchema(CurrencyOptions)), ("defaultMeetingMinutes", IntegerSchema(15, 480)), ("defaultTaskPriority", EnumSchema(Priorities)),
+             ("responseStyle", EnumSchema(["breve", "detallado"])), ("defaultScope", EnumSchema(DayScopes)), ("notes", StringSchema(500)), ("clearNotes", BooleanSchema())], []) }
     ];
 
     public IReadOnlyCollection<AiToolDefinitionDto> GetAvailableTools(AiExecutionContext actor) =>

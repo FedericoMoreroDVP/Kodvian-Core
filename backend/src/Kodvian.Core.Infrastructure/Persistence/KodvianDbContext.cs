@@ -46,6 +46,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AiRun> AiRuns => Set<AiRun>();
     public DbSet<AiAuditEvent> AiAuditEvents => Set<AiAuditEvent>();
     public DbSet<AiPendingAction> AiPendingActions => Set<AiPendingAction>();
+    public DbSet<AiUserPreference> AiUserPreferences => Set<AiUserPreference>();
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -91,6 +92,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.Content).HasMaxLength(16000).IsRequired();
             entity.Property(x => x.SourcesJson).HasMaxLength(8000).IsRequired();
             entity.Property(x => x.SuggestionsJson).HasMaxLength(1000).IsRequired().HasDefaultValue("[]");
+            entity.Property(x => x.ContextJson).HasMaxLength(4000);
             entity.Property(x => x.TraceId).HasMaxLength(64);
             entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
@@ -109,6 +111,16 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
             entity.HasIndex(x => x.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'");
             entity.HasOne(x => x.Conversation).WithMany(x => x.Runs).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiUserPreference>(entity =>
+        {
+            entity.ToTable("AiUserPreferences");
+            entity.HasKey(x => x.UserId);
+            entity.Property(x => x.PreferredCurrency).HasMaxLength(3);
+            entity.Property(x => x.DefaultTaskPriority).HasMaxLength(20);
+            entity.Property(x => x.ResponseStyle).HasMaxLength(20);
+            entity.Property(x => x.DefaultScope).HasMaxLength(10);
+            entity.Property(x => x.Notes).HasMaxLength(500);
         });
         modelBuilder.Entity<AiPendingAction>(entity =>
         {

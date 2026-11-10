@@ -116,3 +116,13 @@ export interface AiBriefing {
   projectsAtRisk: { id: string; name: string; progress: number; estimatedDelivery: string | null; daysToDelivery: number | null }[] | null;
   alerts: AiAlert[];
 }
+
+export interface AiUserPreferences {
+  preferredCurrency: 'ARS' | 'USD' | null;
+  defaultMeetingMinutes: number | null;
+  defaultTaskPriority: string | null;
+  responseStyle: 'breve' | 'detallado' | null;
+  defaultScope: 'todo' | 'mio' | null;
+  notes: string | null;
+  updatedAtUtc?: string | null;
+}

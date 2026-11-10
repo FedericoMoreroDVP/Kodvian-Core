@@ -11,6 +11,7 @@ import { finalize } from 'rxjs';
 
 import { AiActionCardComponent, isActionable } from './ai-action-card.component';
 import { AiBriefingComponent } from './ai-briefing.component';
+import { AiPreferencesComponent } from './ai-preferences.component';
 import { renderAiMarkdown } from './ai-markdown';
 import { AiBriefing, AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
@@ -49,7 +50,7 @@ interface Suggestion {
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [AiActionCardComponent, AiBriefingComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
+  imports: [AiActionCardComponent, AiBriefingComponent, AiPreferencesComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
       <mat-card class="hero-card">
@@ -90,10 +91,14 @@ interface Suggestion {
               <h3>{{ activeConversation?.title ?? 'Nueva conversación' }}</h3>
               <p class="muted">Las conversaciones se conservan hasta que las elimines.</p>
             </div>
-            @if (activeConversation) {
-              <button mat-icon-button type="button" class="delete-button" aria-label="Eliminar conversación" matTooltip="Eliminar conversación" (click)="deleteConversation()" [disabled]="busy"><mat-icon>delete_outline</mat-icon></button>
-            }
+            <div class="chat-actions">
+              <button mat-icon-button type="button" class="preferences-button" aria-label="Preferencias del asistente" matTooltip="Preferencias del asistente" (click)="showPreferences = !showPreferences"><mat-icon>tune</mat-icon></button>
+              @if (activeConversation) {
+                <button mat-icon-button type="button" class="delete-button" aria-label="Eliminar conversación" matTooltip="Eliminar conversación" (click)="deleteConversation()" [disabled]="busy"><mat-icon>delete_outline</mat-icon></button>
+              }
+            </div>
           </div>
+          @if (showPreferences) { <app-ai-preferences (closed)="showPreferences = false" /> }
 
           @if (chatError) {
             <div class="banner error" role="alert">
@@ -252,7 +257,8 @@ interface Suggestion {
     .chat-heading { min-width: 0; }
     .chat-heading h3 { margin: 0; font-size: 15px; color: var(--text-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chat-heading p { margin: 3px 0 0; font-size: 12px; }
-    .delete-button { color: var(--text-300); }
+    .chat-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .delete-button, .preferences-button { color: var(--text-300); }
     .delete-button:hover { color: #ffb4b4; }
     .chat-panel > .banner { margin: 12px 18px 0; }
     .muted { color: var(--text-300); }
@@ -399,6 +405,7 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
   private pendingRequest: { content: string; id: string } | null = null;
 
   briefing: AiBriefing | null = null;
+  showPreferences = false;
 
   ngOnInit(): void {
     this.loadConversations();

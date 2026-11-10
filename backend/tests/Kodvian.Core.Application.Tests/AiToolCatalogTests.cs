@@ -146,6 +146,27 @@ public sealed class AiToolCatalogTests
     }
 
     [Fact]
+    public async Task PreferencesCanBeSavedThroughTheAssistantAndUndone()
+    {
+        await using var db = CreateDatabase();
+        var (actor, _) = SeedProject(db);
+        var catalog = CreateCatalog(db);
+
+        var proposal = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "preferences.update",
+            new JsonObject { ["defaultMeetingMinutes"] = 30, ["preferredCurrency"] = "USD" }, CancellationToken.None);
+        Assert.Contains(proposal.Proposal!.Details, x => x.Label == "Duración de reuniones" && x.Value == "sin preferencia → 30");
+        Assert.Null(db.AiUserPreferences.AsNoTracking().SingleOrDefault());
+
+        var outcome = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "preferences.update", proposal.Proposal.Arguments, CancellationToken.None);
+        var saved = db.AiUserPreferences.AsNoTracking().Single();
+        Assert.Equal(30, saved.DefaultMeetingMinutes);
+        Assert.Equal("USD", saved.PreferredCurrency);
+
+        await catalog.UndoActionAsync(actor, Guid.NewGuid(), "preferences.update", actor.UserId, outcome.UndoData!, CancellationToken.None);
+        Assert.Null(db.AiUserPreferences.AsNoTracking().Single().DefaultMeetingMinutes);
+    }
+
+    [Fact]
     public async Task ProspectIsCreatedOnceAndDuplicatesAreRejected()
     {
         await using var db = CreateDatabase();
