@@ -239,7 +239,7 @@ interface Suggestion {
     .small-icon { color: var(--text-300); transform: scale(.85); }
     .delete-button:hover { color: #ffb4b4; }
     .rename-input { flex: 1; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--kd-border-subtle); background: rgba(0,0,0,.2); color: var(--text-100); font: inherit; font-size: 13px; }
-    .thread-width, .thread { width: 100%; max-width: 900px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+    .thread-width, .thread { width: 100%; box-sizing: border-box; }
     .chat-panel > .thread-width { margin-top: 10px; padding: 0 16px; }
     .chat-panel > .banner.thread-width { width: calc(100% - 32px); padding: 8px 12px; }
 
