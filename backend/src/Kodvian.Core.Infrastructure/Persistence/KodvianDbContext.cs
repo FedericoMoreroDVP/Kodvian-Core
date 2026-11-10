@@ -122,6 +122,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
             entity.Property(x => x.ResultMessage).HasMaxLength(1000);
             entity.Property(x => x.ResultLink).HasMaxLength(300);
+            entity.Property(x => x.UndoJson).HasMaxLength(8000);
             entity.Property(x => x.Version).IsConcurrencyToken();
             entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
             entity.HasIndex(x => x.MessageId);

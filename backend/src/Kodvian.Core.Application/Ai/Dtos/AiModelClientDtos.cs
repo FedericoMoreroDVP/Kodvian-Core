@@ -52,4 +52,8 @@ public sealed class AiActionOutcomeDto
     public string Message { get; init; } = string.Empty;
     public string? Link { get; init; }
     public AiSourceReferenceDto? Source { get; init; }
+    /// <summary>Entidad creada o modificada.</summary>
+    public Guid? EntityId { get; init; }
+    /// <summary>Estado necesario para revertir la acción; null si no se puede deshacer de forma segura.</summary>
+    public JsonObject? UndoData { get; init; }
 }

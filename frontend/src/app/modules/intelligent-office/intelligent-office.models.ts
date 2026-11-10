@@ -37,7 +37,7 @@ export type AiStreamEvent =
   | { type: 'done'; data: AiSendResult }
   | { type: 'error'; data: { status: number; message: string } };
 
-export type AiPendingActionStatus = 'Pending' | 'Executing' | 'Confirmed' | 'Cancelled' | 'Expired' | 'Failed';
+export type AiPendingActionStatus = 'Pending' | 'Executing' | 'Confirmed' | 'Cancelled' | 'Expired' | 'Failed' | 'Undone';
 
 export interface AiActionDetail {
   label: string;
@@ -55,6 +55,8 @@ export interface AiPendingAction {
   resolvedAtUtc: string | null;
   resultMessage: string | null;
   resultLink: string | null;
+  canUndo?: boolean;
+  undoAvailableUntilUtc?: string | null;
 }
 
 export interface AiActionResolution {
@@ -83,4 +85,9 @@ export interface Paged<T> {
   pageNumber: number;
   pageSize: number;
   totalCount: number;
+}
+
+export interface AiActionBatchResolution {
+  actions: AiPendingAction[];
+  message: AiMessage | null;
 }

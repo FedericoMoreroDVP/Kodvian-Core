@@ -173,7 +173,7 @@ public sealed class AiPendingActionTests
     }
 
     /// <summary>Primera llamada: pide tasks.create. Segunda: responde con texto.</summary>
-    private sealed class ProposeOnceModel : IAiResponsesClient
+    private sealed class ProposeOnceModel(params string[] titles) : IAiResponsesClient
     {
         private int _calls;
         public string SecondInput { get; private set; } = string.Empty;
@@ -184,11 +184,11 @@ public sealed class AiPendingActionTests
                 return Task.FromResult(new AiModelResponseDto
                 {
                     Status = "completed",
-                    OutputItems = new JsonArray(new JsonObject
+                    OutputItems = new JsonArray((titles.Length == 0 ? ["Llamar a Juan"] : titles).Select((title, index) => (JsonNode?)new JsonObject
                     {
-                        ["type"] = "function_call", ["name"] = "tasks__create", ["call_id"] = "call-1",
-                        ["arguments"] = "{\"projectId\":\"7d7c2a4e-0000-4000-8000-000000000001\",\"title\":\"Llamar a Juan\"}"
-                    })
+                        ["type"] = "function_call", ["name"] = "tasks__create", ["call_id"] = $"call-{index}",
+                        ["arguments"] = $"{{\"projectId\":\"7d7c2a4e-0000-4000-8000-000000000001\",\"title\":\"{title}\"}}"
+                    }).ToArray())
                 });
             SecondInput = input.ToJsonString();
             return Task.FromResult(new AiModelResponseDto { Status = "completed", OutputText = "Te dejé la tarea lista para confirmar." });
@@ -229,8 +229,72 @@ public sealed class AiPendingActionTests
             {
                 Message = $"Listo, creé la tarea «{arguments["title"]!.GetValue<string>()}».",
                 Link = "/tareas",
-                Source = new AiSourceReferenceDto { ToolName = toolName, Source = "test", AsOfUtc = DateTime.UtcNow, Link = "/tareas" }
+                Source = new AiSourceReferenceDto { ToolName = toolName, Source = "test", AsOfUtc = DateTime.UtcNow, Link = "/tareas" },
+                EntityId = Guid.NewGuid(),
+                UndoData = new JsonObject()
             });
         }
+
+        public int UndoCalls { get; private set; }
+
+        public Task<AiActionOutcomeDto> UndoActionAsync(AiExecutionContext actor, Guid actionId, string toolName, Guid entityId, JsonObject undoData, CancellationToken cancellationToken)
+        {
+            UndoCalls++;
+            return Task.FromResult(new AiActionOutcomeDto { Message = "Deshice la creación." });
+        }
+    }
+
+    [Fact]
+    public async Task ConfirmAllExecutesEveryPendingActionAndAddsOneSummary()
+    {
+        await using var db = CreateDatabase();
+        var executor = new ProposalExecutor();
+        var (service, actor, conversationId) = await CreateAsync(db, new ProposeOnceModel("Tarea A", "Tarea B", "Tarea C"), executor);
+        var result = await service.SendMessageAsync(actor, conversationId, new AiSendMessageRequest { ClientRequestId = Guid.NewGuid(), Content = "Creame tres tareas" }, CancellationToken.None);
+        Assert.Equal(3, result.AssistantMessage.PendingActions.Count);
+
+        var batch = await service.ConfirmAllActionsAsync(actor, conversationId, result.AssistantMessage.Id, CancellationToken.None);
+
+        Assert.All(batch.Actions, x => Assert.Equal("Confirmed", x.Status));
+        Assert.Equal(3, executor.ConfirmedCalls);
+        Assert.StartsWith("Listo, confirmé las 3 acciones:", batch.Message!.Content);
+        Assert.Contains("Tarea B", batch.Message.Content);
+        Assert.Single(await db.AiMessages.Where(x => x.Content.StartsWith("Listo, confirmé")).ToListAsync());
+        await Assert.ThrowsAsync<AiConversationConflictException>(() => service.ConfirmAllActionsAsync(actor, conversationId, result.AssistantMessage.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ConfirmedActionCanBeUndoneOnlyOnce()
+    {
+        await using var db = CreateDatabase();
+        var executor = new ProposalExecutor();
+        var (service, actor, conversationId) = await CreateAsync(db, new ProposeOnceModel(), executor);
+        var result = await service.SendMessageAsync(actor, conversationId, new AiSendMessageRequest { ClientRequestId = Guid.NewGuid(), Content = "Creá la tarea" }, CancellationToken.None);
+        var actionId = result.AssistantMessage.PendingActions.Single().Id;
+        var confirmed = await service.ConfirmActionAsync(actor, conversationId, actionId, CancellationToken.None);
+        Assert.True(confirmed.Action.CanUndo);
+
+        var undone = await service.UndoActionAsync(actor, conversationId, actionId, CancellationToken.None);
+
+        Assert.Equal("Undone", undone.Action.Status);
+        Assert.False(undone.Action.CanUndo);
+        Assert.Equal("Deshice la creación.", undone.Message!.Content);
+        await Assert.ThrowsAsync<AiConversationConflictException>(() => service.UndoActionAsync(actor, conversationId, actionId, CancellationToken.None));
+        Assert.Equal(1, executor.UndoCalls);
+    }
+
+    [Fact]
+    public async Task UndoIsNotOfferedAfterTheWindowExpires()
+    {
+        await using var db = CreateDatabase();
+        var (service, actor, conversationId) = await CreateAsync(db, new ProposeOnceModel(), new ProposalExecutor());
+        var result = await service.SendMessageAsync(actor, conversationId, new AiSendMessageRequest { ClientRequestId = Guid.NewGuid(), Content = "Creá la tarea" }, CancellationToken.None);
+        var actionId = result.AssistantMessage.PendingActions.Single().Id;
+        await service.ConfirmActionAsync(actor, conversationId, actionId, CancellationToken.None);
+        var stored = await db.AiPendingActions.SingleAsync();
+        stored.ResolvedAtUtc = DateTime.UtcNow.AddMinutes(-20);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<AiConversationConflictException>(() => service.UndoActionAsync(actor, conversationId, actionId, CancellationToken.None));
     }
 }

@@ -12,6 +12,8 @@ public interface IAiConversationService
     Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, IAiRunObserver? observer, CancellationToken cancellationToken)
         => SendMessageAsync(actor, conversationId, request, cancellationToken);
     Task<AiActionResolutionDto> ConfirmActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken);
+    Task<AiActionBatchResolutionDto> ConfirmAllActionsAsync(AiExecutionContext actor, Guid conversationId, Guid messageId, CancellationToken cancellationToken);
+    Task<AiActionResolutionDto> UndoActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken);
     Task<AiActionResolutionDto> CancelActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken);
 }

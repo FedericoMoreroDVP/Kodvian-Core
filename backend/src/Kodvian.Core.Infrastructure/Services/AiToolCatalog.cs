@@ -32,6 +32,7 @@ public sealed partial class AiToolCatalog(
     IMeetingService meetings,
     IFinanceOverviewService finance,
     IDashboardService dashboard,
+    IFinancialMovementService movements,
     IAiProviderConfigurationService providerConfiguration,
     ISessionValidator sessionValidator,
     KodvianDbContext dbContext) : IAiToolExecutor
@@ -89,7 +90,19 @@ public sealed partial class AiToolCatalog(
             [("taskId", GuidSchema()), ("status", EnumSchema(TaskStatuses))], ["taskId", "status"]) },
         new() { Name = "meetings.create", RequiresConfirmation = true, Description = "Prepara la creación de una reunión en la agenda para que el usuario la confirme; no la crea. Requiere projectId (de projects.list), title y startsAt en hora local de Buenos Aires (yyyy-MM-ddTHH:mm). Indicá endsAt o durationMinutes (por defecto 60). Participantes: ids de usuarios de people.list.", RequiredPermissions = [PermissionCodes.MeetingsRead, PermissionCodes.MeetingsWrite], Parameters = ObjectSchema(
             [("projectId", GuidSchema()), ("title", StringSchema(200)), ("startsAt", LocalDateTimeSchema()), ("endsAt", LocalDateTimeSchema()), ("durationMinutes", IntegerSchema(15, 480)),
-             ("description", StringSchema(2000)), ("location", StringSchema(300)), ("participantIds", GuidArraySchema(20))], ["projectId", "title", "startsAt"]) }
+             ("description", StringSchema(2000)), ("location", StringSchema(300)), ("participantIds", GuidArraySchema(20))], ["projectId", "title", "startsAt"]) },
+        new() { Name = "tasks.update", RequiresConfirmation = true, Description = "Prepara el cambio de una tarea para que el usuario lo confirme: reprogramar (startDate, dueDate), cambiar prioridad o título, o reasignar (developerId o responsibleUserId de people.list). Solo se envían los campos que cambian. Requiere taskId de tasks.list.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
+            [("taskId", GuidSchema()), ("title", StringSchema(200)), ("startDate", DateSchema()), ("dueDate", DateSchema()), ("priority", EnumSchema(Priorities)),
+             ("developerId", GuidSchema()), ("responsibleUserId", GuidSchema())], ["taskId"]) },
+        new() { Name = "meetings.update", RequiresConfirmation = true, Description = "Prepara el cambio de una reunión para que el usuario lo confirme: moverla (startsAt en hora local de Buenos Aires yyyy-MM-ddTHH:mm; si no se indica fin se conserva la duración), cambiar la duración, el título o la ubicación. Requiere meetingId de meetings.list.", RequiredPermissions = [PermissionCodes.MeetingsRead, PermissionCodes.MeetingsWrite], Parameters = ObjectSchema(
+            [("meetingId", GuidSchema()), ("startsAt", LocalDateTimeSchema()), ("endsAt", LocalDateTimeSchema()), ("durationMinutes", IntegerSchema(15, 480)), ("title", StringSchema(200)), ("location", StringSchema(300))], ["meetingId"]) },
+        new() { Name = "meetings.cancel", RequiresConfirmation = true, Description = "Prepara la cancelación de una reunión para que el usuario la confirme. Requiere meetingId de meetings.list.", RequiredPermissions = [PermissionCodes.MeetingsRead, PermissionCodes.MeetingsCancel], Parameters = ObjectSchema(
+            [("meetingId", GuidSchema())], ["meetingId"]) },
+        new() { Name = "finance.create_movement", RequiresConfirmation = true, Description = "Prepara el registro de un ingreso o gasto operativo de la empresa para que el usuario lo confirme. Requiere type, amount, currency, description y category (nombre de la categoría; si no sabés cuál, enviá la más parecida y la herramienta devuelve las opciones). settled=true si ya se cobró o pagó (con fecha date, no futura); si no, queda pendiente con dueDate opcional.", RequiredPermissions = [PermissionCodes.FinancesRead, PermissionCodes.FinancesWrite], Parameters = ObjectSchema(
+            [("type", EnumSchema(MovementTypes)), ("amount", NumberSchema(0.01m, 1_000_000_000m)), ("currency", EnumSchema(CurrencyOptions)), ("description", StringSchema(300)), ("category", StringSchema(100)),
+             ("date", DateSchema()), ("settled", BooleanSchema()), ("dueDate", DateSchema()), ("clientId", GuidSchema()), ("projectId", GuidSchema())], ["type", "amount", "currency", "description"]) },
+        new() { Name = "clients.create_prospect", RequiresConfirmation = true, Description = "Prepara el alta de un cliente en estado Prospecto para que el usuario la confirme. Requiere el nombre comercial; serviceType opcional.", RequiredPermissions = [PermissionCodes.ClientsRead, PermissionCodes.ClientsWrite], Parameters = ObjectSchema(
+            [("name", StringSchema(160)), ("serviceType", StringSchema(120))], ["name"]) }
     ];
 
     public IReadOnlyCollection<AiToolDefinitionDto> GetAvailableTools(AiExecutionContext actor) =>
@@ -204,7 +217,7 @@ public sealed partial class AiToolCatalog(
             ValidateProperties(arguments, definition.Parameters);
             // Se vuelve a validar todo: entre la propuesta y la confirmación pudo cambiar el proyecto, la tarea o las personas.
             var prepared = await PrepareActionAsync(toolName, actor, arguments, DateTime.UtcNow, cancellationToken);
-            return await ExecuteActionAsync(actor, prepared, cancellationToken);
+            return await ExecuteActionAsync(actor, actionId, prepared, cancellationToken);
         }, cancellationToken);
 
         await WriteAuditAsync(actor, actionId, toolName, "Allowed", "executed", cancellationToken);
@@ -253,7 +266,7 @@ public sealed partial class AiToolCatalog(
         "tasks.create" => PrepareTaskCreateAsync(args, ct),
         "tasks.update_status" => PrepareTaskStatusAsync(args, ct),
         "meetings.create" => PrepareMeetingCreateAsync(args, ct),
-        _ => throw new AiToolRejectedException("La acción solicitada no está habilitada.")
+        _ => PrepareExtendedActionAsync(toolName, actor, args, now, ct)
     };
 
     private async Task<AiActionProposalDto> PrepareTaskCreateAsync(JsonObject args, CancellationToken ct)
@@ -383,7 +396,7 @@ public sealed partial class AiToolCatalog(
         };
     }
 
-    private async Task<AiActionOutcomeDto> ExecuteActionAsync(AiExecutionContext actor, AiActionProposalDto prepared, CancellationToken ct)
+    private async Task<AiActionOutcomeDto> ExecuteActionAsync(AiExecutionContext actor, Guid actionId, AiActionProposalDto prepared, CancellationToken ct)
     {
         var args = prepared.Arguments;
         var now = DateTime.UtcNow;
@@ -407,13 +420,17 @@ public sealed partial class AiToolCatalog(
                 {
                     Message = $"Listo, creé la tarea «{created.Title}» en {created.ProjectName}.",
                     Link = "/tareas",
-                    Source = Source("tasks.create", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas")
+                    Source = Source("tasks.create", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas"),
+                    EntityId = created.Id,
+                    UndoData = new JsonObject()
                 };
             }
             case "tasks.update_status":
             {
                 var taskId = GetGuid(args, "taskId")!.Value;
-                var kanbanOrder = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == taskId).Select(x => x.OrdenKanban).SingleOrDefaultAsync(ct);
+                var previous = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == taskId).Select(x => new { x.OrdenKanban, x.Estado }).SingleOrDefaultAsync(ct)
+                    ?? throw new AiToolRejectedException("La tarea ya no existe.");
+                var kanbanOrder = previous.OrdenKanban;
                 var status = GetString(args, "status", 20)!;
                 var updated = await tasks.UpdateStatusAsync(taskId, new TaskStatusUpdateRequestDto { Status = status, KanbanOrder = kanbanOrder }, ct)
                     ?? throw new AiToolRejectedException("La tarea ya no existe.");
@@ -421,7 +438,9 @@ public sealed partial class AiToolCatalog(
                 {
                     Message = $"Listo, la tarea «{updated.Title}» quedó en {StatusLabel(status)}.",
                     Link = "/tareas",
-                    Source = Source("tasks.update_status", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas")
+                    Source = Source("tasks.update_status", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas"),
+                    EntityId = taskId,
+                    UndoData = new JsonObject { ["previousStatus"] = previous.Estado.ToString(), ["previousKanbanOrder"] = previous.OrdenKanban, ["newStatus"] = status }
                 };
             }
             case "meetings.create":
@@ -442,11 +461,13 @@ public sealed partial class AiToolCatalog(
                 {
                     Message = $"Listo, agendé «{created.Title}» para el {startsAt.ToString("dddd d 'de' MMMM 'a las' HH:mm", Spanish)}.",
                     Link = "/agenda",
-                    Source = Source("meetings.create", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda")
+                    Source = Source("meetings.create", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda"),
+                    EntityId = created.Id,
+                    UndoData = new JsonObject()
                 };
             }
             default:
-                throw new AiToolRejectedException("La acción solicitada no está habilitada.");
+                return await ExecuteExtendedActionAsync(actor, actionId, prepared, ct);
         }
     }
 

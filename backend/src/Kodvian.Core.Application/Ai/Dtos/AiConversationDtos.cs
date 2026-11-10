@@ -42,12 +42,21 @@ public sealed class AiPendingActionDto
     public string Title { get; init; } = string.Empty;
     public string Summary { get; init; } = string.Empty;
     public IReadOnlyCollection<AiActionDetailDto> Details { get; init; } = [];
-    /// <summary>Pending, Executing, Confirmed, Cancelled, Expired o Failed.</summary>
+    /// <summary>Pending, Executing, Confirmed, Cancelled, Expired, Failed o Undone.</summary>
     public string Status { get; init; } = string.Empty;
     public DateTime ExpiresAtUtc { get; init; }
     public DateTime? ResolvedAtUtc { get; init; }
     public string? ResultMessage { get; init; }
     public string? ResultLink { get; init; }
+    /// <summary>True durante los minutos en que la acción confirmada todavía se puede deshacer.</summary>
+    public bool CanUndo { get; init; }
+    public DateTime? UndoAvailableUntilUtc { get; init; }
+}
+
+public sealed class AiActionBatchResolutionDto
+{
+    public IReadOnlyCollection<AiPendingActionDto> Actions { get; init; } = [];
+    public AiMessageDto? Message { get; init; }
 }
 
 public sealed class AiActionResolutionDto

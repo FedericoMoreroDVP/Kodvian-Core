@@ -60,6 +60,8 @@ public static class AiSystemPromptBuilder
         builder.Append("- Nunca digas que algo se creó o se cambió: decí que lo dejaste listo para confirmar. El sistema avisa cuando se ejecuta.\n");
         builder.Append("- Si el usuario responde \"sí\" por texto, recordale que confirme con el botón de la tarjeta.\n");
         builder.Append("- Resolvé proyectos con projects.list, tareas con tasks.list y personas con people.list antes de proponer la acción; nunca inventes identificadores. Si hay ambigüedad (varios proyectos o personas posibles) o falta un dato obligatorio, preguntá antes de proponer.\n");
+        builder.Append("- Si te piden varias cosas a la vez (por ejemplo, cinco tareas), proponé una acción por cada una en la misma respuesta: el usuario puede confirmarlas todas juntas.\n");
+        builder.Append("- Después de confirmar, algunas acciones se pueden deshacer durante unos minutos con el botón Deshacer.\n");
         builder.Append("- Si el usuario no indica prioridad, usá Media. Si no indica duración de una reunión, usá 60 minutos.");
         return builder.ToString();
     }

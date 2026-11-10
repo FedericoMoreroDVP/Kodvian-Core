@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 
 import { ApiResponse } from '../../core/auth/auth.models';
-import { AiActionResolution, AiConversation, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
+import { AiActionBatchResolution, AiActionResolution, AiConversation, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
 
 /** El streaming no está disponible: hay que usar el envío común. */
 export class StreamUnavailableError extends Error {
@@ -118,6 +118,18 @@ export class IntelligentOfficeService {
   confirmAction(conversationId: string, actionId: string): Observable<AiActionResolution> {
     return this.http.post<ApiResponse<AiActionResolution>>(
       `${this.baseUrl}/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}/confirm`, {}, { withCredentials: true })
+      .pipe(map(response => response.data));
+  }
+
+  confirmAll(conversationId: string, messageId: string): Observable<AiActionBatchResolution> {
+    return this.http.post<ApiResponse<AiActionBatchResolution>>(
+      `${this.baseUrl}/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/actions/confirm-all`, {}, { withCredentials: true })
+      .pipe(map(response => response.data));
+  }
+
+  undoAction(conversationId: string, actionId: string): Observable<AiActionResolution> {
+    return this.http.post<ApiResponse<AiActionResolution>>(
+      `${this.baseUrl}/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}/undo`, {}, { withCredentials: true })
       .pipe(map(response => response.data));
   }
 

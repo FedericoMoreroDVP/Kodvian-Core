@@ -187,6 +187,9 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<DateTime?>("ResolvedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("ResultEntityId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ResultLink")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -217,6 +220,13 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UndoJson")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<DateTime?>("UndoneAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("Version")
                         .IsConcurrencyToken()

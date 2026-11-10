@@ -20,6 +20,149 @@ namespace Kodvian.Core.Application.Tests;
 public sealed class AiToolCatalogTests
 {
     [Fact]
+    public async Task TaskUpdateReschedulesAndCanBeUndoneUnlessSomeoneChangedIt()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var task = new TaskItem { Titulo = "Informe", ProyectoId = project.Id, CreadoPorId = actor.UserId, FechaVencimiento = new DateOnly(2026, 11, 12) };
+        db.Tasks.Add(task);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var proposal = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "tasks.update",
+            new JsonObject { ["taskId"] = task.Id.ToString(), ["dueDate"] = "2026-11-20", ["priority"] = "Alta" }, CancellationToken.None);
+        Assert.Equal("Reprogramar tarea", proposal.Proposal!.Title);
+        Assert.Contains(proposal.Proposal.Details, x => x.Label == "Vence" && x.Value == "12/11/2026 → 20/11/2026");
+
+        var outcome = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "tasks.update", proposal.Proposal.Arguments, CancellationToken.None);
+        var updated = db.Tasks.AsNoTracking().Single();
+        Assert.Equal(new DateOnly(2026, 11, 20), updated.FechaVencimiento);
+        Assert.Equal(TaskPriority.Alta, updated.Prioridad);
+        Assert.NotNull(outcome.UndoData);
+
+        await catalog.UndoActionAsync(actor, Guid.NewGuid(), "tasks.update", task.Id, outcome.UndoData!, CancellationToken.None);
+        var reverted = db.Tasks.AsNoTracking().Single();
+        Assert.Equal(new DateOnly(2026, 11, 12), reverted.FechaVencimiento);
+        Assert.Equal(TaskPriority.Media, reverted.Prioridad);
+
+        // Si alguien la cambia después, deshacer ya no es seguro.
+        var second = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "tasks.update", proposal.Proposal.Arguments, CancellationToken.None);
+        var tracked = db.Tasks.Single();
+        tracked.Titulo = "Informe editado a mano";
+        db.SaveChanges();
+        var error = await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.UndoActionAsync(actor, Guid.NewGuid(), "tasks.update", task.Id, second.UndoData!, CancellationToken.None));
+        Assert.Contains("modificó", error.Message);
+    }
+
+    [Fact]
+    public async Task UndoingATaskCreationRemovesTheTask()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var catalog = CreateCatalog(db);
+        var outcome = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "tasks.create",
+            new JsonObject { ["projectId"] = project.Id.ToString(), ["title"] = "Temporal" }, CancellationToken.None);
+        Assert.Single(db.Tasks);
+
+        await catalog.UndoActionAsync(actor, Guid.NewGuid(), "tasks.create", outcome.EntityId!.Value, outcome.UndoData!, CancellationToken.None);
+
+        Assert.Empty(db.Tasks.AsNoTracking());
+    }
+
+    [Fact]
+    public async Task StatusChangeUndoRestoresThePreviousStatus()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var task = new TaskItem { Titulo = "Deploy", ProyectoId = project.Id, CreadoPorId = actor.UserId, Estado = Kodvian.Core.Domain.Enums.TaskStatus.EnCurso };
+        db.Tasks.Add(task);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+        var outcome = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "tasks.update_status",
+            new JsonObject { ["taskId"] = task.Id.ToString(), ["status"] = "Finalizada" }, CancellationToken.None);
+
+        await catalog.UndoActionAsync(actor, Guid.NewGuid(), "tasks.update_status", task.Id, outcome.UndoData!, CancellationToken.None);
+
+        Assert.Equal(Kodvian.Core.Domain.Enums.TaskStatus.EnCurso, db.Tasks.AsNoTracking().Single().Estado);
+    }
+
+    [Fact]
+    public async Task MeetingCanBeMovedKeepingItsDurationUndoneAndCancelled()
+    {
+        await using var db = CreateDatabase();
+        var (actor, project) = SeedProject(db);
+        var start = new DateTime(2026, 11, 12, 13, 0, 0, DateTimeKind.Utc); // 10:00 en Buenos Aires
+        var meeting = new Meeting { ProyectoId = project.Id, CreadoPorId = actor.UserId, Titulo = "Revisión", Inicio = start, Fin = start.AddMinutes(45) };
+        db.Meetings.Add(meeting);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var proposal = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "meetings.update",
+            new JsonObject { ["meetingId"] = meeting.Id.ToString(), ["startsAt"] = "2026-11-13T15:00" }, CancellationToken.None);
+        Assert.Equal("2026-11-13T15:45", proposal.Proposal!.Arguments["endsAt"]!.GetValue<string>());
+        var outcome = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "meetings.update", proposal.Proposal.Arguments, CancellationToken.None);
+        Assert.Equal(new DateTime(2026, 11, 13, 18, 0, 0, DateTimeKind.Utc), db.Meetings.AsNoTracking().Single().Inicio);
+
+        await catalog.UndoActionAsync(actor, Guid.NewGuid(), "meetings.update", meeting.Id, outcome.UndoData!, CancellationToken.None);
+        Assert.Equal(start, db.Meetings.AsNoTracking().Single().Inicio);
+
+        var cancel = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "meetings.cancel", new JsonObject { ["meetingId"] = meeting.Id.ToString() }, CancellationToken.None);
+        var cancelled = await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "meetings.cancel", cancel.Proposal!.Arguments, CancellationToken.None);
+        Assert.Equal(MeetingStatus.Cancelada, db.Meetings.AsNoTracking().Single().Estado);
+        Assert.Null(cancelled.UndoData);
+    }
+
+    [Fact]
+    public async Task MovementRegistrationResolvesTheCategoryByNameAndIsIdempotent()
+    {
+        await using var db = CreateDatabase();
+        var (actor, _) = SeedProject(db);
+        db.FinancialCategories.AddRange(
+            new FinancialCategory { Name = "Hosting", MovementType = FinancialMovementType.Egreso },
+            new FinancialCategory { Name = "Sueldos", MovementType = FinancialMovementType.Egreso });
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var unknown = await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "finance.create_movement",
+            new JsonObject { ["type"] = "Egreso", ["amount"] = 20, ["currency"] = "USD", ["description"] = "Servidor", ["category"] = "Viajes" }, CancellationToken.None));
+        Assert.Contains("Hosting", unknown.Message);
+
+        var yesterday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone)).AddDays(-1);
+        var proposal = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "finance.create_movement", new JsonObject
+        {
+            ["type"] = "Egreso", ["amount"] = 20.5, ["currency"] = "USD", ["description"] = "Servidor", ["category"] = "host", ["settled"] = true, ["date"] = yesterday.ToString("yyyy-MM-dd")
+        }, CancellationToken.None);
+        Assert.Contains(proposal.Proposal!.Details, x => x.Label == "Categoría" && x.Value == "Hosting");
+
+        var actionId = Guid.NewGuid();
+        await catalog.ExecuteConfirmedActionAsync(actor, actionId, "finance.create_movement", proposal.Proposal.Arguments, CancellationToken.None);
+        await catalog.ExecuteConfirmedActionAsync(actor, actionId, "finance.create_movement", proposal.Proposal.Arguments, CancellationToken.None);
+
+        var movement = Assert.Single(db.FinancialMovements.AsNoTracking());
+        Assert.Equal(actionId, movement.Id);
+        Assert.Equal(20.5m, movement.Amount);
+        Assert.Equal(FinancialMovementStatus.Pagado, movement.Status);
+        Assert.Equal(yesterday, movement.SettlementDate);
+    }
+
+    [Fact]
+    public async Task ProspectIsCreatedOnceAndDuplicatesAreRejected()
+    {
+        await using var db = CreateDatabase();
+        var (actor, _) = SeedProject(db);
+        var catalog = CreateCatalog(db);
+        var proposal = await catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "clients.create_prospect",
+            new JsonObject { ["name"] = "Nueva Empresa", ["serviceType"] = "Desarrollo web" }, CancellationToken.None);
+
+        await catalog.ExecuteConfirmedActionAsync(actor, Guid.NewGuid(), "clients.create_prospect", proposal.Proposal!.Arguments, CancellationToken.None);
+
+        var client = db.Clients.AsNoTracking().Single(x => x.CommercialName == "Nueva Empresa");
+        Assert.Equal(ClientStatus.Prospecto, client.Status);
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "t", "clients.create_prospect",
+            new JsonObject { ["name"] = "nueva empresa" }, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ClientToolOmitsContactTaxFinancialAndNotesData()
     {
         await using var db = CreateDatabase();
@@ -426,6 +569,7 @@ public sealed class AiToolCatalogTests
             new MeetingService(db),
             finance,
             new DashboardService(db, finance),
+            new FinancialMovementService(db, new NullFileStorage(), Options.Create(new StorageOptions()), finance),
             new FakeProviderConfiguration(),
             new ActiveSessionValidator(),
             db);

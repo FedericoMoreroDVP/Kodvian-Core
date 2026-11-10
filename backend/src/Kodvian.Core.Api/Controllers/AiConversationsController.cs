@@ -89,6 +89,22 @@ public sealed class AiConversationsController(IAiConversationService service) : 
         return Ok(ApiResponseDto<AiActionResolutionDto>.Ok(data, data.Action.Status == "Confirmed" ? "Acción confirmada." : "La acción no se pudo completar."));
     }
 
+    [HttpPost("{id:guid}/messages/{messageId:guid}/actions/confirm-all")]
+    [EnableRateLimiting("AiConversationMessages")]
+    public async Task<ActionResult<ApiResponseDto<AiActionBatchResolutionDto>>> ConfirmAllActions(Guid id, Guid messageId, CancellationToken cancellationToken)
+    {
+        var data = await service.ConfirmAllActionsAsync(CreateActor(), id, messageId, cancellationToken);
+        return Ok(ApiResponseDto<AiActionBatchResolutionDto>.Ok(data, "Acciones procesadas."));
+    }
+
+    [HttpPost("{id:guid}/actions/{actionId:guid}/undo")]
+    [EnableRateLimiting("AiConversationMessages")]
+    public async Task<ActionResult<ApiResponseDto<AiActionResolutionDto>>> UndoAction(Guid id, Guid actionId, CancellationToken cancellationToken)
+    {
+        var data = await service.UndoActionAsync(CreateActor(), id, actionId, cancellationToken);
+        return Ok(ApiResponseDto<AiActionResolutionDto>.Ok(data, data.Action.Status == "Undone" ? "Acción deshecha." : "La acción no se pudo deshacer."));
+    }
+
     [HttpPost("{id:guid}/actions/{actionId:guid}/cancel")]
     public async Task<ActionResult<ApiResponseDto<AiActionResolutionDto>>> CancelAction(Guid id, Guid actionId, CancellationToken cancellationToken)
     {

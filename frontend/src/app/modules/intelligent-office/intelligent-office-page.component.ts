@@ -9,6 +9,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
+import { AiActionCardComponent, isActionable } from './ai-action-card.component';
 import { renderAiMarkdown } from './ai-markdown';
 import { AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
@@ -29,22 +30,12 @@ const SOURCE_LABELS: Record<string, string> = {
   'finance.compare_months': 'Comparación mensual',
   'my_day.get': 'Mi día',
   'projects.get': 'Proyecto',
-  'clients.get': 'Cliente'
-};
-
-const ACTION_ICONS: Record<string, string> = {
-  'tasks.create': 'add_task',
-  'tasks.update_status': 'published_with_changes',
-  'meetings.create': 'event'
-};
-
-const ACTION_STATUS_LABELS: Record<string, string> = {
-  Pending: 'Pendiente de confirmación',
-  Executing: 'Procesando…',
-  Confirmed: 'Confirmada',
-  Cancelled: 'Cancelada',
-  Expired: 'Vencida',
-  Failed: 'No se pudo completar'
+  'clients.get': 'Cliente',
+  'tasks.update': 'Tareas',
+  'meetings.update': 'Agenda',
+  'meetings.cancel': 'Agenda',
+  'finance.create_movement': 'Finanzas',
+  'clients.create_prospect': 'Clientes'
 };
 
 interface Suggestion {
@@ -57,7 +48,7 @@ interface Suggestion {
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
+  imports: [AiActionCardComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
       <mat-card class="hero-card">
@@ -125,39 +116,18 @@ interface Suggestion {
                   } @else {
                     <p class="message-content">{{ message.content }}</p>
                   }
+                  @if (actionableCount(message) > 1) {
+                    <div class="batch-bar">
+                      <span>{{ actionableCount(message) }} acciones listas</span>
+                      <button mat-flat-button color="primary" type="button" class="confirm-all" (click)="confirmAll(message)" [disabled]="busy || !!actionInProgress">
+                        @if (actionInProgress === message.id) { <mat-spinner diameter="16" /> } @else { <mat-icon>done_all</mat-icon> }
+                        Confirmar todas
+                      </button>
+                    </div>
+                  }
                   @for (action of message.pendingActions ?? []; track action.id) {
-                    <section class="action-card" [attr.data-status]="action.status" [attr.aria-label]="action.title">
-                      <header class="action-header">
-                        <mat-icon class="action-icon">{{ actionIcon(action) }}</mat-icon>
-                        <span class="action-title">{{ action.title }}</span>
-                        <span class="action-status">{{ actionStatusLabel(action) }}</span>
-                      </header>
-                      <p class="action-summary">{{ action.summary }}</p>
-                      @if (action.details.length) {
-                        <dl class="action-details">
-                          @for (detail of action.details; track $index) {
-                            <div class="action-detail"><dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd></div>
-                          }
-                        </dl>
-                      }
-                      @if (isActionable(action)) {
-                        <div class="action-buttons">
-                          <button mat-flat-button color="primary" type="button" class="confirm-action" (click)="confirmAction(action)" [disabled]="busy || !!actionInProgress">
-                            @if (actionInProgress === action.id) { <mat-spinner diameter="16" /> } @else { <mat-icon>check</mat-icon> }
-                            Confirmar
-                          </button>
-                          <button mat-stroked-button type="button" class="cancel-action" (click)="cancelAction(action)" [disabled]="busy || !!actionInProgress">
-                            <mat-icon>close</mat-icon> Cancelar
-                          </button>
-                          <span class="action-expiry">Vence a las {{ action.expiresAtUtc | date:'HH:mm' }}</span>
-                        </div>
-                      } @else if (action.resultMessage) {
-                        <p class="action-result">
-                          {{ action.resultMessage }}
-                          @if (action.resultLink && action.status === 'Confirmed') { <a [routerLink]="action.resultLink">Ver</a> }
-                        </p>
-                      }
-                    </section>
+                    <app-ai-action-card [action]="action" [disabled]="busy || !!actionInProgress" [inProgress]="actionInProgress === action.id"
+                      (confirm)="confirmAction($event)" (cancel)="cancelAction($event)" (undo)="undoAction($event)" />
                   }
                   @if (message.sources.length) {
                     <div class="sources">
@@ -317,26 +287,9 @@ interface Suggestion {
     .markdown th { color: var(--text-300); font-weight: 600; background: rgba(255,255,255,.03); }
     .assistant-message .message-content.markdown { white-space: normal; }
 
-    .action-card { margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px solid rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .05); }
-    .action-card[data-status="Confirmed"] { border-color: rgba(34, 197, 94, .25); background: rgba(34, 197, 94, .03); }
-    .action-card[data-status="Cancelled"], .action-card[data-status="Expired"] { border-color: var(--kd-border-subtle); background: rgba(255,255,255,.02); opacity: .8; }
-    .action-card[data-status="Failed"] { border-color: rgba(255, 99, 99, .3); background: rgba(255, 99, 99, .05); }
-    .action-header { display: flex; align-items: center; gap: 8px; }
-    .action-icon { color: var(--brand-300); }
-    .action-title { flex: 1; font-weight: 600; font-size: 14px; }
-    .action-status { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: var(--text-300); background: rgba(255,255,255,.05); }
-    .action-card[data-status="Confirmed"] .action-status { color: var(--brand-300); }
-    .action-card[data-status="Failed"] .action-status { color: #ffb4b4; }
-    .action-summary { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }
-    .action-details { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin: 10px 0 0; }
-    .action-detail dt { color: var(--text-300); font-size: 11px; }
-    .action-detail dd { margin: 1px 0 0; font-size: 13px; }
-    .action-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-    .action-buttons mat-spinner { display: inline-block; margin-right: 6px; }
-    .action-expiry { color: var(--text-300); font-size: 11px; }
-    .action-result { margin: 10px 0 0; font-size: 13px; color: var(--text-300); }
-    .action-result a { margin-left: 6px; color: var(--brand-300); }
 
+    .batch-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 8px 10px; border-radius: 10px; font-size: 13px; background: rgba(34, 197, 94, .08); }
+    .batch-bar mat-spinner { display: inline-block; margin-right: 6px; }
     .ungrounded { display: inline-flex; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--text-300); font-size: 11px; }
     .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
 
@@ -483,41 +436,56 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
     return html;
   }
 
-  actionIcon(action: AiPendingAction): string { return ACTION_ICONS[action.toolName] ?? 'bolt'; }
-
-  isActionable(action: AiPendingAction): boolean {
-    return action.status === 'Pending' && new Date(action.expiresAtUtc).getTime() > Date.now();
-  }
-
-  actionStatusLabel(action: AiPendingAction): string {
-    const status = action.status === 'Pending' && !this.isActionable(action) ? 'Expired' : action.status;
-    return ACTION_STATUS_LABELS[status] ?? status;
-  }
+  actionableCount(message: AiMessage): number { return (message.pendingActions ?? []).filter(isActionable).length; }
 
   confirmAction(action: AiPendingAction): void { this.resolveAction(action, 'confirm'); }
 
   cancelAction(action: AiPendingAction): void { this.resolveAction(action, 'cancel'); }
 
-  private resolveAction(action: AiPendingAction, kind: 'confirm' | 'cancel'): void {
+  undoAction(action: AiPendingAction): void { this.resolveAction(action, 'undo'); }
+
+  confirmAll(message: AiMessage): void {
+    const conversation = this.activeConversation;
+    if (!conversation || this.busy || this.actionInProgress) return;
+    this.actionInProgress = message.id;
+    this.chatError = '';
+    this.api.confirmAll(conversation.id, message.id).pipe(finalize(() => this.actionInProgress = null)).subscribe({
+      next: result => {
+        result.actions.forEach(action => this.replaceAction(action));
+        if (result.message) this.appendSystemMessage(conversation, result.message);
+      },
+      error: error => { this.chatError = IntelligentOfficeService.errorMessage(error); this.reloadActive(); }
+    });
+  }
+
+  private resolveAction(action: AiPendingAction, kind: 'confirm' | 'cancel' | 'undo'): void {
     const conversation = this.activeConversation;
     if (!conversation || this.busy || this.actionInProgress) return;
     this.actionInProgress = action.id;
     this.chatError = '';
-    const request = kind === 'confirm' ? this.api.confirmAction(conversation.id, action.id) : this.api.cancelAction(conversation.id, action.id);
+    const request = kind === 'confirm' ? this.api.confirmAction(conversation.id, action.id)
+      : kind === 'undo' ? this.api.undoAction(conversation.id, action.id)
+      : this.api.cancelAction(conversation.id, action.id);
     request.pipe(finalize(() => this.actionInProgress = null)).subscribe({
       next: result => {
-        this.messages = this.messages.map(message => message.pendingActions?.some(x => x.id === result.action.id)
-          ? { ...message, pendingActions: message.pendingActions!.map(x => x.id === result.action.id ? result.action : x) }
-          : message);
-        if (result.message) {
-          this.messages = [...this.messages, result.message];
-          this.activeConversation = { ...conversation, messageCount: conversation.messageCount + 1, updatedAtUtc: result.message.createdAtUtc };
-          this.conversations = this.conversations.map(x => x.id === conversation.id ? this.activeConversation! : x);
-          this.shouldScroll = true;
-        }
+        this.replaceAction(result.action);
+        if (result.message) this.appendSystemMessage(conversation, result.message);
       },
       error: error => { this.chatError = IntelligentOfficeService.errorMessage(error); this.reloadActive(); }
     });
+  }
+
+  private replaceAction(action: AiPendingAction): void {
+    this.messages = this.messages.map(message => message.pendingActions?.some(x => x.id === action.id)
+      ? { ...message, pendingActions: message.pendingActions!.map(x => x.id === action.id ? action : x) }
+      : message);
+  }
+
+  private appendSystemMessage(conversation: AiConversation, message: AiMessage): void {
+    this.messages = [...this.messages, message];
+    this.activeConversation = { ...conversation, messageCount: conversation.messageCount + 1, updatedAtUtc: message.createdAtUtc };
+    this.conversations = this.conversations.map(x => x.id === conversation.id ? this.activeConversation! : x);
+    this.shouldScroll = true;
   }
 
   onComposerKeydown(event: KeyboardEvent): void {

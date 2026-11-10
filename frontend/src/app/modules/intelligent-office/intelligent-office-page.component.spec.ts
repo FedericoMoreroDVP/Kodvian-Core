@@ -153,6 +153,47 @@ describe('Oficina Inteligente', () => {
     fixture.destroy();
   });
 
+  it('confirma varias acciones juntas y permite deshacer una confirmada', () => {
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    const conversation = { id: 'c1', title: 'Tareas', createdAtUtc: '2026-11-10T12:00:00Z', updatedAtUtc: '2026-11-10T12:00:00Z', messageCount: 2 };
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [conversation], pageNumber: 1, pageSize: 50, totalCount: 1 } });
+    const expires = new Date(Date.now() + 600000).toISOString();
+    const pending = (id: string, title: string) => ({ id, toolName: 'tasks.create', title: 'Crear tarea', summary: title, details: [], status: 'Pending', expiresAtUtc: expires, resolvedAtUtc: null, resultMessage: null, resultLink: null });
+    http.expectOne('/api/ai/conversations/c1').flush({ data: { ...conversation, messages: [
+      { id: 'm1', role: 'user', content: 'Creame dos tareas', createdAtUtc: '2026-11-10T12:00:00Z', traceId: null, sources: [] },
+      { id: 'm2', role: 'assistant', content: 'Listas para confirmar.', createdAtUtc: '2026-11-10T12:00:02Z', traceId: null, sources: [], pendingActions: [pending('a1', 'Tarea A'), pending('a2', 'Tarea B')] }
+    ] } });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.confirm-all') as HTMLButtonElement).click();
+    const batch = http.expectOne('/api/ai/conversations/c1/messages/m2/actions/confirm-all');
+    const undoUntil = new Date(Date.now() + 900000).toISOString();
+    batch.flush({ data: {
+      actions: [
+        { ...pending('a1', 'Tarea A'), status: 'Confirmed', resultMessage: 'Listo A', canUndo: true, undoAvailableUntilUtc: undoUntil },
+        { ...pending('a2', 'Tarea B'), status: 'Confirmed', resultMessage: 'Listo B', canUndo: true, undoAvailableUntilUtc: undoUntil }
+      ],
+      message: { id: 'm3', role: 'assistant', content: 'Listo, confirmé las 2 acciones.', createdAtUtc: '2026-11-10T12:01:00Z', traceId: null, sources: [] }
+    } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.confirm-all')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.undo-action').length).toBe(2);
+
+    (fixture.nativeElement.querySelector('.undo-action') as HTMLButtonElement).click();
+    http.expectOne('/api/ai/conversations/c1/actions/a1/undo').flush({ data: {
+      action: { ...pending('a1', 'Tarea A'), status: 'Undone', resultMessage: 'Listo A', canUndo: false },
+      message: { id: 'm4', role: 'assistant', content: 'Deshice la creación de «Tarea A».', createdAtUtc: '2026-11-10T12:02:00Z', traceId: null, sources: [] }
+    } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('.undo-action').length).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Deshecha');
+    expect(fixture.componentInstance.messages.length).toBe(4);
+    fixture.destroy();
+  });
+
   it('una sugerencia de acción se copia al cuadro de texto sin enviarse', () => {
     const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
     fixture.detectChanges();

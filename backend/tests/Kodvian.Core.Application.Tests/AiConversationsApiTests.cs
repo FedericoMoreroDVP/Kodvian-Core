@@ -138,6 +138,8 @@ public sealed class AiConversationsApiTests : IDisposable
         }
         public Task<AiActionResolutionDto> ConfirmActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
         public Task<AiActionResolutionDto> CancelActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
+        public Task<AiActionBatchResolutionDto> ConfirmAllActionsAsync(AiExecutionContext actor, Guid conversationId, Guid messageId, CancellationToken cancellationToken) => Task.FromResult(new AiActionBatchResolutionDto());
+        public Task<AiActionResolutionDto> UndoActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
         public Task<bool> DeleteAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 }

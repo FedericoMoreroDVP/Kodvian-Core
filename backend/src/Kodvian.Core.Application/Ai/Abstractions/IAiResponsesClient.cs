@@ -39,4 +39,11 @@ public interface IAiToolExecutor
     /// Las validaciones de dominio se informan con <see cref="Kodvian.Core.Application.Ai.AiToolRejectedException"/>.
     /// </summary>
     Task<AiActionOutcomeDto> ExecuteConfirmedActionAsync(AiExecutionContext actor, Guid actionId, string toolName, JsonObject arguments, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Revierte una acción confirmada si todavía es seguro (nadie la modificó después).
+    /// Si no se puede, informa el motivo con <see cref="Kodvian.Core.Application.Ai.AiToolRejectedException"/>.
+    /// </summary>
+    Task<AiActionOutcomeDto> UndoActionAsync(AiExecutionContext actor, Guid actionId, string toolName, Guid entityId, JsonObject undoData, CancellationToken cancellationToken) =>
+        throw new Kodvian.Core.Application.Ai.AiToolRejectedException("Esta acción no se puede deshacer.");
 }
