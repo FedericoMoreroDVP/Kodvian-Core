@@ -19,6 +19,8 @@ public sealed class AiToolDefinitionDto
     public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [];
     /// <summary>Las herramientas de acción no escriben: preparan una propuesta que el usuario confirma.</summary>
     public bool RequiresConfirmation { get; init; }
+    /// <summary>Además de RequiredPermissions, el usuario necesita al menos uno de estos (vacío = no aplica).</summary>
+    public IReadOnlyCollection<string> AnyOfPermissions { get; init; } = [];
 }
 
 public sealed class AiToolExecutionResultDto

@@ -9,6 +9,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
+import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { AiActionCardComponent, isActionable } from './ai-action-card.component';
 import { AiBriefingComponent } from './ai-briefing.component';
 import { AiMessageExtrasComponent } from './ai-message-extras.component';
@@ -62,7 +63,7 @@ interface Suggestion {
           <h2>Oficina Inteligente</h2>
           <p class="hero-subtitle">Consultá datos con fuentes verificables y pedí acciones como agendar tareas o reuniones. Nada se crea sin tu confirmación.</p>
         </div>
-        <a mat-stroked-button class="provider-link" routerLink="/administracion/configuracion-ia"><mat-icon>tune</mat-icon> Configuración del proveedor</a>
+        @if (isAdministrator) { <a mat-stroked-button class="provider-link" routerLink="/administracion/configuracion-ia"><mat-icon>tune</mat-icon> Configuración del proveedor</a> }
       </mat-card>
 
       @if (pageError) { <p class="banner error" role="alert"><mat-icon>error_outline</mat-icon>{{ pageError }}</p> }
@@ -372,6 +373,8 @@ interface Suggestion {
 })
 export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked {
   private readonly api = inject(IntelligentOfficeService);
+  /** La configuración del proveedor y el uso de IA son solo para Administradores. */
+  readonly isAdministrator = inject(AuthSessionService).user?.roles.includes('Administrador') ?? false;
   @ViewChild('messageList') private messageList?: ElementRef<HTMLElement>;
   private shouldScroll = false;
 

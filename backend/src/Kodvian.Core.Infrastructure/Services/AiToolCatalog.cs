@@ -62,13 +62,13 @@ public sealed partial class AiToolCatalog(
             [("from", DateSchema()), ("to", DateSchema())], []) },
         new() { Name = "projects.list", Description = "Lista proyectos visibles con campos operativos mínimos. Limita los resultados a la primera página.", RequiredPermissions = [PermissionCodes.ProjectsRead], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("status", EnumSchema(ProjectStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
-        new() { Name = "tasks.list", Description = "Lista tareas visibles. Devuelve título, proyecto, estado, prioridad y vencimiento; no devuelve descripción ni horas.", RequiredPermissions = [PermissionCodes.TasksRead], Parameters = ObjectSchema(
+        new() { Name = "tasks.list", Description = "Lista tareas visibles. Devuelve título, proyecto, estado, prioridad y vencimiento; no devuelve descripción ni horas. Quien no tiene acceso al tablero completo ve solo sus tareas asignadas.", RequiredPermissions = [], AnyOfPermissions = [PermissionCodes.TasksRead, PermissionCodes.DeveloperWorkRead], Parameters = ObjectSchema(
             [("search", StringSchema(120)), ("projectId", GuidSchema()), ("status", EnumSchema(TaskStatuses)), ("dueDateFrom", DateSchema()), ("dueDateTo", DateSchema()), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "clients.list", Description = "Lista clientes visibles con nombre comercial y estado; excluye datos de contacto, montos y notas.", RequiredPermissions = [PermissionCodes.ClientsRead], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("status", EnumSchema(ClientStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "meetings.list", Description = "Lista reuniones visibles durante un período de hasta 90 días. Sin fechas devuelve los próximos 7 días (desde hoy). Para reuniones pasadas indicá from y to. No devuelve enlaces, ubicación ni nombres de participantes.", RequiredPermissions = [PermissionCodes.MeetingsRead], Parameters = ObjectSchema(
             [("from", DateSchema()), ("to", DateSchema()), ("projectId", GuidSchema()), ("status", EnumSchema(MeetingStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
-        new() { Name = "people.list", Description = "Busca personas por nombre para asignar tareas o invitar a reuniones. Devuelve usuarios activos (sirven como responsable de tarea y como participantes de reunión) y desarrolladores activos (sirven como desarrollador asignado de una tarea). Solo id y nombre.", RequiredPermissions = [], Parameters = ObjectSchema(
+        new() { Name = "people.list", Description = "Busca personas por nombre para asignar tareas o invitar a reuniones. Devuelve usuarios activos (sirven como responsable de tarea y como participantes de reunión) y desarrolladores activos (sirven como desarrollador asignado de una tarea). Solo id y nombre.", RequiredPermissions = [], AnyOfPermissions = [PermissionCodes.TeamRead, PermissionCodes.TasksWrite, PermissionCodes.MeetingsWrite], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "finance.list_movements", Description = "Lista movimientos financieros (ingresos y egresos) de un período de hasta 90 días, por defecto los últimos 30. Filtra por tipo, estado, moneda, cliente, proyecto o texto (descripción, cliente, proveedor o categoría). Devuelve totales por moneda y tipo de todo el filtro. Excluye anulados salvo que se pidan.", RequiredPermissions = [PermissionCodes.FinancesRead], Parameters = ObjectSchema(
             [("from", DateSchema()), ("to", DateSchema()), ("type", EnumSchema(MovementTypes)), ("status", EnumSchema(MovementStatuses)), ("currency", EnumSchema(CurrencyOptions)),
@@ -77,7 +77,7 @@ public sealed partial class AiToolCatalog(
             [("kind", EnumSchema(PendingKinds)), ("overdueOnly", BooleanSchema()), ("dueUntil", DateSchema()), ("currency", EnumSchema(CurrencyOptions)), ("clientId", GuidSchema()), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "finance.compare_months", Description = "Compara ingresos, egresos y resultado por moneda entre dos meses (por defecto el actual contra el anterior), con variación porcentual y las categorías de gasto que más cambiaron.", RequiredPermissions = [PermissionCodes.FinancesRead], Parameters = ObjectSchema(
             [("year", IntegerSchema(2000, 2100)), ("month", IntegerSchema(1, 12)), ("compareYear", IntegerSchema(2000, 2100)), ("compareMonth", IntegerSchema(1, 12))], []) },
-        new() { Name = "my_day.get", Description = "Arma el día: tareas que vencen y tareas atrasadas, reuniones del día (hora de Buenos Aires) y cobros/pagos que vencen o están vencidos. Por defecto hoy. scope: todo (toda la empresa) o mio (solo lo asignado al usuario). Usalo para \"¿qué tengo hoy?\".", RequiredPermissions = [], Parameters = ObjectSchema(
+        new() { Name = "my_day.get", Description = "Arma el día: tareas que vencen y tareas atrasadas, reuniones del día (hora de Buenos Aires) y cobros/pagos que vencen o están vencidos. Por defecto hoy. scope: todo (toda la empresa) o mio (solo lo asignado al usuario). Usalo para \"¿qué tengo hoy?\".", RequiredPermissions = [], AnyOfPermissions = [PermissionCodes.TasksRead, PermissionCodes.DeveloperWorkRead, PermissionCodes.MeetingsRead, PermissionCodes.FinancesRead], Parameters = ObjectSchema(
             [("date", DateSchema()), ("scope", EnumSchema(DayScopes))], []) },
         new() { Name = "projects.get", Description = "Ficha de un proyecto: estado, avance, fechas y días a la entrega, responsable, desarrolladores asignados, cantidad de tareas por estado, tareas atrasadas, próximas tareas, próximas reuniones y, con permiso de finanzas, cobrado/pagado y pendiente por moneda. Requiere projectId de projects.list.", RequiredPermissions = [PermissionCodes.ProjectsRead], Parameters = ObjectSchema(
             [("projectId", GuidSchema())], ["projectId"]) },
@@ -86,7 +86,7 @@ public sealed partial class AiToolCatalog(
         new() { Name = "tasks.create", RequiresConfirmation = true, Description = "Prepara la creación de una tarea para que el usuario la confirme; no la crea. Requiere projectId (de projects.list) y title. Asigná con developerId (desarrollador de people.list) o responsibleUserId (usuario de people.list), no ambos. Fechas en yyyy-MM-dd.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
             [("projectId", GuidSchema()), ("title", StringSchema(200)), ("description", StringSchema(2000)), ("startDate", DateSchema()), ("dueDate", DateSchema()),
              ("priority", EnumSchema(Priorities)), ("status", EnumSchema(NewTaskStatuses)), ("developerId", GuidSchema()), ("responsibleUserId", GuidSchema())], ["projectId", "title"]) },
-        new() { Name = "tasks.update_status", RequiresConfirmation = true, Description = "Prepara el cambio de estado de una tarea para que el usuario lo confirme; no lo aplica. Requiere taskId (de tasks.list) y el estado nuevo.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
+        new() { Name = "tasks.update_status", RequiresConfirmation = true, Description = "Prepara el cambio de estado de una tarea para que el usuario lo confirme; no lo aplica. Requiere taskId (de tasks.list) y el estado nuevo.", RequiredPermissions = [], AnyOfPermissions = [PermissionCodes.TasksWrite, PermissionCodes.DeveloperTasksStatusWrite], Parameters = ObjectSchema(
             [("taskId", GuidSchema()), ("status", EnumSchema(TaskStatuses))], ["taskId", "status"]) },
         new() { Name = "meetings.create", RequiresConfirmation = true, Description = "Prepara la creación de una reunión en la agenda para que el usuario la confirme; no la crea. Requiere projectId (de projects.list), title y startsAt en hora local de Buenos Aires (yyyy-MM-ddTHH:mm). Indicá endsAt o durationMinutes (por defecto 60). Participantes: ids de usuarios de people.list.", RequiredPermissions = [PermissionCodes.MeetingsRead, PermissionCodes.MeetingsWrite], Parameters = ObjectSchema(
             [("projectId", GuidSchema()), ("title", StringSchema(200)), ("startsAt", LocalDateTimeSchema()), ("endsAt", LocalDateTimeSchema()), ("durationMinutes", IntegerSchema(15, 480)),
@@ -109,9 +109,14 @@ public sealed partial class AiToolCatalog(
     ];
 
     public IReadOnlyCollection<AiToolDefinitionDto> GetAvailableTools(AiExecutionContext actor) =>
-        IsAdministrator(actor) && actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
-            ? Definitions.Where(definition => definition.RequiredPermissions.All(actor.Permissions.Contains)).ToArray()
-            : [];
+        Definitions.Where(definition => CanUse(actor, definition)).ToArray();
+
+    // Ya no hace falta ser Administrador: alcanza con ai.office.use y los permisos de dominio de cada herramienta.
+    // Los datos que ve cada herramienta se recortan además según el rol (por ejemplo, un desarrollador solo ve lo suyo).
+    private static bool CanUse(AiExecutionContext actor, AiToolDefinitionDto definition) =>
+        actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
+        && definition.RequiredPermissions.All(actor.Permissions.Contains)
+        && (definition.AnyOfPermissions.Count == 0 || definition.AnyOfPermissions.Any(actor.Permissions.Contains));
 
     public async Task<AiToolExecutionResultDto> ExecuteAsync(AiExecutionContext actor, Guid runId, Guid expectedConfigurationVersion, string traceId, string toolName, JsonObject arguments, CancellationToken cancellationToken)
     {
@@ -122,8 +127,7 @@ public sealed partial class AiToolCatalog(
             throw new AiToolRejectedException("La herramienta solicitada no está habilitada.");
         }
 
-        if (!IsAdministrator(actor) || !actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
-            || definition.RequiredPermissions.Any(permission => !actor.Permissions.Contains(permission)))
+        if (!CanUse(actor, definition))
         {
             await WriteAuditAsync(actor, runId, toolName, "Denied", "permission_denied", cancellationToken);
             throw new AiToolRejectedException("No tienes permisos para consultar este dominio.");
@@ -175,7 +179,7 @@ public sealed partial class AiToolCatalog(
                 "dashboard.get_snapshot" => await DashboardAsync(arguments, now, cancellationToken),
                 "finance.get_summary" => await FinanceAsync(arguments, now, traceId, cancellationToken),
                 "projects.list" => await ProjectsAsync(arguments, now, cancellationToken),
-                "tasks.list" => await TasksAsync(arguments, now, cancellationToken),
+                "tasks.list" => await TasksAsync(actor, arguments, now, cancellationToken),
                 "clients.list" => await ClientsAsync(arguments, now, cancellationToken),
                 "meetings.list" => await MeetingsAsync(actor, arguments, now, cancellationToken),
                 "people.list" => await PeopleAsync(arguments, now, cancellationToken),
@@ -202,8 +206,7 @@ public sealed partial class AiToolCatalog(
             throw new AiToolRejectedException("La acción solicitada no está habilitada.");
         }
 
-        if (!IsAdministrator(actor) || !actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
-            || definition.RequiredPermissions.Any(permission => !actor.Permissions.Contains(permission)))
+        if (!CanUse(actor, definition))
         {
             await WriteAuditAsync(actor, actionId, toolName, "Denied", "permission_denied", cancellationToken);
             throw new AiToolRejectedException("No tenés permisos para realizar esta acción.");
@@ -267,8 +270,8 @@ public sealed partial class AiToolCatalog(
     private Task<AiActionProposalDto> PrepareActionAsync(string toolName, AiExecutionContext actor, JsonObject args, DateTime now, CancellationToken ct) => toolName switch
     {
         "tasks.create" => PrepareTaskCreateAsync(args, ct),
-        "tasks.update_status" => PrepareTaskStatusAsync(args, ct),
-        "meetings.create" => PrepareMeetingCreateAsync(args, ct),
+        "tasks.update_status" => PrepareTaskStatusAsync(actor, args, ct),
+        "meetings.create" => PrepareMeetingCreateAsync(actor, args, ct),
         _ => PrepareExtendedActionAsync(toolName, actor, args, now, ct)
     };
 
@@ -323,13 +326,15 @@ public sealed partial class AiToolCatalog(
         };
     }
 
-    private async Task<AiActionProposalDto> PrepareTaskStatusAsync(JsonObject args, CancellationToken ct)
+    private async Task<AiActionProposalDto> PrepareTaskStatusAsync(AiExecutionContext actor, JsonObject args, CancellationToken ct)
     {
         var taskId = GetGuid(args, "taskId") ?? throw new AiToolRejectedException("Falta la tarea.");
         var status = NormalizeOption(GetEnum(args, "status", TaskStatuses), TaskStatuses) ?? throw new AiToolRejectedException("Falta el estado nuevo.");
         var task = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == taskId && x.Activo)
-            .Select(x => new { x.Titulo, x.Estado, ProjectName = x.Proyecto != null ? x.Proyecto.Nombre : null }).SingleOrDefaultAsync(ct)
+            .Select(x => new { x.Titulo, x.Estado, x.DeveloperId, x.ResponsableId, ProjectName = x.Proyecto != null ? x.Proyecto.Nombre : null }).SingleOrDefaultAsync(ct)
             ?? throw new AiToolRejectedException("La tarea indicada no existe o no está activa. Buscala con tasks.list.");
+        if (!actor.Permissions.Contains(PermissionCodes.TasksWrite) && !await IsOwnTaskAsync(actor, task.DeveloperId, task.ResponsableId, ct))
+            throw new AiToolRejectedException("Solo podés cambiar el estado de tus propias tareas.");
         var current = task.Estado.ToString();
         if (string.Equals(current, status, StringComparison.OrdinalIgnoreCase))
             throw new AiToolRejectedException($"La tarea ya está en estado {StatusLabel(status)}.");
@@ -346,7 +351,7 @@ public sealed partial class AiToolCatalog(
         };
     }
 
-    private async Task<AiActionProposalDto> PrepareMeetingCreateAsync(JsonObject args, CancellationToken ct)
+    private async Task<AiActionProposalDto> PrepareMeetingCreateAsync(AiExecutionContext actor, JsonObject args, CancellationToken ct)
     {
         var projectId = GetGuid(args, "projectId") ?? throw new AiToolRejectedException("Falta el proyecto de la reunión.");
         var title = GetString(args, "title", 200)?.Trim();
@@ -364,6 +369,12 @@ public sealed partial class AiToolCatalog(
 
         var project = await dbContext.Projects.AsNoTracking().Where(x => x.Id == projectId && x.Activo).Select(x => new { x.Nombre }).SingleOrDefaultAsync(ct)
             ?? throw new AiToolRejectedException("El proyecto indicado no existe o no está activo. Buscalo con projects.list.");
+        if (!IsAdministrator(actor))
+        {
+            // Fuera de Administración solo se agenda en proyectos a los que el usuario tiene acceso (igual que en Agenda).
+            var lookups = await meetings.GetLookupsAsync(actor.UserId, false, true, ct);
+            if (lookups.Projects.All(x => x.Id != projectId)) throw new AiToolRejectedException("No tenés acceso a ese proyecto para agendar reuniones.");
+        }
         var participants = participantIds.Count == 0 ? [] : await dbContext.Users.AsNoTracking()
             .Where(x => participantIds.Contains(x.Id) && x.Activo).OrderBy(x => x.FullName).Select(x => x.FullName).ToListAsync(ct);
         if (participants.Count != participantIds.Count)
@@ -450,7 +461,7 @@ public sealed partial class AiToolCatalog(
             {
                 var startsAt = GetLocalDateTime(args, "startsAt")!.Value;
                 var endsAt = GetLocalDateTime(args, "endsAt")!.Value;
-                var created = await meetings.CreateAsync(actor.UserId, true, new MeetingUpsertRequestDto
+                var created = await meetings.CreateAsync(actor.UserId, IsAdministrator(actor), new MeetingUpsertRequestDto
                 {
                     ProjectId = GetGuid(args, "projectId")!.Value,
                     Title = GetString(args, "title", 200)!,
@@ -533,7 +544,7 @@ public sealed partial class AiToolCatalog(
         return (Wrap("projects.list", now, new { request.Search, request.Status, page.PageSize }, output, warnings, null, null), Source("projects.list", "Kodvian.Core.Application.Projects", now, null, null, null, "/proyectos"));
     }
 
-    private async Task<(JsonObject, AiSourceReferenceDto)> TasksAsync(JsonObject args, DateTime now, CancellationToken ct)
+    private async Task<(JsonObject, AiSourceReferenceDto)> TasksAsync(AiExecutionContext actor, JsonObject args, DateTime now, CancellationToken ct)
     {
         var (dueDateFrom, dueDateTo) = ResolveOptionalBoundedRange(args, "dueDateFrom", "dueDateTo");
         var request = new TaskListRequestDto
@@ -547,6 +558,12 @@ public sealed partial class AiToolCatalog(
         };
         var projectId = GetGuid(args, "projectId");
         if (projectId.HasValue) request.ProjectId = projectId;
+        if (!actor.Permissions.Contains(PermissionCodes.TasksRead))
+        {
+            // Sin acceso al tablero completo (por ejemplo, un desarrollador): solo sus tareas.
+            var developerId = await dbContext.Users.AsNoTracking().Where(x => x.Id == actor.UserId).Select(x => x.DeveloperId).SingleOrDefaultAsync(ct);
+            if (developerId.HasValue) request.DeveloperId = developerId; else request.ResponsibleId = actor.UserId;
+        }
         if (request.DueDateFrom.HasValue && request.DueDateTo.HasValue && request.DueDateFrom > request.DueDateTo)
             throw new AiToolRejectedException("El rango de vencimientos no es válido.");
         var page = await tasks.GetPagedAsync(request, ct);
@@ -582,7 +599,7 @@ public sealed partial class AiToolCatalog(
             ActiveOnly = true,
             PageSize = GetPageSize(args)
         };
-        var page = await meetings.GetPagedAsync(actor.UserId, true, request, ct);
+        var page = await meetings.GetPagedAsync(actor.UserId, IsAdministrator(actor), request, ct);
         var output = page.Items.Select(x => new { x.Id, x.Title, x.ProjectId, x.ProjectName, x.StartsAt, x.EndsAt, x.Status, ParticipantCount = x.Participants.Count }).ToArray();
         var warnings = page.TotalCount > page.Items.Count ? new[] { "Se muestran las primeras reuniones del período." } : [];
         return (Wrap("meetings.list", now, new { fromDate, toDate, request.ProjectId, page.PageSize }, output, warnings, null, null), Source("meetings.list", "Kodvian.Core.Application.Meetings", now, fromDate, toDate, null, "/agenda"));
@@ -704,6 +721,15 @@ public sealed partial class AiToolCatalog(
     private static JsonObject EnumSchema(string[] options) => new() { ["type"] = "string", ["enum"] = JsonSerializer.SerializeToNode(options) };
 
     private static bool IsAdministrator(AiExecutionContext actor) => actor.Roles.Contains(RoleNames.Administrator);
+
+    /// <summary>La tarea está asignada al usuario (como desarrollador o como responsable).</summary>
+    private async Task<bool> IsOwnTaskAsync(AiExecutionContext actor, Guid? taskDeveloperId, Guid? taskResponsibleId, CancellationToken ct)
+    {
+        if (taskResponsibleId == actor.UserId) return true;
+        if (!taskDeveloperId.HasValue) return false;
+        var developerId = await dbContext.Users.AsNoTracking().Where(x => x.Id == actor.UserId).Select(x => x.DeveloperId).SingleOrDefaultAsync(ct);
+        return developerId == taskDeveloperId;
+    }
 
     private static int GetPageSize(JsonObject args)
     {

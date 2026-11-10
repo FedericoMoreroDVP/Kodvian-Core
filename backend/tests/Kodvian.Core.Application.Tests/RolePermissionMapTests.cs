@@ -5,13 +5,13 @@ namespace Kodvian.Core.Application.Tests;
 public class RolePermissionMapTests
 {
     [Fact]
-    public void OnlyAdministratorReceivesAiOfficeUseDuringPilot()
+    public void OperationalRolesReceiveAiOfficeUseButReadOnlyDoesNot()
     {
         Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Administrator));
-        Assert.DoesNotContain(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Analyst));
-        Assert.DoesNotContain(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Operative));
+        Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Analyst));
+        Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Operative));
         Assert.DoesNotContain(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.ReadOnly));
-        Assert.DoesNotContain(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Developer));
+        Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Developer));
     }
 
     [Fact]
@@ -26,7 +26,8 @@ public class RolePermissionMapTests
         Assert.DoesNotContain(PermissionCodes.FinancesRead, permissions);
         Assert.Contains(PermissionCodes.MeetingsRead, permissions);
         Assert.DoesNotContain(PermissionCodes.MeetingsWrite, permissions);
-        Assert.Equal(3, permissions.Count);
+        Assert.Contains(PermissionCodes.AiOfficeUse, permissions);
+        Assert.Equal(4, permissions.Count);
     }
 
     [Fact]

@@ -540,7 +540,7 @@ public sealed class AiToolCatalogTests
     }
 
     [Fact]
-    public async Task ToolsRequireAdminAiPermissionAndCurrentSession()
+    public async Task ToolsRequireAiPermissionAndTheDomainPermissionsOfEachTool()
     {
         await using var db = CreateDatabase();
         var catalog = CreateCatalog(db);
@@ -554,14 +554,97 @@ public sealed class AiToolCatalogTests
         };
         Assert.Empty(catalog.GetAvailableTools(noAiPermission));
 
-        var noLongerAdmin = new AiExecutionContext
-        {
-            UserId = actor.UserId, SessionVersion = actor.SessionVersion,
-            Roles = new HashSet<string>([RoleNames.Analyst], StringComparer.Ordinal),
-            Permissions = actor.Permissions
-        };
-        Assert.Empty(catalog.GetAvailableTools(noLongerAdmin));
+        // Un Analista ve lo operativo pero no finanzas, panel ejecutivo ni registro de movimientos.
+        var analystTools = catalog.GetAvailableTools(RoleActor(RoleNames.Analyst)).Select(x => x.Name).ToArray();
+        Assert.Contains("tasks.create", analystTools);
+        Assert.Contains("meetings.create", analystTools);
+        Assert.Contains("clients.create_prospect", analystTools);
+        Assert.DoesNotContain("finance.get_summary", analystTools);
+        Assert.DoesNotContain("finance.list_pending", analystTools);
+        Assert.DoesNotContain("finance.create_movement", analystTools);
+        Assert.DoesNotContain("dashboard.get_snapshot", analystTools);
+
+        // Un Desarrollador solo ve lo suyo: su día, sus tareas, sus reuniones y el cambio de estado de sus tareas.
+        var developerTools = catalog.GetAvailableTools(RoleActor(RoleNames.Developer)).Select(x => x.Name).OrderBy(x => x).ToArray();
+        Assert.Equal(["meetings.list", "my_day.get", "preferences.update", "tasks.list", "tasks.update_status"], developerTools);
     }
+
+    [Fact]
+    public async Task UserWithoutPermissionCannotExecuteOrConfirmTheTool()
+    {
+        await using var db = CreateDatabase();
+        var (_, project) = SeedProject(db);
+        var catalog = CreateCatalog(db);
+        var developer = RoleActor(RoleNames.Developer);
+
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(developer, Guid.NewGuid(), Guid.Empty, "t", "finance.get_summary", new JsonObject(), CancellationToken.None));
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteConfirmedActionAsync(developer, Guid.NewGuid(), "tasks.create",
+            new JsonObject { ["projectId"] = project.Id.ToString(), ["title"] = "X" }, CancellationToken.None));
+        Assert.Empty(db.Tasks);
+        Assert.Contains(db.AiAuditEvents, x => x.Decision == "Denied" && x.ReasonCode == "permission_denied");
+    }
+
+    [Fact]
+    public async Task DeveloperOnlySeesAndChangesTheirOwnTasks()
+    {
+        await using var db = CreateDatabase();
+        var (admin, project) = SeedProject(db);
+        var developerProfile = new Developer { FullName = "Dev Uno" };
+        var developer = RoleActor(RoleNames.Developer);
+        db.Developers.Add(developerProfile);
+        db.Users.Add(new User { Id = developer.UserId, FullName = "Dev Uno", Email = "dev@example.test", DeveloperId = developerProfile.Id });
+        var mine = new TaskItem { Titulo = "Mi tarea", ProyectoId = project.Id, CreadoPorId = admin.UserId, DeveloperId = developerProfile.Id };
+        var other = new TaskItem { Titulo = "Tarea ajena", ProyectoId = project.Id, CreadoPorId = admin.UserId };
+        db.Tasks.AddRange(mine, other);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var list = await catalog.ExecuteAsync(developer, Guid.NewGuid(), Guid.Empty, "t", "tasks.list", new JsonObject(), CancellationToken.None);
+        var json = list.Data.ToJsonString();
+        Assert.Contains("Mi tarea", json);
+        Assert.DoesNotContain("Tarea ajena", json);
+
+        var proposal = await catalog.ExecuteAsync(developer, Guid.NewGuid(), Guid.Empty, "t", "tasks.update_status",
+            new JsonObject { ["taskId"] = mine.Id.ToString(), ["status"] = "EnCurso" }, CancellationToken.None);
+        await catalog.ExecuteConfirmedActionAsync(developer, Guid.NewGuid(), "tasks.update_status", proposal.Proposal!.Arguments, CancellationToken.None);
+        Assert.Equal(Kodvian.Core.Domain.Enums.TaskStatus.EnCurso, db.Tasks.AsNoTracking().Single(x => x.Id == mine.Id).Estado);
+
+        var error = await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(developer, Guid.NewGuid(), Guid.Empty, "t", "tasks.update_status",
+            new JsonObject { ["taskId"] = other.Id.ToString(), ["status"] = "EnCurso" }, CancellationToken.None));
+        Assert.Contains("tus propias tareas", error.Message);
+        Assert.Equal(Kodvian.Core.Domain.Enums.TaskStatus.Pendiente, db.Tasks.AsNoTracking().Single(x => x.Id == other.Id).Estado);
+    }
+
+    [Fact]
+    public async Task NonAdministratorsOnlySeeMeetingsTheyTakePartIn()
+    {
+        await using var db = CreateDatabase();
+        var (admin, project) = SeedProject(db);
+        var operative = RoleActor(RoleNames.Operative);
+        db.Users.Add(new User { Id = operative.UserId, FullName = "Operativo", Email = "op@example.test" });
+        var start = DateTime.UtcNow.AddDays(1);
+        var mine = new Meeting { ProyectoId = project.Id, CreadoPorId = operative.UserId, Titulo = "Reunion mia", Inicio = start, Fin = start.AddHours(1) };
+        var other = new Meeting { ProyectoId = project.Id, CreadoPorId = admin.UserId, Titulo = "Reunion de direccion", Inicio = start, Fin = start.AddHours(1) };
+        db.Meetings.AddRange(mine, other);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+
+        var json = (await catalog.ExecuteAsync(operative, Guid.NewGuid(), Guid.Empty, "t", "meetings.list", new JsonObject(), CancellationToken.None)).Data.ToJsonString();
+        Assert.Contains("Reunion mia", json);
+        Assert.DoesNotContain("Reunion de direccion", json);
+
+        var error = await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(operative, Guid.NewGuid(), Guid.Empty, "t", "meetings.cancel",
+            new JsonObject { ["meetingId"] = other.Id.ToString() }, CancellationToken.None));
+        Assert.Contains("No tenés acceso", error.Message);
+    }
+
+    private static AiExecutionContext RoleActor(string role) => new()
+    {
+        UserId = Guid.NewGuid(),
+        SessionVersion = Guid.NewGuid(),
+        Roles = new HashSet<string>([role], StringComparer.Ordinal),
+        Permissions = new HashSet<string>(RolePermissionMap.GetPermissions(role), StringComparer.Ordinal)
+    };
 
     private static KodvianDbContext CreateDatabase()
     {

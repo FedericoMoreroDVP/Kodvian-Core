@@ -159,7 +159,8 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(RoleNames.Administrator));
 
     options.AddPolicy("AiOfficeUse", policy =>
-        policy.RequireRole(RoleNames.Administrator).RequireClaim(CustomClaimTypes.Permission, PermissionCodes.AiOfficeUse));
+        // Cualquier rol con ai.office.use; cada herramienta revalida sus propios permisos de dominio.
+        policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.AiOfficeUse));
 
     options.AddPolicy("FinancesRead", policy =>
         policy.RequireRole(RoleNames.Administrator).RequireClaim(CustomClaimTypes.Permission, PermissionCodes.FinancesRead));

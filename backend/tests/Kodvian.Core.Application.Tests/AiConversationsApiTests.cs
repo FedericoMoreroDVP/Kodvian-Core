@@ -41,7 +41,7 @@ public sealed class AiConversationsApiTests : IDisposable
                 };
             });
             services.AddAuthorization(options => options.AddPolicy("AiOfficeUse", policy =>
-                policy.RequireRole(RoleNames.Administrator).RequireClaim(CustomClaimTypes.Permission, PermissionCodes.AiOfficeUse)));
+                policy.RequireClaim(CustomClaimTypes.Permission, PermissionCodes.AiOfficeUse)));
             services.AddControllers().AddApplicationPart(typeof(AiConversationsController).Assembly);
         }).Configure(app =>
         {
@@ -54,7 +54,7 @@ public sealed class AiConversationsApiTests : IDisposable
     }
 
     [Fact]
-    public async Task ConversationEndpointsRequireAdministratorAndAiPermission()
+    public async Task ConversationEndpointsRequireTheAiPermissionForAnyRole()
     {
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/ai/conversations")).StatusCode);
 
@@ -62,6 +62,11 @@ public sealed class AiConversationsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/ai/conversations")).StatusCode);
 
         Authenticate(Token(RoleNames.Administrator, PermissionCodes.AiOfficeUse));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/ai/conversations")).StatusCode);
+
+        Authenticate(Token(RoleNames.Analyst));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/ai/conversations")).StatusCode);
+        Authenticate(Token(RoleNames.Analyst, PermissionCodes.AiOfficeUse));
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/ai/conversations")).StatusCode);
     }
 

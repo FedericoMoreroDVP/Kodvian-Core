@@ -22,8 +22,8 @@ public sealed partial class AiToolCatalog
     private Task<AiActionProposalDto> PrepareExtendedActionAsync(string toolName, AiExecutionContext actor, JsonObject args, DateTime now, CancellationToken ct) => toolName switch
     {
         "tasks.update" => PrepareTaskUpdateAsync(args, ct),
-        "meetings.update" => PrepareMeetingUpdateAsync(args, ct),
-        "meetings.cancel" => PrepareMeetingCancelAsync(args, ct),
+        "meetings.update" => PrepareMeetingUpdateAsync(actor, args, ct),
+        "meetings.cancel" => PrepareMeetingCancelAsync(actor, args, ct),
         "finance.create_movement" => PrepareMovementAsync(args, now, ct),
         "clients.create_prospect" => PrepareProspectAsync(args, ct),
         "preferences.update" => PreparePreferencesAsync(actor, args, ct),
@@ -156,9 +156,11 @@ public sealed partial class AiToolCatalog
         };
     }
 
-    private async Task<AiActionProposalDto> PrepareMeetingUpdateAsync(JsonObject args, CancellationToken ct)
+    private async Task<AiActionProposalDto> PrepareMeetingUpdateAsync(AiExecutionContext actor, JsonObject args, CancellationToken ct)
     {
         var meetingId = GetGuid(args, "meetingId") ?? throw new AiToolRejectedException("Falta la reunión. Buscala con meetings.list.");
+        if (!IsAdministrator(actor) && await meetings.GetByIdAsync(actor.UserId, false, meetingId, ct) is null)
+            throw new AiToolRejectedException("No tenés acceso a esa reunión.");
         var meeting = await dbContext.Meetings.AsNoTracking().Where(x => x.Id == meetingId && x.Activo)
             .Select(x => new { x.Titulo, x.Inicio, x.Fin, x.Estado, x.Ubicacion, Project = x.Proyecto != null ? x.Proyecto.Nombre : null }).SingleOrDefaultAsync(ct)
             ?? throw new AiToolRejectedException("La reunión indicada no existe. Buscala con meetings.list.");
@@ -205,9 +207,11 @@ public sealed partial class AiToolCatalog
         };
     }
 
-    private async Task<AiActionProposalDto> PrepareMeetingCancelAsync(JsonObject args, CancellationToken ct)
+    private async Task<AiActionProposalDto> PrepareMeetingCancelAsync(AiExecutionContext actor, JsonObject args, CancellationToken ct)
     {
         var meetingId = GetGuid(args, "meetingId") ?? throw new AiToolRejectedException("Falta la reunión. Buscala con meetings.list.");
+        if (!IsAdministrator(actor) && await meetings.GetByIdAsync(actor.UserId, false, meetingId, ct) is null)
+            throw new AiToolRejectedException("No tenés acceso a esa reunión.");
         var meeting = await dbContext.Meetings.AsNoTracking().Where(x => x.Id == meetingId && x.Activo)
             .Select(x => new { x.Titulo, x.Inicio, x.Fin, x.Estado, Project = x.Proyecto != null ? x.Proyecto.Nombre : null, Participants = x.Participantes.Count }).SingleOrDefaultAsync(ct)
             ?? throw new AiToolRejectedException("La reunión indicada no existe. Buscala con meetings.list.");
@@ -339,14 +343,14 @@ public sealed partial class AiToolCatalog
             case "meetings.update":
             {
                 var meetingId = GetGuid(args, "meetingId")!.Value;
-                var current = await meetings.GetByIdAsync(actor.UserId, true, meetingId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe.");
+                var current = await meetings.GetByIdAsync(actor.UserId, IsAdministrator(actor), meetingId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe o no tenés permiso para modificarla.");
                 var request = ToUpsert(current);
                 var before = MeetingSnapshot(request);
                 request.StartsAt = TimeZoneInfo.ConvertTimeToUtc(GetLocalDateTime(args, "startsAt")!.Value, BuenosAiresTimeZone);
                 request.EndsAt = TimeZoneInfo.ConvertTimeToUtc(GetLocalDateTime(args, "endsAt")!.Value, BuenosAiresTimeZone);
                 if (GetString(args, "title", 200) is { } title) request.Title = title;
                 if (GetString(args, "location", 300) is { } location) request.Location = location;
-                var updated = await meetings.UpdateAsync(actor.UserId, true, meetingId, request, ct) ?? throw new AiToolRejectedException("La reunión ya no existe.");
+                var updated = await meetings.UpdateAsync(actor.UserId, IsAdministrator(actor), meetingId, request, ct) ?? throw new AiToolRejectedException("La reunión ya no existe o no tenés permiso para modificarla.");
                 return new AiActionOutcomeDto
                 {
                     Message = $"Listo, moví «{updated.Title}» al {ToLocal(updated.StartsAt).ToString("dddd d 'de' MMMM 'a las' HH:mm", Spanish)}.",
@@ -358,7 +362,7 @@ public sealed partial class AiToolCatalog
             case "meetings.cancel":
             {
                 var meetingId = GetGuid(args, "meetingId")!.Value;
-                var cancelled = await meetings.CancelAsync(actor.UserId, true, meetingId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe.");
+                var cancelled = await meetings.CancelAsync(actor.UserId, IsAdministrator(actor), meetingId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe o no tenés permiso para modificarla.");
                 return new AiActionOutcomeDto
                 {
                     Message = $"Listo, cancelé «{cancelled.Title}».", Link = "/agenda", EntityId = meetingId,
@@ -441,8 +445,7 @@ public sealed partial class AiToolCatalog
     {
         var definition = Definitions.SingleOrDefault(x => x.Name == toolName && x.RequiresConfirmation)
             ?? throw new AiToolRejectedException("La acción no se puede deshacer.");
-        if (!IsAdministrator(actor) || !actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
-            || definition.RequiredPermissions.Any(permission => !actor.Permissions.Contains(permission)))
+        if (!CanUse(actor, definition))
         {
             await WriteAuditAsync(actor, actionId, toolName, "Denied", "permission_denied", cancellationToken);
             throw new AiToolRejectedException("No tenés permisos para deshacer esta acción.");
@@ -476,8 +479,10 @@ public sealed partial class AiToolCatalog
             }
             case "tasks.update_status":
             {
-                var task = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == entityId).Select(x => new { x.Titulo, x.Estado }).SingleOrDefaultAsync(ct)
+                var task = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == entityId).Select(x => new { x.Titulo, x.Estado, x.DeveloperId, x.ResponsableId }).SingleOrDefaultAsync(ct)
                     ?? throw new AiToolRejectedException("La tarea ya no existe.");
+                if (!actor.Permissions.Contains(PermissionCodes.TasksWrite) && !await IsOwnTaskAsync(actor, task.DeveloperId, task.ResponsableId, ct))
+                    throw new AiToolRejectedException("Solo podés cambiar el estado de tus propias tareas.");
                 if (!string.Equals(task.Estado.ToString(), undoData["newStatus"]?.GetValue<string>(), StringComparison.Ordinal)) throw new AiToolRejectedException(changedSince);
                 var previous = undoData["previousStatus"]!.GetValue<string>();
                 await tasks.UpdateStatusAsync(entityId, new TaskStatusUpdateRequestDto { Status = previous, KanbanOrder = undoData["previousKanbanOrder"]?.GetValue<int>() ?? 0 }, ct);
@@ -500,12 +505,12 @@ public sealed partial class AiToolCatalog
             }
             case "meetings.create":
             {
-                var cancelled = await meetings.CancelAsync(actor.UserId, true, entityId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe.");
+                var cancelled = await meetings.CancelAsync(actor.UserId, IsAdministrator(actor), entityId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe o no tenés permiso para modificarla.");
                 return new AiActionOutcomeDto { Message = $"Deshice la reunión «{cancelled.Title}» (quedó cancelada).", Link = "/agenda", Source = Source("meetings.create", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda") };
             }
             case "meetings.update":
             {
-                var current = await meetings.GetByIdAsync(actor.UserId, true, entityId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe.");
+                var current = await meetings.GetByIdAsync(actor.UserId, IsAdministrator(actor), entityId, ct) ?? throw new AiToolRejectedException("La reunión ya no existe o no tenés permiso para modificarla.");
                 var request = ToUpsert(current);
                 if (!JsonNode.DeepEquals(MeetingSnapshot(request), undoData["after"])) throw new AiToolRejectedException(changedSince);
                 var before = undoData["before"]!.AsObject();
@@ -513,7 +518,7 @@ public sealed partial class AiToolCatalog
                 request.EndsAt = DateTime.Parse(before["endsAt"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal);
                 request.Title = before["title"]!.GetValue<string>();
                 request.Location = before["location"]?.GetValue<string>();
-                await meetings.UpdateAsync(actor.UserId, true, entityId, request, ct);
+                await meetings.UpdateAsync(actor.UserId, IsAdministrator(actor), entityId, request, ct);
                 return new AiActionOutcomeDto { Message = $"Listo, «{request.Title}» volvió a su horario original.", Link = "/agenda", Source = Source("meetings.update", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda") };
             }
             case "preferences.update":

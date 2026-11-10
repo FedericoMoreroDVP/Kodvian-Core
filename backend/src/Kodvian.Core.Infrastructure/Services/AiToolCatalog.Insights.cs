@@ -181,7 +181,7 @@ public sealed partial class AiToolCatalog
         var developerId = await dbContext.Users.AsNoTracking().Where(x => x.Id == actor.UserId).Select(x => x.DeveloperId).SingleOrDefaultAsync(ct);
         var result = new JsonObject { ["date"] = date.ToString("yyyy-MM-dd"), ["scope"] = scope };
 
-        if (actor.Permissions.Contains(PermissionCodes.TasksRead))
+        if (actor.Permissions.Contains(PermissionCodes.TasksRead) || actor.Permissions.Contains(PermissionCodes.DeveloperWorkRead))
         {
             var tasksQuery = dbContext.Tasks.AsNoTracking().Where(x => x.Activo && x.FechaVencimiento.HasValue && x.FechaVencimiento <= date
                 && x.Estado != DomainTaskStatus.Finalizada && x.Estado != DomainTaskStatus.Cancelada);

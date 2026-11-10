@@ -60,7 +60,8 @@ public static class RolePermissionMap
                 PermissionCodes.MeetingsWrite,
                 PermissionCodes.MeetingsCancel,
                 PermissionCodes.TeamRead,
-                PermissionCodes.TeamWrite
+                PermissionCodes.TeamWrite,
+                PermissionCodes.AiOfficeUse
             ],
             RoleNames.ReadOnly =>
             [
@@ -87,13 +88,15 @@ public static class RolePermissionMap
                 PermissionCodes.MeetingsWrite,
                 PermissionCodes.MeetingsCancel,
                 PermissionCodes.TeamRead,
-                PermissionCodes.TeamWrite
+                PermissionCodes.TeamWrite,
+                PermissionCodes.AiOfficeUse
             ],
             RoleNames.Developer =>
             [
                 PermissionCodes.DeveloperWorkRead,
                 PermissionCodes.DeveloperTasksStatusWrite,
-                PermissionCodes.MeetingsRead
+                PermissionCodes.MeetingsRead,
+                PermissionCodes.AiOfficeUse
             ],
             _ => Array.Empty<string>()
         };

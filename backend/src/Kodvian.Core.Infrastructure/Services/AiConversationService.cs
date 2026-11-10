@@ -757,7 +757,7 @@ public sealed class AiConversationService(
 
     private async Task EnsureActorAsync(AiExecutionContext actor, CancellationToken cancellationToken)
     {
-        if (!actor.Roles.Contains(RoleNames.Administrator) || !actor.Permissions.Contains(PermissionCodes.AiOfficeUse))
+        if (!actor.Permissions.Contains(PermissionCodes.AiOfficeUse))
             throw new UnauthorizedAccessException("No tienes acceso a Oficina Inteligente.");
         if (!await sessionValidator.IsValidAsync(actor.UserId, actor.SessionVersion, cancellationToken))
             throw new UnauthorizedAccessException("La sesión dejó de estar vigente.");
