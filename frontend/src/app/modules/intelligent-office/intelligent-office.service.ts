@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 
 import { ApiResponse } from '../../core/auth/auth.models';
-import { AiConversation, AiConversationDetail, AiSendResult, Paged } from './intelligent-office.models';
+import { AiActionResolution, AiConversation, AiConversationDetail, AiSendResult, Paged } from './intelligent-office.models';
 
 @Injectable({ providedIn: 'root' })
 export class IntelligentOfficeService {
@@ -28,6 +28,18 @@ export class IntelligentOfficeService {
   send(id: string, content: string, clientRequestId: string): Observable<AiSendResult> {
     return this.http.post<ApiResponse<AiSendResult>>(`${this.baseUrl}/${encodeURIComponent(id)}/messages`,
       { content, clientRequestId }, { withCredentials: true }).pipe(map(response => response.data));
+  }
+
+  confirmAction(conversationId: string, actionId: string): Observable<AiActionResolution> {
+    return this.http.post<ApiResponse<AiActionResolution>>(
+      `${this.baseUrl}/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}/confirm`, {}, { withCredentials: true })
+      .pipe(map(response => response.data));
+  }
+
+  cancelAction(conversationId: string, actionId: string): Observable<AiActionResolution> {
+    return this.http.post<ApiResponse<AiActionResolution>>(
+      `${this.baseUrl}/${encodeURIComponent(conversationId)}/actions/${encodeURIComponent(actionId)}/cancel`, {}, { withCredentials: true })
+      .pipe(map(response => response.data));
   }
 
   delete(id: string): Observable<void> {

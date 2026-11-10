@@ -45,6 +45,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AiMessage> AiMessages => Set<AiMessage>();
     public DbSet<AiRun> AiRuns => Set<AiRun>();
     public DbSet<AiAuditEvent> AiAuditEvents => Set<AiAuditEvent>();
+    public DbSet<AiPendingAction> AiPendingActions => Set<AiPendingAction>();
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -107,6 +108,23 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
             entity.HasIndex(x => x.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'");
             entity.HasOne(x => x.Conversation).WithMany(x => x.Runs).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AiPendingAction>(entity =>
+        {
+            entity.ToTable("AiPendingActions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ToolName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ArgumentsJson).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.DetailsJson).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ResultMessage).HasMaxLength(1000);
+            entity.Property(x => x.ResultLink).HasMaxLength(300);
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
+            entity.HasIndex(x => x.MessageId);
+            entity.HasOne(x => x.Conversation).WithMany(x => x.PendingActions).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<AiAuditEvent>(entity =>
         {

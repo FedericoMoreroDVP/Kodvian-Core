@@ -26,6 +26,8 @@ public sealed class AiConversationService(
     private const int MaxToolCalls = 12;
     private const int MaxModelCalls = 6;
     private const int MaxAssistantMessageLength = 16000;
+    private const int MaxPendingActionsPerRun = 5;
+    internal static readonly TimeSpan PendingActionLifetime = TimeSpan.FromMinutes(10);
 
     public async Task<AiConversationDto> CreateAsync(AiExecutionContext actor, AiConversationCreateRequest request, CancellationToken cancellationToken)
     {
@@ -73,6 +75,11 @@ public sealed class AiConversationService(
         if (conversation is null) return null;
         var messages = await dbContext.AiMessages.AsNoTracking().Where(x => x.ConversationId == conversationId)
             .OrderByDescending(x => x.CreatedAtUtc).Take(200).OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
+        var messageIds = messages.Select(x => x.Id).ToArray();
+        var actions = await dbContext.AiPendingActions.AsNoTracking()
+            .Where(x => x.ConversationId == conversationId && x.MessageId.HasValue && messageIds.Contains(x.MessageId.Value))
+            .OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
+        var actionsByMessage = actions.ToLookup(x => x.MessageId!.Value);
         return new AiConversationDetailDto
         {
             Id = conversation.Id,
@@ -80,7 +87,7 @@ public sealed class AiConversationService(
             CreatedAtUtc = conversation.CreatedAtUtc,
             UpdatedAtUtc = conversation.UpdatedAtUtc,
             MessageCount = conversation.MessageCount,
-            Messages = messages.Select(MapMessage).ToArray()
+            Messages = messages.Select(x => MapMessage(x, actionsByMessage[x.Id])).ToArray()
         };
     }
 
@@ -121,10 +128,11 @@ public sealed class AiConversationService(
                 var previousUser = await dbContext.AiMessages.AsNoTracking().SingleAsync(
                     x => x.ConversationId == conversationId && x.ClientRequestId == request.ClientRequestId, cancellationToken);
                 var previousAssistant = await dbContext.AiMessages.AsNoTracking().SingleAsync(x => x.RunId == previousRun.Id && x.Role == "assistant", cancellationToken);
+                var previousActions = await dbContext.AiPendingActions.AsNoTracking().Where(x => x.MessageId == previousAssistant.Id).OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
                 return new AiSendMessageResultDto
                 {
                     UserMessage = MapMessage(previousUser),
-                    AssistantMessage = MapMessage(previousAssistant),
+                    AssistantMessage = MapMessage(previousAssistant, previousActions),
                     RunId = previousRun.Id,
                     TraceId = previousRun.TraceId
                 };
@@ -179,6 +187,8 @@ public sealed class AiConversationService(
         }
 
         var sources = new List<AiSourceReferenceDto>();
+        // Las propuestas se guardan recién al final, junto con el mensaje del asistente: si la ejecución falla no queda ninguna colgada.
+        var pendingActions = new List<AiPendingAction>();
         var partial = false;
         try
         {
@@ -230,12 +240,22 @@ public sealed class AiConversationService(
                     try
                     {
                         var execution = await toolExecutor.ExecuteAsync(actor, run.Id, provider.Version, run.TraceId, toolName, arguments, cancellationToken);
-                        sources.Add(execution.Source);
+                        if (execution.Source is not null) sources.Add(execution.Source);
+                        var output = execution.Data;
+                        if (execution.Proposal is not null)
+                        {
+                            if (pendingActions.Count >= MaxPendingActionsPerRun)
+                                throw new AiToolRejectedException($"Solo se pueden proponer {MaxPendingActionsPerRun} acciones por respuesta. Pedile al usuario que confirme las anteriores.");
+                            var pending = CreatePendingAction(actor, conversationId, run.Id, execution.Proposal);
+                            pendingActions.Add(pending);
+                            output = (JsonObject)output.DeepClone();
+                            output["actionId"] = pending.Id.ToString();
+                        }
                         input.Add(new JsonObject
                         {
                             ["type"] = "function_call_output",
                             ["call_id"] = callId,
-                            ["output"] = execution.Data.ToJsonString()
+                            ["output"] = output.ToJsonString()
                         });
                     }
                     catch (Exception exception) when (exception is AiToolRejectedException or ArgumentException or KeyNotFoundException)
@@ -259,9 +279,11 @@ public sealed class AiConversationService(
                 assistantText = "No pude completar la consulta dentro de los límites de esta ejecución. Acotá la pregunta y volvé a intentar.";
             }
             // Las respuestas sin consultas (saludos, ayuda, "no puedo hacer X") se guardan tal cual, marcadas como no respaldadas.
-            var grounded = sources.Count > 0;
+            var grounded = sources.Count > 0 || pendingActions.Count > 0;
             if (string.IsNullOrWhiteSpace(assistantText))
-                assistantText = "No encontré información suficiente para responder con datos verificables.";
+                assistantText = pendingActions.Count > 0
+                    ? "Te dejé la acción lista. Revisala y confirmala con el botón de la tarjeta."
+                    : "No encontré información suficiente para responder con datos verificables.";
             if (assistantText.Length > MaxAssistantMessageLength) assistantText = assistantText[..MaxAssistantMessageLength];
             await EnsureActorAsync(actor, cancellationToken);
             await EnsureProviderApprovalAsync(provider.Version, cancellationToken);
@@ -283,13 +305,18 @@ public sealed class AiConversationService(
             run.FinishedAtUtc = DateTime.UtcNow;
             conversation.UpdatedAtUtc = run.FinishedAtUtc.Value;
             dbContext.AiMessages.Add(assistantMessage);
+            foreach (var pending in pendingActions)
+            {
+                pending.MessageId = assistantMessage.Id;
+                dbContext.AiPendingActions.Add(pending);
+            }
             dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = run.Id, Decision = partial ? "Partial" : "Allowed", ReasonCode = partial ? "execution_limit" : "completed", CreatedAtUtc = DateTime.UtcNow });
             await dbContext.SaveChangesAsync(cancellationToken);
 
             return new AiSendMessageResultDto
             {
                 UserMessage = MapMessage(userMessage),
-                AssistantMessage = MapMessage(assistantMessage),
+                AssistantMessage = MapMessage(assistantMessage, pendingActions),
                 RunId = run.Id,
                 TraceId = run.TraceId
             };
@@ -303,6 +330,168 @@ public sealed class AiConversationService(
             logger.LogWarning("AI run {RunId} for actor {ActorId} failed with {ErrorType}.", run.Id, actor.UserId, exception.GetType().Name);
             throw;
         }
+    }
+
+    public async Task<AiActionResolutionDto> ConfirmActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken)
+    {
+        await EnsureActorAsync(actor, cancellationToken);
+        var (conversation, action) = await LoadOwnedActionAsync(actor, conversationId, actionId, cancellationToken);
+        await EnsurePendingAsync(actor, action, cancellationToken);
+
+        // Se marca en ejecución antes de escribir: el token de concurrencia evita que dos confirmaciones creen la tarea dos veces.
+        action.Status = "Executing";
+        action.Version = Guid.NewGuid();
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AiConversationConflictException("La acción ya se está procesando.");
+        }
+
+        JsonObject arguments;
+        try { arguments = JsonNode.Parse(action.ArgumentsJson) as JsonObject ?? new JsonObject(); }
+        catch (JsonException) { arguments = new JsonObject(); }
+
+        AiMessage resultMessage;
+        try
+        {
+            var outcome = await toolExecutor.ExecuteConfirmedActionAsync(actor, action.Id, action.ToolName, arguments, cancellationToken);
+            action.Status = "Confirmed";
+            action.ResultMessage = Truncate(outcome.Message, 1000);
+            action.ResultLink = outcome.Link;
+            resultMessage = NewSystemReply(conversationId, outcome.Message, outcome.Source is null ? [] : [outcome.Source], grounded: true);
+        }
+        catch (AiToolRejectedException exception)
+        {
+            action.Status = "Failed";
+            action.ResultMessage = Truncate(exception.Message, 1000);
+            resultMessage = NewSystemReply(conversationId, $"No pude completar «{action.Title}»: {exception.Message}", [], grounded: false);
+        }
+        catch (Exception exception)
+        {
+            // Sesión vencida u otro error inesperado: la acción queda pendiente para reintentar y no se informa el detalle.
+            action.Status = "Pending";
+            action.Version = Guid.NewGuid();
+            dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = action.RunId, ToolName = action.ToolName, Decision = "Failed", ReasonCode = SafeReasonCode(exception), CreatedAtUtc = DateTime.UtcNow });
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+            logger.LogWarning("AI action {ActionId} for actor {ActorId} failed with {ErrorType}.", action.Id, actor.UserId, exception.GetType().Name);
+            throw;
+        }
+
+        var now = DateTime.UtcNow;
+        action.ResolvedAtUtc = now;
+        action.Version = Guid.NewGuid();
+        conversation.UpdatedAtUtc = now;
+        dbContext.AiMessages.Add(resultMessage);
+        dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = action.RunId, ToolName = action.ToolName, Decision = action.Status, ReasonCode = action.Status == "Confirmed" ? "user_confirmed" : "action_failed", CreatedAtUtc = now });
+        // La escritura ya ocurrió: el resultado se guarda aunque el usuario cierre la pantalla.
+        await dbContext.SaveChangesAsync(CancellationToken.None);
+        return new AiActionResolutionDto { Action = MapAction(action), Message = MapMessage(resultMessage) };
+    }
+
+    public async Task<AiActionResolutionDto> CancelActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken)
+    {
+        await EnsureActorAsync(actor, cancellationToken);
+        var (_, action) = await LoadOwnedActionAsync(actor, conversationId, actionId, cancellationToken);
+        await EnsurePendingAsync(actor, action, cancellationToken);
+        var now = DateTime.UtcNow;
+        action.Status = "Cancelled";
+        action.ResolvedAtUtc = now;
+        action.Version = Guid.NewGuid();
+        dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = conversationId, RunId = action.RunId, ToolName = action.ToolName, Decision = "Cancelled", ReasonCode = "user_cancelled", CreatedAtUtc = now });
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AiConversationConflictException("La acción cambió mientras la cancelabas. Actualizá la conversación.");
+        }
+        return new AiActionResolutionDto { Action = MapAction(action) };
+    }
+
+    private async Task<(AiConversation Conversation, AiPendingAction Action)> LoadOwnedActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken)
+    {
+        var conversation = await dbContext.AiConversations.SingleOrDefaultAsync(x => x.Id == conversationId && x.OwnerUserId == actor.UserId, cancellationToken)
+            ?? throw new KeyNotFoundException("Conversación no encontrada.");
+        var action = await dbContext.AiPendingActions.SingleOrDefaultAsync(x => x.Id == actionId && x.ConversationId == conversationId && x.ActorUserId == actor.UserId, cancellationToken)
+            ?? throw new KeyNotFoundException("Acción no encontrada.");
+        return (conversation, action);
+    }
+
+    private async Task EnsurePendingAsync(AiExecutionContext actor, AiPendingAction action, CancellationToken cancellationToken)
+    {
+        if (action.Status == "Pending" && action.ExpiresAtUtc <= DateTime.UtcNow)
+        {
+            action.Status = "Expired";
+            action.ResolvedAtUtc = DateTime.UtcNow;
+            action.Version = Guid.NewGuid();
+            dbContext.AiAuditEvents.Add(new AiAuditEvent { ActorUserId = actor.UserId, ConversationId = action.ConversationId, RunId = action.RunId, ToolName = action.ToolName, Decision = "Expired", ReasonCode = "action_expired", CreatedAtUtc = DateTime.UtcNow });
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw new AiConversationConflictException("La acción venció. Pedile al asistente que la prepare de nuevo.");
+        }
+        if (action.Status != "Pending")
+            throw new AiConversationConflictException(action.Status switch
+            {
+                "Confirmed" => "La acción ya fue confirmada.",
+                "Cancelled" => "La acción ya fue cancelada.",
+                "Expired" => "La acción venció. Pedile al asistente que la prepare de nuevo.",
+                "Executing" => "La acción ya se está procesando.",
+                _ => "La acción ya no se puede confirmar."
+            });
+    }
+
+    private static AiPendingAction CreatePendingAction(AiExecutionContext actor, Guid conversationId, Guid runId, AiActionProposalDto proposal)
+    {
+        var now = DateTime.UtcNow;
+        return new AiPendingAction
+        {
+            ConversationId = conversationId,
+            RunId = runId,
+            ActorUserId = actor.UserId,
+            ToolName = proposal.ToolName,
+            ArgumentsJson = proposal.Arguments.ToJsonString(),
+            Title = Truncate(proposal.Title, 200),
+            Summary = Truncate(proposal.Summary, 1000),
+            DetailsJson = JsonSerializer.Serialize(proposal.Details),
+            CreatedAtUtc = now,
+            ExpiresAtUtc = now.Add(PendingActionLifetime)
+        };
+    }
+
+    private static AiMessage NewSystemReply(Guid conversationId, string content, AiSourceReferenceDto[] sources, bool grounded) => new()
+    {
+        ConversationId = conversationId,
+        Role = "assistant",
+        Content = Truncate(content, MaxAssistantMessageLength),
+        SourcesJson = JsonSerializer.Serialize(sources),
+        Grounded = grounded,
+        CreatedAtUtc = DateTime.UtcNow
+    };
+
+    private static string Truncate(string value, int maxLength) => value.Length <= maxLength ? value : value[..(maxLength - 1)] + "…";
+
+    private static AiPendingActionDto MapAction(AiPendingAction action)
+    {
+        IReadOnlyCollection<AiActionDetailDto> details;
+        try { details = JsonSerializer.Deserialize<AiActionDetailDto[]>(action.DetailsJson) ?? []; }
+        catch (JsonException) { details = []; }
+        var status = action.Status == "Pending" && action.ExpiresAtUtc <= DateTime.UtcNow ? "Expired" : action.Status;
+        return new AiPendingActionDto
+        {
+            Id = action.Id,
+            ToolName = action.ToolName,
+            Title = action.Title,
+            Summary = action.Summary,
+            Details = details,
+            Status = status,
+            ExpiresAtUtc = action.ExpiresAtUtc,
+            ResolvedAtUtc = action.ResolvedAtUtc,
+            ResultMessage = action.ResultMessage,
+            ResultLink = action.ResultLink
+        };
     }
 
     public async Task<bool> DeleteAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken)
@@ -381,12 +570,18 @@ public sealed class AiConversationService(
 
     internal static string FromProviderToolName(string name) => name.Replace("__", ".", StringComparison.Ordinal);
 
-    private static AiMessageDto MapMessage(AiMessage message)
+    private static AiMessageDto MapMessage(AiMessage message) => MapMessage(message, []);
+
+    private static AiMessageDto MapMessage(AiMessage message, IEnumerable<AiPendingAction> actions)
     {
         IReadOnlyCollection<AiSourceReferenceDto> sources;
         try { sources = JsonSerializer.Deserialize<AiSourceReferenceDto[]>(message.SourcesJson) ?? []; }
         catch (JsonException) { sources = []; }
-        return new AiMessageDto { Id = message.Id, Role = message.Role, Content = message.Content, CreatedAtUtc = message.CreatedAtUtc, TraceId = message.TraceId, Sources = sources, Grounded = message.Grounded };
+        return new AiMessageDto
+        {
+            Id = message.Id, Role = message.Role, Content = message.Content, CreatedAtUtc = message.CreatedAtUtc, TraceId = message.TraceId,
+            Sources = sources, Grounded = message.Grounded, PendingActions = actions.Select(MapAction).ToArray()
+        };
     }
 
     private static string SafeReasonCode(Exception exception) => exception switch

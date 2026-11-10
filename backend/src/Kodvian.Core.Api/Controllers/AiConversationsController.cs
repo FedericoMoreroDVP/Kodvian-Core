@@ -48,6 +48,21 @@ public sealed class AiConversationsController(IAiConversationService service) : 
         return Ok(ApiResponseDto<AiSendMessageResultDto>.Ok(data, "Respuesta generada."));
     }
 
+    [HttpPost("{id:guid}/actions/{actionId:guid}/confirm")]
+    [EnableRateLimiting("AiConversationMessages")]
+    public async Task<ActionResult<ApiResponseDto<AiActionResolutionDto>>> ConfirmAction(Guid id, Guid actionId, CancellationToken cancellationToken)
+    {
+        var data = await service.ConfirmActionAsync(CreateActor(), id, actionId, cancellationToken);
+        return Ok(ApiResponseDto<AiActionResolutionDto>.Ok(data, data.Action.Status == "Confirmed" ? "Acción confirmada." : "La acción no se pudo completar."));
+    }
+
+    [HttpPost("{id:guid}/actions/{actionId:guid}/cancel")]
+    public async Task<ActionResult<ApiResponseDto<AiActionResolutionDto>>> CancelAction(Guid id, Guid actionId, CancellationToken cancellationToken)
+    {
+        var data = await service.CancelActionAsync(CreateActor(), id, actionId, cancellationToken);
+        return Ok(ApiResponseDto<AiActionResolutionDto>.Ok(data, "Acción cancelada."));
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<ApiResponseDto<object>>> Delete(Guid id, CancellationToken cancellationToken)
     {

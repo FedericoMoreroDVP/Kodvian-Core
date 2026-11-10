@@ -25,6 +25,32 @@ export interface AiMessage {
   sources: AiSourceReference[];
   /** false cuando la respuesta no consultó datos de Kodvian. */
   grounded?: boolean;
+  pendingActions?: AiPendingAction[];
+}
+
+export type AiPendingActionStatus = 'Pending' | 'Executing' | 'Confirmed' | 'Cancelled' | 'Expired' | 'Failed';
+
+export interface AiActionDetail {
+  label: string;
+  value: string;
+}
+
+export interface AiPendingAction {
+  id: string;
+  toolName: string;
+  title: string;
+  summary: string;
+  details: AiActionDetail[];
+  status: AiPendingActionStatus;
+  expiresAtUtc: string;
+  resolvedAtUtc: string | null;
+  resultMessage: string | null;
+  resultLink: string | null;
+}
+
+export interface AiActionResolution {
+  action: AiPendingAction;
+  message: AiMessage | null;
 }
 
 export interface AiConversationDetail {

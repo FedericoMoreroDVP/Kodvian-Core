@@ -146,6 +146,84 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.ToTable("AiMessages", (string)null);
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiPendingAction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ArgumentsJson")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DetailsJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("MessageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResultLink")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ResultMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ToolName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId");
+
+                    b.HasIndex("ConversationId", "CreatedAtUtc");
+
+                    b.ToTable("AiPendingActions", (string)null);
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiProviderConfiguration", b =>
                 {
                     b.Property<int>("Id")
@@ -1553,6 +1631,17 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Navigation("Conversation");
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiPendingAction", b =>
+                {
+                    b.HasOne("Kodvian.Core.Domain.Entities.AiConversation", "Conversation")
+                        .WithMany("PendingActions")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiRun", b =>
                 {
                     b.HasOne("Kodvian.Core.Domain.Entities.AiConversation", "Conversation")
@@ -1909,6 +1998,8 @@ namespace Kodvian.Core.Infrastructure.Migrations
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.AiConversation", b =>
                 {
                     b.Navigation("Messages");
+
+                    b.Navigation("PendingActions");
 
                     b.Navigation("Runs");
                 });

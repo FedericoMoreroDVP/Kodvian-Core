@@ -65,6 +65,22 @@ public sealed class AiConversationsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/ai/conversations")).StatusCode);
     }
 
+    [Fact]
+    public async Task ActionEndpointsRequireAdministratorAndAiPermission()
+    {
+        var confirmUrl = $"/api/ai/conversations/{Guid.NewGuid()}/actions/{Guid.NewGuid()}/confirm";
+        var cancelUrl = $"/api/ai/conversations/{Guid.NewGuid()}/actions/{Guid.NewGuid()}/cancel";
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsync(confirmUrl, null)).StatusCode);
+
+        Authenticate(Token(RoleNames.Administrator));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(confirmUrl, null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(cancelUrl, null)).StatusCode);
+
+        Authenticate(Token(RoleNames.Administrator, PermissionCodes.AiOfficeUse));
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(confirmUrl, null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(cancelUrl, null)).StatusCode);
+    }
+
     private void Authenticate(string token) => client.DefaultRequestHeaders.Authorization =
         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -94,6 +110,8 @@ public sealed class AiConversationsApiTests : IDisposable
         public Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, PagedRequestDto request, CancellationToken cancellationToken) => Task.FromResult(new PagedResultDto<AiConversationDto>());
         public Task<AiConversationDetailDto?> GetByIdAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult<AiConversationDetailDto?>(null);
         public Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, CancellationToken cancellationToken) => Task.FromResult(new AiSendMessageResultDto());
+        public Task<AiActionResolutionDto> ConfirmActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
+        public Task<AiActionResolutionDto> CancelActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
         public Task<bool> DeleteAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 }

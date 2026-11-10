@@ -24,5 +24,32 @@ public sealed class AiToolDefinitionDto
 public sealed class AiToolExecutionResultDto
 {
     public JsonObject Data { get; init; } = new();
-    public AiSourceReferenceDto Source { get; init; } = new();
+    /// <summary>Fuente consultada; null para herramientas de acción, que no leen datos para responder.</summary>
+    public AiSourceReferenceDto? Source { get; init; }
+    /// <summary>Propuesta de escritura que el usuario tiene que confirmar.</summary>
+    public AiActionProposalDto? Proposal { get; init; }
+}
+
+public sealed class AiActionDetailDto
+{
+    public string Label { get; init; } = string.Empty;
+    public string Value { get; init; } = string.Empty;
+}
+
+/// <summary>Acción validada y con referencias resueltas, lista para que el usuario la confirme.</summary>
+public sealed class AiActionProposalDto
+{
+    public string ToolName { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Summary { get; init; } = string.Empty;
+    public IReadOnlyList<AiActionDetailDto> Details { get; init; } = [];
+    public JsonObject Arguments { get; init; } = new();
+}
+
+/// <summary>Resultado de ejecutar una acción confirmada.</summary>
+public sealed class AiActionOutcomeDto
+{
+    public string Message { get; init; } = string.Empty;
+    public string? Link { get; init; }
+    public AiSourceReferenceDto? Source { get; init; }
 }

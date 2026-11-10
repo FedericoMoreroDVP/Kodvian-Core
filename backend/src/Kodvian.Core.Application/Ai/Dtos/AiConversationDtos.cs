@@ -30,6 +30,29 @@ public sealed class AiMessageDto
     public IReadOnlyCollection<AiSourceReferenceDto> Sources { get; init; } = [];
     /// <summary>False cuando la respuesta no se apoyó en ninguna consulta a datos de Kodvian.</summary>
     public bool Grounded { get; init; } = true;
+    public IReadOnlyCollection<AiPendingActionDto> PendingActions { get; init; } = [];
+}
+
+public sealed class AiPendingActionDto
+{
+    public Guid Id { get; init; }
+    public string ToolName { get; init; } = string.Empty;
+    public string Title { get; init; } = string.Empty;
+    public string Summary { get; init; } = string.Empty;
+    public IReadOnlyCollection<AiActionDetailDto> Details { get; init; } = [];
+    /// <summary>Pending, Executing, Confirmed, Cancelled, Expired o Failed.</summary>
+    public string Status { get; init; } = string.Empty;
+    public DateTime ExpiresAtUtc { get; init; }
+    public DateTime? ResolvedAtUtc { get; init; }
+    public string? ResultMessage { get; init; }
+    public string? ResultLink { get; init; }
+}
+
+public sealed class AiActionResolutionDto
+{
+    public AiPendingActionDto Action { get; init; } = new();
+    /// <summary>Mensaje que se agregó a la conversación con el resultado (solo al confirmar).</summary>
+    public AiMessageDto? Message { get; init; }
 }
 
 public sealed class AiConversationDetailDto

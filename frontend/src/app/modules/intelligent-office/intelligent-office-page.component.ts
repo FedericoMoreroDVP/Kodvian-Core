@@ -9,7 +9,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { AiConversation, AiMessage, AiSourceReference } from './intelligent-office.models';
+import { renderAiMarkdown } from './ai-markdown';
+import { AiConversation, AiMessage, AiPendingAction, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService } from './intelligent-office.service';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -17,9 +18,35 @@ const SOURCE_LABELS: Record<string, string> = {
   'finance.get_summary': 'Finanzas',
   'projects.list': 'Proyectos',
   'tasks.list': 'Tareas',
+  'tasks.create': 'Tareas',
+  'tasks.update_status': 'Tareas',
   'clients.list': 'Clientes',
-  'meetings.list': 'Agenda'
+  'meetings.list': 'Agenda',
+  'meetings.create': 'Agenda',
+  'people.list': 'Equipo'
 };
+
+const ACTION_ICONS: Record<string, string> = {
+  'tasks.create': 'add_task',
+  'tasks.update_status': 'published_with_changes',
+  'meetings.create': 'event'
+};
+
+const ACTION_STATUS_LABELS: Record<string, string> = {
+  Pending: 'Pendiente de confirmación',
+  Executing: 'Procesando…',
+  Confirmed: 'Confirmada',
+  Cancelled: 'Cancelada',
+  Expired: 'Vencida',
+  Failed: 'No se pudo completar'
+};
+
+interface Suggestion {
+  icon: string;
+  text: string;
+  /** Si es true, la sugerencia se copia al cuadro de texto para completarla en lugar de enviarse. */
+  prefill?: boolean;
+}
 
 @Component({
   selector: 'app-intelligent-office-page',
@@ -32,7 +59,7 @@ const SOURCE_LABELS: Record<string, string> = {
         <div class="hero-text">
           <p class="eyebrow">Kodvian Core</p>
           <h2>Oficina Inteligente</h2>
-          <p class="hero-subtitle">Consultas operativas con fuentes verificables. En esta etapa la IA solo lee información autorizada.</p>
+          <p class="hero-subtitle">Consultá datos con fuentes verificables y pedí acciones como agendar tareas o reuniones. Nada se crea sin tu confirmación.</p>
         </div>
         <a mat-stroked-button class="provider-link" routerLink="/administracion/configuracion-ia"><mat-icon>tune</mat-icon> Configuración del proveedor</a>
       </mat-card>
@@ -87,7 +114,45 @@ const SOURCE_LABELS: Record<string, string> = {
                     <span>{{ message.role === 'user' ? 'Vos' : 'Oficina Inteligente' }}</span>
                     <time [attr.title]="message.traceId ? 'Seguimiento ' + message.traceId : null">{{ message.createdAtUtc | date:'dd/MM HH:mm' }}</time>
                   </div>
-                  <p class="message-content">{{ message.content }}</p>
+                  @if (message.role === 'assistant') {
+                    <div class="message-content markdown" [innerHTML]="renderMarkdown(message.content)"></div>
+                  } @else {
+                    <p class="message-content">{{ message.content }}</p>
+                  }
+                  @for (action of message.pendingActions ?? []; track action.id) {
+                    <section class="action-card" [attr.data-status]="action.status" [attr.aria-label]="action.title">
+                      <header class="action-header">
+                        <mat-icon class="action-icon">{{ actionIcon(action) }}</mat-icon>
+                        <span class="action-title">{{ action.title }}</span>
+                        <span class="action-status">{{ actionStatusLabel(action) }}</span>
+                      </header>
+                      <p class="action-summary">{{ action.summary }}</p>
+                      @if (action.details.length) {
+                        <dl class="action-details">
+                          @for (detail of action.details; track $index) {
+                            <div class="action-detail"><dt>{{ detail.label }}</dt><dd>{{ detail.value }}</dd></div>
+                          }
+                        </dl>
+                      }
+                      @if (isActionable(action)) {
+                        <div class="action-buttons">
+                          <button mat-flat-button color="primary" type="button" class="confirm-action" (click)="confirmAction(action)" [disabled]="busy || !!actionInProgress">
+                            @if (actionInProgress === action.id) { <mat-spinner diameter="16" /> } @else { <mat-icon>check</mat-icon> }
+                            Confirmar
+                          </button>
+                          <button mat-stroked-button type="button" class="cancel-action" (click)="cancelAction(action)" [disabled]="busy || !!actionInProgress">
+                            <mat-icon>close</mat-icon> Cancelar
+                          </button>
+                          <span class="action-expiry">Vence a las {{ action.expiresAtUtc | date:'HH:mm' }}</span>
+                        </div>
+                      } @else if (action.resultMessage) {
+                        <p class="action-result">
+                          {{ action.resultMessage }}
+                          @if (action.resultLink && action.status === 'Confirmed') { <a [routerLink]="action.resultLink">Ver</a> }
+                        </p>
+                      }
+                    </section>
+                  }
                   @if (message.sources.length) {
                     <div class="sources">
                       <span class="sources-title"><mat-icon>verified</mat-icon> Fuentes</span>
@@ -111,10 +176,10 @@ const SOURCE_LABELS: Record<string, string> = {
                 <div class="empty-chat">
                   <div class="empty-icon"><mat-icon>auto_awesome</mat-icon></div>
                   <h4>¿En qué te ayudo hoy?</h4>
-                  <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas. Cada respuesta indica de dónde salió el dato.</p>
+                  <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas, o pedime que agende algo. Cada respuesta indica de dónde salió el dato y las acciones esperan tu confirmación.</p>
                   <div class="suggestions">
                     @for (suggestion of suggestions; track suggestion.text) {
-                      <button type="button" class="suggestion" (click)="useSuggestion(suggestion.text)" [disabled]="busy">
+                      <button type="button" class="suggestion" (click)="useSuggestion(suggestion)" [disabled]="busy">
                         <mat-icon>{{ suggestion.icon }}</mat-icon><span>{{ suggestion.text }}</span>
                       </button>
                     }
@@ -138,7 +203,7 @@ const SOURCE_LABELS: Record<string, string> = {
 
           <form class="composer" (ngSubmit)="send()">
             <div class="composer-box" [class.disabled]="busy">
-              <textarea name="message" [(ngModel)]="draft" maxlength="4000" rows="2" [disabled]="busy" (keydown)="onComposerKeydown($event)"
+              <textarea #composerInput name="message" [(ngModel)]="draft" maxlength="4000" rows="2" [disabled]="busy" (keydown)="onComposerKeydown($event)"
                 aria-label="Escribí tu consulta" placeholder="Escribí tu consulta…"></textarea>
               <button mat-flat-button color="primary" class="send-button" type="submit" [disabled]="busy || !draft.trim()" aria-label="Consultar">
                 @if (busy && pendingContent) { <mat-spinner diameter="18" /> } @else { <mat-icon>send</mat-icon> }
@@ -216,6 +281,38 @@ const SOURCE_LABELS: Record<string, string> = {
     .source-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; color: var(--text-100); background: rgba(255,255,255,.05); border: 1px solid var(--kd-border-subtle); text-decoration: none; }
     a.source-chip { color: var(--brand-300); }
     a.source-chip:hover { border-color: rgba(34, 197, 94, .45); }
+    .markdown :is(p, ul, ol) { margin: 0 0 8px; }
+    .markdown > :last-child { margin-bottom: 0; }
+    .markdown :is(ul, ol) { padding-left: 20px; }
+    .markdown li { margin: 2px 0; }
+    .markdown .md-heading { margin-top: 4px; font-weight: 700; }
+    .markdown code { padding: 1px 5px; border-radius: 5px; background: rgba(255,255,255,.07); font-size: 12.5px; }
+    .markdown .md-table { overflow-x: auto; margin: 4px 0 8px; }
+    .markdown table { border-collapse: collapse; font-size: 13px; }
+    .markdown :is(th, td) { padding: 5px 10px; border: 1px solid var(--kd-border-subtle); text-align: left; white-space: nowrap; }
+    .markdown th { color: var(--text-300); font-weight: 600; background: rgba(255,255,255,.03); }
+    .assistant-message .message-content.markdown { white-space: normal; }
+
+    .action-card { margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px solid rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .05); }
+    .action-card[data-status="Confirmed"] { border-color: rgba(34, 197, 94, .25); background: rgba(34, 197, 94, .03); }
+    .action-card[data-status="Cancelled"], .action-card[data-status="Expired"] { border-color: var(--kd-border-subtle); background: rgba(255,255,255,.02); opacity: .8; }
+    .action-card[data-status="Failed"] { border-color: rgba(255, 99, 99, .3); background: rgba(255, 99, 99, .05); }
+    .action-header { display: flex; align-items: center; gap: 8px; }
+    .action-icon { color: var(--brand-300); }
+    .action-title { flex: 1; font-weight: 600; font-size: 14px; }
+    .action-status { padding: 2px 8px; border-radius: 999px; font-size: 11px; color: var(--text-300); background: rgba(255,255,255,.05); }
+    .action-card[data-status="Confirmed"] .action-status { color: var(--brand-300); }
+    .action-card[data-status="Failed"] .action-status { color: #ffb4b4; }
+    .action-summary { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }
+    .action-details { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin: 10px 0 0; }
+    .action-detail dt { color: var(--text-300); font-size: 11px; }
+    .action-detail dd { margin: 1px 0 0; font-size: 13px; }
+    .action-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+    .action-buttons mat-spinner { display: inline-block; margin-right: 6px; }
+    .action-expiry { color: var(--text-300); font-size: 11px; }
+    .action-result { margin: 10px 0 0; font-size: 13px; color: var(--text-300); }
+    .action-result a { margin-left: 6px; color: var(--brand-300); }
+
     .ungrounded { display: inline-flex; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--text-300); font-size: 11px; }
     .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
 
@@ -264,12 +361,18 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
   @ViewChild('messageList') private messageList?: ElementRef<HTMLElement>;
   private shouldScroll = false;
 
-  readonly suggestions = [
+  readonly suggestions: Suggestion[] = [
     { icon: 'event_busy', text: '¿Qué tareas vencen en los próximos siete días?' },
-    { icon: 'folder_open', text: '¿Cómo vienen los proyectos activos?' },
-    { icon: 'payments', text: 'Resumen de ingresos y egresos del último mes' },
-    { icon: 'calendar_month', text: '¿Qué reuniones tengo esta semana?' }
+    { icon: 'add_task', text: 'Agendá una tarea para mañana en el proyecto ', prefill: true },
+    { icon: 'calendar_month', text: '¿Qué reuniones tengo esta semana?' },
+    { icon: 'event', text: 'Agendá una reunión el jueves a las 10 con ', prefill: true },
+    { icon: 'payments', text: 'Resumen de ingresos y egresos de este mes' },
+    { icon: 'folder_open', text: '¿Cómo vienen los proyectos activos?' }
   ];
+
+  actionInProgress: string | null = null;
+  private readonly markdownCache = new Map<string, string>();
+  @ViewChild('composerInput') private composerInput?: ElementRef<HTMLTextAreaElement>;
 
   conversations: AiConversation[] = [];
   activeConversation?: AiConversation;
@@ -303,9 +406,63 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
     return parts.filter(Boolean).join(' · ');
   }
 
-  useSuggestion(text: string): void {
-    this.draft = text;
-    this.send();
+  useSuggestion(suggestion: Suggestion): void {
+    this.draft = suggestion.text;
+    if (!suggestion.prefill) { this.send(); return; }
+    // Las sugerencias de acción se completan antes de enviar (proyecto, persona, horario).
+    setTimeout(() => {
+      const input = this.composerInput?.nativeElement;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+  }
+
+  renderMarkdown(content: string): string {
+    let html = this.markdownCache.get(content);
+    if (html === undefined) {
+      html = renderAiMarkdown(content);
+      if (this.markdownCache.size > 300) this.markdownCache.clear();
+      this.markdownCache.set(content, html);
+    }
+    return html;
+  }
+
+  actionIcon(action: AiPendingAction): string { return ACTION_ICONS[action.toolName] ?? 'bolt'; }
+
+  isActionable(action: AiPendingAction): boolean {
+    return action.status === 'Pending' && new Date(action.expiresAtUtc).getTime() > Date.now();
+  }
+
+  actionStatusLabel(action: AiPendingAction): string {
+    const status = action.status === 'Pending' && !this.isActionable(action) ? 'Expired' : action.status;
+    return ACTION_STATUS_LABELS[status] ?? status;
+  }
+
+  confirmAction(action: AiPendingAction): void { this.resolveAction(action, 'confirm'); }
+
+  cancelAction(action: AiPendingAction): void { this.resolveAction(action, 'cancel'); }
+
+  private resolveAction(action: AiPendingAction, kind: 'confirm' | 'cancel'): void {
+    const conversation = this.activeConversation;
+    if (!conversation || this.busy || this.actionInProgress) return;
+    this.actionInProgress = action.id;
+    this.chatError = '';
+    const request = kind === 'confirm' ? this.api.confirmAction(conversation.id, action.id) : this.api.cancelAction(conversation.id, action.id);
+    request.pipe(finalize(() => this.actionInProgress = null)).subscribe({
+      next: result => {
+        this.messages = this.messages.map(message => message.pendingActions?.some(x => x.id === result.action.id)
+          ? { ...message, pendingActions: message.pendingActions!.map(x => x.id === result.action.id ? result.action : x) }
+          : message);
+        if (result.message) {
+          this.messages = [...this.messages, result.message];
+          this.activeConversation = { ...conversation, messageCount: conversation.messageCount + 1, updatedAtUtc: result.message.createdAtUtc };
+          this.conversations = this.conversations.map(x => x.id === conversation.id ? this.activeConversation! : x);
+          this.shouldScroll = true;
+        }
+      },
+      error: error => { this.chatError = IntelligentOfficeService.errorMessage(error); this.reloadActive(); }
+    });
   }
 
   onComposerKeydown(event: KeyboardEvent): void {

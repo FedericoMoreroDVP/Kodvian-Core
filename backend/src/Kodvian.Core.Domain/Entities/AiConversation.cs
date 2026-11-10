@@ -10,4 +10,5 @@ public sealed class AiConversation
     public Guid Version { get; set; } = Guid.NewGuid();
     public ICollection<AiMessage> Messages { get; set; } = new List<AiMessage>();
     public ICollection<AiRun> Runs { get; set; } = new List<AiRun>();
+    public ICollection<AiPendingAction> PendingActions { get; set; } = new List<AiPendingAction>();
 }

@@ -207,6 +207,7 @@ public sealed class AiConversationServiceTests
     {
         public IReadOnlyCollection<AiToolDefinitionDto> GetAvailableTools(AiExecutionContext actor) => [];
         public Task<AiToolExecutionResultDto> ExecuteAsync(AiExecutionContext actor, Guid runId, Guid expectedConfigurationVersion, string traceId, string toolName, JsonObject arguments, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<AiActionOutcomeDto> ExecuteConfirmedActionAsync(AiExecutionContext actor, Guid actionId, string toolName, JsonObject arguments, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 
     private sealed class FunctionCallResponsesClient : IAiResponsesClient
@@ -247,5 +248,7 @@ public sealed class AiConversationServiceTests
                 Data = new JsonObject { ["result"] = new JsonObject { ["count"] = 3 }, ["traceId"] = traceId },
                 Source = new AiSourceReferenceDto { ToolName = toolName, Source = "test.source", AsOfUtc = DateTime.UtcNow }
             });
+
+        public Task<AiActionOutcomeDto> ExecuteConfirmedActionAsync(AiExecutionContext actor, Guid actionId, string toolName, JsonObject arguments, CancellationToken cancellationToken) => throw new NotImplementedException();
     }
 }

@@ -41,7 +41,11 @@ public sealed class AiToolCatalog(
     private static readonly string[] ProjectStatuses = ["Planificacion", "EnCurso", "Pausado", "Finalizado", "Cancelado", "Presupuestado"];
     private static readonly string[] ClientStatuses = ["Prospecto", "Activo", "Pausado", "Finalizado", "Presupuestado"];
     private static readonly string[] MeetingStatuses = Enum.GetNames<MeetingStatus>();
+    private static readonly string[] Priorities = ["Baja", "Media", "Alta", "Urgente"];
+    private static readonly string[] NewTaskStatuses = ["Pendiente", "EnCurso"];
     private static readonly TimeZoneInfo BuenosAiresTimeZone = ResolveBuenosAiresTimeZone();
+    private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-AR");
+    private const string LocalDateTimePattern = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$";
 
     private static readonly AiToolDefinitionDto[] Definitions =
     [
@@ -56,7 +60,17 @@ public sealed class AiToolCatalog(
         new() { Name = "clients.list", Description = "Lista clientes visibles con nombre comercial y estado; excluye datos de contacto, montos y notas.", RequiredPermissions = [PermissionCodes.ClientsRead], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("status", EnumSchema(ClientStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "meetings.list", Description = "Lista reuniones visibles durante un período de hasta 90 días. Sin fechas devuelve los próximos 7 días (desde hoy). Para reuniones pasadas indicá from y to. No devuelve enlaces, ubicación ni nombres de participantes.", RequiredPermissions = [PermissionCodes.MeetingsRead], Parameters = ObjectSchema(
-            [("from", DateSchema()), ("to", DateSchema()), ("projectId", GuidSchema()), ("status", EnumSchema(MeetingStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) }
+            [("from", DateSchema()), ("to", DateSchema()), ("projectId", GuidSchema()), ("status", EnumSchema(MeetingStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
+        new() { Name = "people.list", Description = "Busca personas por nombre para asignar tareas o invitar a reuniones. Devuelve usuarios activos (sirven como responsable de tarea y como participantes de reunión) y desarrolladores activos (sirven como desarrollador asignado de una tarea). Solo id y nombre.", RequiredPermissions = [], Parameters = ObjectSchema(
+            [("search", StringSchema(100)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
+        new() { Name = "tasks.create", RequiresConfirmation = true, Description = "Prepara la creación de una tarea para que el usuario la confirme; no la crea. Requiere projectId (de projects.list) y title. Asigná con developerId (desarrollador de people.list) o responsibleUserId (usuario de people.list), no ambos. Fechas en yyyy-MM-dd.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
+            [("projectId", GuidSchema()), ("title", StringSchema(200)), ("description", StringSchema(2000)), ("startDate", DateSchema()), ("dueDate", DateSchema()),
+             ("priority", EnumSchema(Priorities)), ("status", EnumSchema(NewTaskStatuses)), ("developerId", GuidSchema()), ("responsibleUserId", GuidSchema())], ["projectId", "title"]) },
+        new() { Name = "tasks.update_status", RequiresConfirmation = true, Description = "Prepara el cambio de estado de una tarea para que el usuario lo confirme; no lo aplica. Requiere taskId (de tasks.list) y el estado nuevo.", RequiredPermissions = [PermissionCodes.TasksRead, PermissionCodes.TasksWrite], Parameters = ObjectSchema(
+            [("taskId", GuidSchema()), ("status", EnumSchema(TaskStatuses))], ["taskId", "status"]) },
+        new() { Name = "meetings.create", RequiresConfirmation = true, Description = "Prepara la creación de una reunión en la agenda para que el usuario la confirme; no la crea. Requiere projectId (de projects.list), title y startsAt en hora local de Buenos Aires (yyyy-MM-ddTHH:mm). Indicá endsAt o durationMinutes (por defecto 60). Participantes: ids de usuarios de people.list.", RequiredPermissions = [PermissionCodes.MeetingsRead, PermissionCodes.MeetingsWrite], Parameters = ObjectSchema(
+            [("projectId", GuidSchema()), ("title", StringSchema(200)), ("startsAt", LocalDateTimeSchema()), ("endsAt", LocalDateTimeSchema()), ("durationMinutes", IntegerSchema(15, 480)),
+             ("description", StringSchema(2000)), ("location", StringSchema(300)), ("participantIds", GuidArraySchema(20))], ["projectId", "title", "startsAt"]) }
     ];
 
     public IReadOnlyCollection<AiToolDefinitionDto> GetAvailableTools(AiExecutionContext actor) =>
@@ -103,11 +117,25 @@ public sealed class AiToolCatalog(
             throw;
         }
         var now = DateTime.UtcNow;
-        JsonObject data;
-        AiSourceReferenceDto source;
-        try
+        if (definition.RequiresConfirmation)
         {
-            (data, source) = toolName switch
+            // Las acciones no escriben: validan, resuelven referencias y devuelven una propuesta para confirmar.
+            var proposal = await RunGuardedAsync(actor, runId, toolName, () => PrepareActionAsync(toolName, actor, arguments, now, cancellationToken), cancellationToken);
+            await WriteAuditAsync(actor, runId, toolName, "Proposed", "pending_confirmation", cancellationToken);
+            var proposalData = new JsonObject
+            {
+                ["status"] = "pending_confirmation",
+                ["title"] = proposal.Title,
+                ["summary"] = proposal.Summary,
+                ["details"] = JsonSerializer.SerializeToNode(proposal.Details.Select(x => new { x.Label, x.Value })),
+                ["instructions"] = "La acción NO se ejecutó todavía. Avisale al usuario que la dejaste lista y que la confirme con el botón Confirmar de la tarjeta.",
+                ["traceId"] = traceId
+            };
+            return new AiToolExecutionResultDto { Data = proposalData, Proposal = proposal };
+        }
+
+        var (data, source) = await RunGuardedAsync(actor, runId, toolName, async () =>
+            toolName switch
             {
                 "dashboard.get_snapshot" => await DashboardAsync(arguments, now, cancellationToken),
                 "finance.get_summary" => await FinanceAsync(arguments, now, traceId, cancellationToken),
@@ -115,8 +143,54 @@ public sealed class AiToolCatalog(
                 "tasks.list" => await TasksAsync(arguments, now, cancellationToken),
                 "clients.list" => await ClientsAsync(arguments, now, cancellationToken),
                 "meetings.list" => await MeetingsAsync(actor, arguments, now, cancellationToken),
+                "people.list" => await PeopleAsync(arguments, now, cancellationToken),
                 _ => throw new AiToolRejectedException("La herramienta solicitada no está habilitada.")
-            };
+            }, cancellationToken);
+
+        await WriteAuditAsync(actor, runId, toolName, "Allowed", "completed", cancellationToken);
+        data["traceId"] = traceId;
+        return new AiToolExecutionResultDto { Data = data, Source = source };
+    }
+
+    public async Task<AiActionOutcomeDto> ExecuteConfirmedActionAsync(AiExecutionContext actor, Guid actionId, string toolName, JsonObject arguments, CancellationToken cancellationToken)
+    {
+        var definition = Definitions.SingleOrDefault(x => x.Name == toolName && x.RequiresConfirmation);
+        if (definition is null)
+        {
+            await WriteAuditAsync(actor, actionId, toolName, "Denied", "tool_not_allowlisted", cancellationToken);
+            throw new AiToolRejectedException("La acción solicitada no está habilitada.");
+        }
+
+        if (!IsAdministrator(actor) || !actor.Permissions.Contains(PermissionCodes.AiOfficeUse)
+            || definition.RequiredPermissions.Any(permission => !actor.Permissions.Contains(permission)))
+        {
+            await WriteAuditAsync(actor, actionId, toolName, "Denied", "permission_denied", cancellationToken);
+            throw new AiToolRejectedException("No tenés permisos para realizar esta acción.");
+        }
+
+        if (!await sessionValidator.IsValidAsync(actor.UserId, actor.SessionVersion, cancellationToken))
+        {
+            await WriteAuditAsync(actor, actionId, toolName, "Denied", "session_revoked", cancellationToken);
+            throw new UnauthorizedAccessException("La sesión dejó de estar vigente.");
+        }
+
+        var outcome = await RunGuardedAsync(actor, actionId, toolName, async () =>
+        {
+            ValidateProperties(arguments, definition.Parameters);
+            // Se vuelve a validar todo: entre la propuesta y la confirmación pudo cambiar el proyecto, la tarea o las personas.
+            var prepared = await PrepareActionAsync(toolName, actor, arguments, DateTime.UtcNow, cancellationToken);
+            return await ExecuteActionAsync(actor, prepared, cancellationToken);
+        }, cancellationToken);
+
+        await WriteAuditAsync(actor, actionId, toolName, "Allowed", "executed", cancellationToken);
+        return outcome;
+    }
+
+    private async Task<T> RunGuardedAsync<T>(AiExecutionContext actor, Guid runId, string toolName, Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await action();
         }
         catch (AiToolRejectedException)
         {
@@ -125,15 +199,244 @@ public sealed class AiToolCatalog(
         }
         catch (Exception exception) when (IsDomainRejection(exception))
         {
-            // Validaciones de los servicios de dominio: se devuelven al modelo como error de herramienta.
+            // Validaciones de los servicios de dominio: se devuelven como error de herramienta.
             await WriteAuditAsync(actor, runId, toolName, "Denied", "domain_rejected", cancellationToken);
             throw new AiToolRejectedException(exception.Message);
         }
-
-        await WriteAuditAsync(actor, runId, toolName, "Allowed", "completed", cancellationToken);
-        data["traceId"] = traceId;
-        return new AiToolExecutionResultDto { Data = data, Source = source };
     }
+
+    private async Task<(JsonObject, AiSourceReferenceDto)> PeopleAsync(JsonObject args, DateTime now, CancellationToken ct)
+    {
+        var search = GetString(args, "search", 100)?.Trim();
+        var pageSize = GetPageSize(args);
+        var users = dbContext.Users.AsNoTracking().Where(x => x.Activo);
+        var developers = dbContext.Developers.AsNoTracking().Where(x => x.Activo);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = search.ToLower();
+            users = users.Where(x => x.FullName.ToLower().Contains(pattern));
+            developers = developers.Where(x => x.FullName.ToLower().Contains(pattern));
+        }
+        var userItems = await users.OrderBy(x => x.FullName).Take(pageSize).Select(x => new { x.Id, Name = x.FullName }).ToListAsync(ct);
+        var developerItems = await developers.OrderBy(x => x.FullName).Take(pageSize).Select(x => new { x.Id, Name = x.FullName }).ToListAsync(ct);
+        var output = new { users = userItems, developers = developerItems };
+        return (Wrap("people.list", now, new { search, pageSize }, output, [], null, null), Source("people.list", "Kodvian.Core.Application.Team", now, null, null, null, null));
+    }
+
+    private Task<AiActionProposalDto> PrepareActionAsync(string toolName, AiExecutionContext actor, JsonObject args, DateTime now, CancellationToken ct) => toolName switch
+    {
+        "tasks.create" => PrepareTaskCreateAsync(args, ct),
+        "tasks.update_status" => PrepareTaskStatusAsync(args, ct),
+        "meetings.create" => PrepareMeetingCreateAsync(args, ct),
+        _ => throw new AiToolRejectedException("La acción solicitada no está habilitada.")
+    };
+
+    private async Task<AiActionProposalDto> PrepareTaskCreateAsync(JsonObject args, CancellationToken ct)
+    {
+        var projectId = GetGuid(args, "projectId") ?? throw new AiToolRejectedException("Falta el proyecto de la tarea.");
+        var title = GetString(args, "title", 200)?.Trim();
+        if (string.IsNullOrWhiteSpace(title)) throw new AiToolRejectedException("Falta el título de la tarea.");
+        var description = GetString(args, "description", 2000)?.Trim();
+        var startDate = GetDate(args, "startDate");
+        var dueDate = GetDate(args, "dueDate");
+        if (startDate.HasValue && dueDate.HasValue && dueDate < startDate)
+            throw new AiToolRejectedException("La fecha de vencimiento no puede ser anterior a la fecha de inicio.");
+        var priority = NormalizeOption(GetEnum(args, "priority", Priorities), Priorities) ?? "Media";
+        var status = NormalizeOption(GetEnum(args, "status", NewTaskStatuses), NewTaskStatuses) ?? "Pendiente";
+        var developerId = GetGuid(args, "developerId");
+        var responsibleUserId = GetGuid(args, "responsibleUserId");
+        if (developerId.HasValue && responsibleUserId.HasValue)
+            throw new AiToolRejectedException("Asigná la tarea a un desarrollador o a un usuario responsable, no a ambos.");
+
+        var project = await dbContext.Projects.AsNoTracking().Where(x => x.Id == projectId && x.Activo).Select(x => new { x.Nombre }).SingleOrDefaultAsync(ct)
+            ?? throw new AiToolRejectedException("El proyecto indicado no existe o no está activo. Buscalo con projects.list.");
+
+        string? assignee = null;
+        if (developerId.HasValue)
+            assignee = await dbContext.Developers.AsNoTracking().Where(x => x.Id == developerId && x.Activo).Select(x => x.FullName).SingleOrDefaultAsync(ct)
+                ?? throw new AiToolRejectedException("El desarrollador indicado no existe o no está activo. Buscalo con people.list.");
+        else if (responsibleUserId.HasValue)
+            assignee = await dbContext.Users.AsNoTracking().Where(x => x.Id == responsibleUserId && x.Activo).Select(x => x.FullName).SingleOrDefaultAsync(ct)
+                ?? throw new AiToolRejectedException("El usuario responsable no existe o no está activo. Buscalo con people.list.");
+
+        var details = new List<AiActionDetailDto> { Detail("Proyecto", project.Nombre), Detail("Prioridad", priority), Detail("Estado", StatusLabel(status)) };
+        if (startDate.HasValue) details.Add(Detail("Inicio", FormatDate(startDate.Value)));
+        if (dueDate.HasValue) details.Add(Detail("Vence", FormatDate(dueDate.Value)));
+        if (assignee is not null) details.Add(Detail(developerId.HasValue ? "Desarrollador" : "Responsable", assignee));
+        if (!string.IsNullOrWhiteSpace(description)) details.Add(Detail("Descripción", description.Length <= 160 ? description : description[..157] + "…"));
+
+        var normalized = new JsonObject { ["projectId"] = projectId.ToString(), ["title"] = title, ["priority"] = priority, ["status"] = status };
+        if (!string.IsNullOrWhiteSpace(description)) normalized["description"] = description;
+        if (startDate.HasValue) normalized["startDate"] = startDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (dueDate.HasValue) normalized["dueDate"] = dueDate.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        if (developerId.HasValue) normalized["developerId"] = developerId.Value.ToString();
+        if (responsibleUserId.HasValue) normalized["responsibleUserId"] = responsibleUserId.Value.ToString();
+
+        return new AiActionProposalDto
+        {
+            ToolName = "tasks.create",
+            Title = "Crear tarea",
+            Summary = $"Crear la tarea «{title}» en {project.Nombre}" + (dueDate.HasValue ? $", con vencimiento el {FormatDate(dueDate.Value)}." : "."),
+            Details = details,
+            Arguments = normalized
+        };
+    }
+
+    private async Task<AiActionProposalDto> PrepareTaskStatusAsync(JsonObject args, CancellationToken ct)
+    {
+        var taskId = GetGuid(args, "taskId") ?? throw new AiToolRejectedException("Falta la tarea.");
+        var status = NormalizeOption(GetEnum(args, "status", TaskStatuses), TaskStatuses) ?? throw new AiToolRejectedException("Falta el estado nuevo.");
+        var task = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == taskId && x.Activo)
+            .Select(x => new { x.Titulo, x.Estado, ProjectName = x.Proyecto != null ? x.Proyecto.Nombre : null }).SingleOrDefaultAsync(ct)
+            ?? throw new AiToolRejectedException("La tarea indicada no existe o no está activa. Buscala con tasks.list.");
+        var current = task.Estado.ToString();
+        if (string.Equals(current, status, StringComparison.OrdinalIgnoreCase))
+            throw new AiToolRejectedException($"La tarea ya está en estado {StatusLabel(status)}.");
+
+        var details = new List<AiActionDetailDto> { Detail("Tarea", task.Titulo), Detail("Estado actual", StatusLabel(current)), Detail("Estado nuevo", StatusLabel(status)) };
+        if (task.ProjectName is not null) details.Insert(1, Detail("Proyecto", task.ProjectName));
+        return new AiActionProposalDto
+        {
+            ToolName = "tasks.update_status",
+            Title = "Cambiar estado de tarea",
+            Summary = $"Pasar la tarea «{task.Titulo}» de {StatusLabel(current)} a {StatusLabel(status)}.",
+            Details = details,
+            Arguments = new JsonObject { ["taskId"] = taskId.ToString(), ["status"] = status }
+        };
+    }
+
+    private async Task<AiActionProposalDto> PrepareMeetingCreateAsync(JsonObject args, CancellationToken ct)
+    {
+        var projectId = GetGuid(args, "projectId") ?? throw new AiToolRejectedException("Falta el proyecto de la reunión.");
+        var title = GetString(args, "title", 200)?.Trim();
+        if (string.IsNullOrWhiteSpace(title)) throw new AiToolRejectedException("Falta el título de la reunión.");
+        var startsAt = GetLocalDateTime(args, "startsAt") ?? throw new AiToolRejectedException("Falta la fecha y hora de inicio.");
+        var endsAtArgument = GetLocalDateTime(args, "endsAt");
+        var duration = GetInt(args, "durationMinutes");
+        if (duration is < 15 or > 480) throw new AiToolRejectedException("La duración debe estar entre 15 y 480 minutos.");
+        var endsAt = endsAtArgument ?? startsAt.AddMinutes(duration ?? 60);
+        if (endsAt <= startsAt) throw new AiToolRejectedException("La hora de finalización debe ser posterior al inicio.");
+        if ((endsAt - startsAt).TotalHours > 12) throw new AiToolRejectedException("La reunión no puede durar más de 12 horas.");
+        var description = GetString(args, "description", 2000)?.Trim();
+        var location = GetString(args, "location", 300)?.Trim();
+        var participantIds = GetGuidArray(args, "participantIds", 20);
+
+        var project = await dbContext.Projects.AsNoTracking().Where(x => x.Id == projectId && x.Activo).Select(x => new { x.Nombre }).SingleOrDefaultAsync(ct)
+            ?? throw new AiToolRejectedException("El proyecto indicado no existe o no está activo. Buscalo con projects.list.");
+        var participants = participantIds.Count == 0 ? [] : await dbContext.Users.AsNoTracking()
+            .Where(x => participantIds.Contains(x.Id) && x.Activo).OrderBy(x => x.FullName).Select(x => x.FullName).ToListAsync(ct);
+        if (participants.Count != participantIds.Count)
+            throw new AiToolRejectedException("Uno o más participantes no existen o no están activos. Buscalos con people.list.");
+
+        var details = new List<AiActionDetailDto>
+        {
+            Detail("Proyecto", project.Nombre),
+            Detail("Cuándo", $"{startsAt.ToString("ddd d/M HH:mm", Spanish)} a {endsAt:HH:mm}" + (endsAt.Date != startsAt.Date ? $" del {endsAt.ToString("d/M", Spanish)}" : string.Empty))
+        };
+        if (participants.Count > 0) details.Add(Detail("Participantes", string.Join(", ", participants)));
+        if (!string.IsNullOrWhiteSpace(location)) details.Add(Detail("Ubicación", location));
+        if (!string.IsNullOrWhiteSpace(description)) details.Add(Detail("Descripción", description.Length <= 160 ? description : description[..157] + "…"));
+
+        var normalized = new JsonObject
+        {
+            ["projectId"] = projectId.ToString(),
+            ["title"] = title,
+            ["startsAt"] = startsAt.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture),
+            ["endsAt"] = endsAt.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture)
+        };
+        if (!string.IsNullOrWhiteSpace(description)) normalized["description"] = description;
+        if (!string.IsNullOrWhiteSpace(location)) normalized["location"] = location;
+        if (participantIds.Count > 0) normalized["participantIds"] = new JsonArray(participantIds.Select(x => (JsonNode?)JsonValue.Create(x.ToString())).ToArray());
+
+        return new AiActionProposalDto
+        {
+            ToolName = "meetings.create",
+            Title = "Agendar reunión",
+            Summary = $"Agendar «{title}» ({project.Nombre}) el {startsAt.ToString("dddd d 'de' MMMM 'a las' HH:mm", Spanish)}.",
+            Details = details,
+            Arguments = normalized
+        };
+    }
+
+    private async Task<AiActionOutcomeDto> ExecuteActionAsync(AiExecutionContext actor, AiActionProposalDto prepared, CancellationToken ct)
+    {
+        var args = prepared.Arguments;
+        var now = DateTime.UtcNow;
+        switch (prepared.ToolName)
+        {
+            case "tasks.create":
+            {
+                var created = await tasks.CreateAsync(actor.UserId, new TaskUpsertRequestDto
+                {
+                    ProjectId = GetGuid(args, "projectId")!.Value,
+                    Title = GetString(args, "title", 200)!,
+                    Description = GetString(args, "description", 2000),
+                    StartDate = GetDate(args, "startDate"),
+                    DueDate = GetDate(args, "dueDate"),
+                    Priority = GetString(args, "priority", 20) ?? "Media",
+                    Status = GetString(args, "status", 20) ?? "Pendiente",
+                    DeveloperId = GetGuid(args, "developerId"),
+                    ResponsibleId = GetGuid(args, "responsibleUserId")
+                }, ct);
+                return new AiActionOutcomeDto
+                {
+                    Message = $"Listo, creé la tarea «{created.Title}» en {created.ProjectName}.",
+                    Link = "/tareas",
+                    Source = Source("tasks.create", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas")
+                };
+            }
+            case "tasks.update_status":
+            {
+                var taskId = GetGuid(args, "taskId")!.Value;
+                var kanbanOrder = await dbContext.Tasks.AsNoTracking().Where(x => x.Id == taskId).Select(x => x.OrdenKanban).SingleOrDefaultAsync(ct);
+                var status = GetString(args, "status", 20)!;
+                var updated = await tasks.UpdateStatusAsync(taskId, new TaskStatusUpdateRequestDto { Status = status, KanbanOrder = kanbanOrder }, ct)
+                    ?? throw new AiToolRejectedException("La tarea ya no existe.");
+                return new AiActionOutcomeDto
+                {
+                    Message = $"Listo, la tarea «{updated.Title}» quedó en {StatusLabel(status)}.",
+                    Link = "/tareas",
+                    Source = Source("tasks.update_status", "Kodvian.Core.Application.Tasks", now, null, null, null, "/tareas")
+                };
+            }
+            case "meetings.create":
+            {
+                var startsAt = GetLocalDateTime(args, "startsAt")!.Value;
+                var endsAt = GetLocalDateTime(args, "endsAt")!.Value;
+                var created = await meetings.CreateAsync(actor.UserId, true, new MeetingUpsertRequestDto
+                {
+                    ProjectId = GetGuid(args, "projectId")!.Value,
+                    Title = GetString(args, "title", 200)!,
+                    Description = GetString(args, "description", 2000),
+                    Location = GetString(args, "location", 300),
+                    StartsAt = TimeZoneInfo.ConvertTimeToUtc(startsAt, BuenosAiresTimeZone),
+                    EndsAt = TimeZoneInfo.ConvertTimeToUtc(endsAt, BuenosAiresTimeZone),
+                    ParticipantIds = GetGuidArray(args, "participantIds", 20)
+                }, ct);
+                return new AiActionOutcomeDto
+                {
+                    Message = $"Listo, agendé «{created.Title}» para el {startsAt.ToString("dddd d 'de' MMMM 'a las' HH:mm", Spanish)}.",
+                    Link = "/agenda",
+                    Source = Source("meetings.create", "Kodvian.Core.Application.Meetings", now, null, null, null, "/agenda")
+                };
+            }
+            default:
+                throw new AiToolRejectedException("La acción solicitada no está habilitada.");
+        }
+    }
+
+    private static AiActionDetailDto Detail(string label, string value) => new() { Label = label, Value = value };
+
+    private static string FormatDate(DateOnly date) => date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "EnCurso" => "En curso",
+        _ => status
+    };
+
+    private static string? NormalizeOption(string? value, string[] options) =>
+        value is null ? null : options.First(x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase));
 
     private async Task<(JsonObject, AiSourceReferenceDto)> DashboardAsync(JsonObject args, DateTime now, CancellationToken ct)
     {
@@ -323,6 +626,32 @@ public sealed class AiToolCatalog(
     private static JsonObject IntegerSchema(int min, int max) => new() { ["type"] = "integer", ["minimum"] = min, ["maximum"] = max };
     private static JsonObject GuidSchema() => new() { ["type"] = "string", ["format"] = "uuid" };
     private static JsonObject DateSchema() => new() { ["type"] = "string", ["format"] = "date" };
+    private static JsonObject LocalDateTimeSchema() => new() { ["type"] = "string", ["pattern"] = LocalDateTimePattern, ["description"] = "Hora local de Buenos Aires, formato yyyy-MM-ddTHH:mm" };
+    private static JsonObject GuidArraySchema(int maxItems) => new() { ["type"] = "array", ["items"] = GuidSchema(), ["maxItems"] = maxItems };
+
+    private static DateTime? GetLocalDateTime(JsonObject args, string property)
+    {
+        var value = GetString(args, property, 19);
+        if (value is null) return null;
+        return DateTime.TryParseExact(value, ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            ? DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified)
+            : throw new AiToolRejectedException($"La fecha y hora {property} no es válida; usá yyyy-MM-ddTHH:mm (hora de Buenos Aires).");
+    }
+
+    private static IReadOnlyCollection<Guid> GetGuidArray(JsonObject args, string property, int maxItems)
+    {
+        if (!args.TryGetPropertyValue(property, out var node) || node is null) return [];
+        if (node is not JsonArray array || array.Count > maxItems) throw new AiToolRejectedException($"El parámetro {property} no es válido.");
+        var result = new List<Guid>();
+        foreach (var item in array)
+        {
+            if (item is not JsonValue value || !value.TryGetValue<string>(out var text) || !Guid.TryParse(text, out var id) || id == Guid.Empty)
+                throw new AiToolRejectedException($"El parámetro {property} no es válido.");
+            if (!result.Contains(id)) result.Add(id);
+        }
+        return result;
+    }
+
     private static JsonObject EnumSchema(string[] options) => new() { ["type"] = "string", ["enum"] = JsonSerializer.SerializeToNode(options) };
 
     private static bool IsAdministrator(AiExecutionContext actor) => actor.Roles.Contains(RoleNames.Administrator);

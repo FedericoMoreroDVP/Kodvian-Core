@@ -73,6 +73,55 @@ describe('Oficina Inteligente', () => {
     fixture.destroy();
   });
 
+  it('muestra la acción propuesta y al confirmarla agrega el resultado', () => {
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    const conversation = { id: 'conversation-1', title: 'Agendar', createdAtUtc: '2026-11-10T12:00:00Z', updatedAtUtc: '2026-11-10T12:00:00Z', messageCount: 2 };
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [conversation], pageNumber: 1, pageSize: 50, totalCount: 1 } });
+    const action = {
+      id: 'action-1', toolName: 'tasks.create', title: 'Crear tarea', summary: 'Crear la tarea «Llamar a Juan» en Proyecto Demo.',
+      details: [{ label: 'Proyecto', value: 'Proyecto Demo' }], status: 'Pending', expiresAtUtc: new Date(Date.now() + 600000).toISOString(),
+      resolvedAtUtc: null, resultMessage: null, resultLink: null
+    };
+    http.expectOne('/api/ai/conversations/conversation-1').flush({ data: { ...conversation, messages: [
+      { id: 'm1', role: 'user', content: 'Agendame llamar a Juan', createdAtUtc: '2026-11-10T12:00:00Z', traceId: null, sources: [] },
+      { id: 'm2', role: 'assistant', content: 'Te dejé la tarea **lista** para confirmar.', createdAtUtc: '2026-11-10T12:00:02Z', traceId: null, sources: [], grounded: true, pendingActions: [action] }
+    ] } });
+    fixture.detectChanges();
+
+    const card: HTMLElement = fixture.nativeElement.querySelector('.action-card');
+    expect(card.textContent).toContain('Llamar a Juan');
+    expect(card.textContent).toContain('Proyecto Demo');
+    expect(fixture.nativeElement.querySelector('.markdown strong').textContent).toBe('lista');
+
+    (card.querySelector('.confirm-action') as HTMLButtonElement).click();
+    const confirm = http.expectOne('/api/ai/conversations/conversation-1/actions/action-1/confirm');
+    expect(confirm.request.method).toBe('POST');
+    confirm.flush({ data: {
+      action: { ...action, status: 'Confirmed', resultMessage: 'Listo, creé la tarea «Llamar a Juan» en Proyecto Demo.', resultLink: '/tareas' },
+      message: { id: 'm3', role: 'assistant', content: 'Listo, creé la tarea «Llamar a Juan» en Proyecto Demo.', createdAtUtc: '2026-11-10T12:01:00Z', traceId: null, sources: [], grounded: true }
+    } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.confirm-action')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.action-card').textContent).toContain('Confirmada');
+    expect(fixture.componentInstance.messages.length).toBe(3);
+    fixture.destroy();
+  });
+
+  it('una sugerencia de acción se copia al cuadro de texto sin enviarse', () => {
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [], pageNumber: 1, pageSize: 50, totalCount: 0 } });
+    const actionSuggestion = fixture.componentInstance.suggestions.find(x => x.prefill)!;
+
+    fixture.componentInstance.useSuggestion(actionSuggestion);
+
+    expect(fixture.componentInstance.draft).toBe(actionSuggestion.text);
+    http.expectNone('/api/ai/conversations');
+    fixture.destroy();
+  });
+
   it('Enter envía y Shift + Enter no', () => {
     const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
     const component = fixture.componentInstance;
