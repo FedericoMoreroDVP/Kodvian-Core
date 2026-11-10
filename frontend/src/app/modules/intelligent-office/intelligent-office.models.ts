@@ -91,3 +91,28 @@ export interface AiActionBatchResolution {
   actions: AiPendingAction[];
   message: AiMessage | null;
 }
+
+export interface AiBriefingItem {
+  id: string;
+  title: string;
+  detail: string | null;
+}
+
+export interface AiAlert {
+  kind: 'overdue_tasks' | 'project_risk' | 'expense_spike' | 'overdue_collections' | string;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  detail: string;
+  prompt: string;
+  link: string | null;
+}
+
+export interface AiBriefing {
+  date: string;
+  greeting: string | null;
+  tasks: { overdue: number; dueToday: number; dueThisWeek: number; topOverdue: AiBriefingItem[] } | null;
+  meetings: { today: number; thisWeek: number; next: AiBriefingItem[] } | null;
+  collections: { currency: string; pending: number; overdue: number; count: number }[] | null;
+  projectsAtRisk: { id: string; name: string; progress: number; estimatedDelivery: string | null; daysToDelivery: number | null }[] | null;
+  alerts: AiAlert[];
+}

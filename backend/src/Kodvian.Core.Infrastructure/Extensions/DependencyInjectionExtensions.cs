@@ -122,6 +122,7 @@ public static class DependencyInjectionExtensions
         services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiProviderConfigurationService, AiProviderConfigurationService>();
         services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiConversationService, AiConversationService>();
         services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiToolExecutor, AiToolCatalog>();
+        services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiBriefingService, AiBriefingService>();
         services.AddHostedService<AiAuditRetentionWorker>();
         services.AddScoped<IMeetingService, MeetingService>();
         services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();

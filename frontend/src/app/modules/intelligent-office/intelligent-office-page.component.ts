@@ -10,8 +10,9 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { AiActionCardComponent, isActionable } from './ai-action-card.component';
+import { AiBriefingComponent } from './ai-briefing.component';
 import { renderAiMarkdown } from './ai-markdown';
-import { AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
+import { AiBriefing, AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -48,7 +49,7 @@ interface Suggestion {
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [AiActionCardComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
+  imports: [AiActionCardComponent, AiBriefingComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
       <mat-card class="hero-card">
@@ -150,6 +151,7 @@ interface Suggestion {
             } @empty {
               @if (!pendingContent) {
                 <div class="empty-chat">
+                  @if (briefing) { <app-ai-briefing [briefing]="briefing" (ask)="useFollowup($event)" /> }
                   <div class="empty-icon"><mat-icon>auto_awesome</mat-icon></div>
                   <h4>¿En qué te ayudo hoy?</h4>
                   <p class="muted">Preguntá por tareas, proyectos, reuniones, clientes o finanzas, o pedime que agende algo. Cada respuesta indica de dónde salió el dato y las acciones esperan tu confirmación.</p>
@@ -396,7 +398,17 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
   chatError = '';
   private pendingRequest: { content: string; id: string } | null = null;
 
-  ngOnInit(): void { this.loadConversations(); }
+  briefing: AiBriefing | null = null;
+
+  ngOnInit(): void {
+    this.loadConversations();
+    this.loadBriefing();
+  }
+
+  /** El resumen es opcional: si falla, la pantalla funciona igual sin él. */
+  loadBriefing(): void {
+    this.api.briefing().subscribe({ next: briefing => this.briefing = briefing, error: () => this.briefing = null });
+  }
 
   ngAfterViewChecked(): void {
     if (!this.shouldScroll || !this.messageList) return;

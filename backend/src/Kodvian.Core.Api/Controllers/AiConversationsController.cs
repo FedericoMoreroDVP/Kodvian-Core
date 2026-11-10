@@ -121,17 +121,5 @@ public sealed class AiConversationsController(IAiConversationService service) : 
             : NotFound(ApiResponseDto<object>.Fail("Conversación no encontrada."));
     }
 
-    private AiExecutionContext CreateActor()
-    {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
-            || !Guid.TryParse(User.FindFirstValue(CustomClaimTypes.SessionVersion), out var sessionVersion))
-            throw new UnauthorizedAccessException("La sesión no es válida.");
-        return new AiExecutionContext
-        {
-            UserId = userId,
-            SessionVersion = sessionVersion,
-            Roles = User.FindAll(ClaimTypes.Role).Select(x => x.Value).ToHashSet(StringComparer.Ordinal),
-            Permissions = User.FindAll(CustomClaimTypes.Permission).Select(x => x.Value).ToHashSet(StringComparer.Ordinal)
-        };
-    }
+    private AiExecutionContext CreateActor() => AiActorFactory.FromUser(User);
 }

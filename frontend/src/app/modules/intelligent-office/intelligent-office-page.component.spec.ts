@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 
-import { Subject, throwError } from 'rxjs';
+import { EMPTY, of, Subject, throwError } from 'rxjs';
 
 import { IntelligentOfficePageComponent } from './intelligent-office-page.component';
 import { AiStreamEvent } from './intelligent-office.models';
@@ -13,6 +13,7 @@ import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-
 describe('Oficina Inteligente', () => {
   let http: HttpTestingController;
   let streamSpy: jasmine.Spy;
+  let briefingSpy: jasmine.Spy;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -22,6 +23,7 @@ describe('Oficina Inteligente', () => {
     http = TestBed.inject(HttpTestingController);
     // Por defecto el streaming "no está disponible" y la pantalla usa el envío común (HttpClient).
     streamSpy = spyOn(TestBed.inject(IntelligentOfficeService), 'sendStream').and.returnValue(throwError(() => new StreamUnavailableError()));
+    briefingSpy = spyOn(TestBed.inject(IntelligentOfficeService), 'briefing').and.returnValue(EMPTY);
   });
 
   it('muestra el progreso y el texto en vivo y después las sugerencias de seguimiento', () => {
@@ -191,6 +193,34 @@ describe('Oficina Inteligente', () => {
     expect(fixture.nativeElement.querySelectorAll('.undo-action').length).toBe(1);
     expect(fixture.nativeElement.textContent).toContain('Deshecha');
     expect(fixture.componentInstance.messages.length).toBe(4);
+    fixture.destroy();
+  });
+
+  it('muestra el resumen con alertas y "Resolver con IA" envía la consulta sugerida', () => {
+    briefingSpy.and.returnValue(of({
+      date: '2026-11-10', greeting: 'Buen día, Nicolás',
+      tasks: { overdue: 3, dueToday: 1, dueThisWeek: 4, topOverdue: [{ id: 't1', title: 'Informe', detail: 'vencida hace 9 días' }] },
+      meetings: { today: 2, thisWeek: 5, next: [] },
+      collections: [{ currency: 'ARS', pending: 150000, overdue: 50000, count: 3 }],
+      projectsAtRisk: [],
+      alerts: [{ kind: 'overdue_tasks', severity: 'warning', title: '1 tarea vencida hace más de una semana', detail: 'Conviene reprogramarlas.', prompt: 'Mostrame las tareas vencidas hace más de 7 días', link: '/tareas' }]
+    }));
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [], pageNumber: 1, pageSize: 50, totalCount: 0 } });
+    fixture.detectChanges();
+
+    const briefing: HTMLElement = fixture.nativeElement.querySelector('app-ai-briefing');
+    expect(briefing.textContent).toContain('Buen día, Nicolás');
+    expect(briefing.textContent).toContain('1 tarea vencida hace más de una semana');
+    expect(briefing.textContent).toContain('Informe');
+
+    (briefing.querySelector('.alert-ask') as HTMLButtonElement).click();
+    http.expectOne('/api/ai/conversations').flush({ data: { id: 'c1', title: 'Nueva conversación', createdAtUtc: '2026-11-10T12:00:00Z', updatedAtUtc: '2026-11-10T12:00:00Z', messageCount: 0 } });
+    const sent = http.expectOne('/api/ai/conversations/c1/messages');
+    expect(sent.request.body.content).toBe('Mostrame las tareas vencidas hace más de 7 días');
+    sent.flush({ message: 'x' }, { status: 503, statusText: 'Unavailable' });
+    http.expectOne('/api/ai/conversations/c1').flush({ data: { id: 'c1', title: 'x', createdAtUtc: '', updatedAtUtc: '', messageCount: 0, messages: [] } });
     fixture.destroy();
   });
 
