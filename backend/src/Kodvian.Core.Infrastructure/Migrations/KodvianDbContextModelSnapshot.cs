@@ -130,6 +130,13 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasMaxLength(8000)
                         .HasColumnType("character varying(8000)");
 
+                    b.Property<string>("SuggestionsJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasDefaultValue("[]");
+
                     b.Property<string>("TraceId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

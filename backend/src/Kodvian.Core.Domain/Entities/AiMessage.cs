@@ -12,6 +12,7 @@ public sealed class AiMessage
     public string SourcesJson { get; set; } = "[]";
     /// <summary>False cuando la respuesta del asistente no se apoyó en ninguna herramienta.</summary>
     public bool Grounded { get; set; } = true;
+    public string SuggestionsJson { get; set; } = "[]";
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public AiConversation? Conversation { get; set; }
 }

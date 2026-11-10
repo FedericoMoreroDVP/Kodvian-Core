@@ -10,8 +10,8 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { renderAiMarkdown } from './ai-markdown';
-import { AiConversation, AiMessage, AiPendingAction, AiSourceReference } from './intelligent-office.models';
-import { IntelligentOfficeService } from './intelligent-office.service';
+import { AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
+import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
 
 const SOURCE_LABELS: Record<string, string> = {
   'dashboard.get_snapshot': 'Panel de indicadores',
@@ -196,8 +196,26 @@ interface Suggestion {
               </article>
               <article class="message assistant-message">
                 <div class="avatar" aria-hidden="true"><mat-icon>auto_awesome</mat-icon></div>
-                <div class="bubble thinking" role="status"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="sr-only">Consultando datos</span></div>
+                @if (visibleStreamingText) {
+                  <div class="bubble streaming">
+                    <div class="message-label"><span>Oficina Inteligente</span></div>
+                    <div class="message-content markdown" [innerHTML]="renderMarkdown(visibleStreamingText)"></div>
+                    <span class="stream-cursor" aria-hidden="true"></span>
+                  </div>
+                } @else {
+                  <div class="bubble thinking" role="status">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    <span class="progress-label">{{ progressLabel || 'Pensando…' }}</span>
+                  </div>
+                }
               </article>
+            }
+            @if (!busy && lastAssistantSuggestions.length) {
+              <div class="followups" aria-label="Sugerencias para seguir">
+                @for (suggestion of lastAssistantSuggestions; track suggestion) {
+                  <button type="button" class="followup" (click)="useFollowup(suggestion)"><mat-icon>subdirectory_arrow_right</mat-icon>{{ suggestion }}</button>
+                }
+              </div>
             }
           </div>
 
@@ -317,6 +335,12 @@ interface Suggestion {
     .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
 
     .thinking { display: flex; align-items: center; gap: 5px; padding: 14px 16px; }
+    .progress-label { margin-left: 6px; color: var(--text-300); font-size: 12px; }
+    .stream-cursor { display: inline-block; width: 7px; height: 14px; margin-top: 4px; background: var(--brand-300); animation: blink 1s infinite; }
+    .followups { display: flex; flex-wrap: wrap; gap: 6px; margin-left: 40px; }
+    .followup { display: inline-flex; align-items: center; gap: 4px; padding: 6px 11px; border-radius: 999px; font: inherit; font-size: 12px; color: var(--brand-300); background: rgba(34, 197, 94, .06); border: 1px solid rgba(34, 197, 94, .3); cursor: pointer; }
+    .followup:hover { background: rgba(34, 197, 94, .12); }
+    .followup mat-icon { width: 15px; height: 15px; font-size: 15px; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-300); animation: blink 1.2s infinite ease-in-out; }
     .dot:nth-child(2) { animation-delay: .2s; }
     .dot:nth-child(3) { animation-delay: .4s; }
@@ -371,6 +395,31 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
   ];
 
   actionInProgress: string | null = null;
+  progressLabel = '';
+  streamingText = '';
+
+  /** Texto en vivo sin la línea de sugerencias, que llega al final y se muestra como botones. */
+  get visibleStreamingText(): string {
+    const marker = this.streamingText.search(/\[\[\s*sugerencias/i);
+    const text = marker >= 0 ? this.streamingText.slice(0, marker) : this.streamingText.replace(/\[{1,2}[^\]]{0,14}$/, '');
+    return text.trim();
+  }
+
+  /** Sugerencias de seguimiento de la última respuesta del asistente. */
+  get lastAssistantSuggestions(): string[] {
+    const last = this.messages[this.messages.length - 1];
+    return last?.role === 'assistant' ? last.suggestions ?? [] : [];
+  }
+
+  useFollowup(text: string): void {
+    this.draft = text;
+    this.send();
+  }
+
+  private resetStreaming(): void {
+    this.progressLabel = '';
+    this.streamingText = '';
+  }
   private readonly markdownCache = new Map<string, string>();
   @ViewChild('composerInput') private composerInput?: ElementRef<HTMLTextAreaElement>;
 
@@ -541,10 +590,10 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
           return (character === 'x' ? random : (random & 0x3) | 0x8).toString(16);
         }) };
       const clientRequestId = this.pendingRequest.id;
-      this.api.send(conversation.id, content, clientRequestId).pipe(finalize(() => this.busy = false)).subscribe({
-        next: result => {
+      const applyResult = (result: AiSendResult): void => {
           this.pendingRequest = null;
           this.pendingContent = '';
+          this.resetStreaming();
           const userWasLoaded = this.messages.some(x => x.id === result.userMessage.id);
           const assistantWasLoaded = this.messages.some(x => x.id === result.assistantMessage.id);
           this.messages = [...this.messages.filter(x => x.id !== result.userMessage.id && x.id !== result.assistantMessage.id), result.userMessage, result.assistantMessage];
@@ -553,8 +602,27 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
             : x);
           this.activeConversation = this.conversations.find(x => x.id === conversation.id) ?? this.activeConversation;
           this.shouldScroll = true;
+      };
+      const onError = (error: unknown): void => { this.resetStreaming(); fail(IntelligentOfficeService.errorMessage(error)); this.reloadActive(); };
+      const sendWithoutStreaming = (): void => {
+        this.api.send(conversation.id, content, clientRequestId).pipe(finalize(() => this.busy = false)).subscribe({ next: applyResult, error: onError });
+      };
+
+      // Respuesta en vivo; si el streaming no está disponible se usa el envío común con el mismo identificador.
+      this.api.sendStream(conversation.id, content, clientRequestId).subscribe({
+        next: event => {
+          switch (event.type) {
+            case 'status': this.progressLabel = event.data.label; break;
+            case 'delta': this.streamingText += event.data.text; this.shouldScroll = true; break;
+            case 'reset': this.streamingText = ''; break;
+            case 'done': this.busy = false; applyResult(event.data); break;
+          }
         },
-        error: error => { fail(IntelligentOfficeService.errorMessage(error)); this.reloadActive(); }
+        error: error => {
+          if (error instanceof StreamUnavailableError) { this.resetStreaming(); sendWithoutStreaming(); return; }
+          this.busy = false;
+          onError(error);
+        }
       });
     };
 

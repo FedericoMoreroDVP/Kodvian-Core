@@ -4,10 +4,15 @@ import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
 
+import { Subject, throwError } from 'rxjs';
+
 import { IntelligentOfficePageComponent } from './intelligent-office-page.component';
+import { AiStreamEvent } from './intelligent-office.models';
+import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
 
 describe('Oficina Inteligente', () => {
   let http: HttpTestingController;
+  let streamSpy: jasmine.Spy;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -15,6 +20,45 @@ describe('Oficina Inteligente', () => {
       providers: [provideHttpClient(), provideHttpClientTesting(), provideNoopAnimations(), provideRouter([])]
     });
     http = TestBed.inject(HttpTestingController);
+    // Por defecto el streaming "no está disponible" y la pantalla usa el envío común (HttpClient).
+    streamSpy = spyOn(TestBed.inject(IntelligentOfficeService), 'sendStream').and.returnValue(throwError(() => new StreamUnavailableError()));
+  });
+
+  it('muestra el progreso y el texto en vivo y después las sugerencias de seguimiento', () => {
+    const events = new Subject<AiStreamEvent>();
+    streamSpy.and.returnValue(events.asObservable());
+    const fixture = TestBed.createComponent(IntelligentOfficePageComponent);
+    fixture.detectChanges();
+    http.expectOne('/api/ai/conversations?pageNumber=1&pageSize=50').flush({ data: { items: [], pageNumber: 1, pageSize: 50, totalCount: 0 } });
+
+    fixture.componentInstance.draft = '¿Qué vence esta semana?';
+    fixture.componentInstance.send();
+    http.expectOne('/api/ai/conversations').flush({ data: { id: 'c1', title: 'Nueva conversación', createdAtUtc: '2026-11-10T12:00:00Z', updatedAtUtc: '2026-11-10T12:00:00Z', messageCount: 0 } });
+
+    events.next({ type: 'status', data: { status: 'tool', label: 'Consultando tareas…', toolName: 'tasks.list' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.progress-label').textContent).toContain('Consultando tareas…');
+
+    events.next({ type: 'delta', data: { text: 'Vencen **3** tareas.' } });
+    events.next({ type: 'delta', data: { text: '\n[[sugerencias: Ver detalle' } });
+    fixture.detectChanges();
+    const live: HTMLElement = fixture.nativeElement.querySelector('.streaming');
+    expect(live.textContent).toContain('Vencen 3 tareas.');
+    expect(live.textContent).not.toContain('sugerencias');
+
+    events.next({ type: 'done', data: {
+      runId: 'r1', traceId: 't1',
+      userMessage: { id: 'u1', role: 'user', content: '¿Qué vence esta semana?', createdAtUtc: '2026-11-10T12:00:00Z', traceId: 't1', sources: [] },
+      assistantMessage: { id: 'a1', role: 'assistant', content: 'Vencen **3** tareas.', createdAtUtc: '2026-11-10T12:00:03Z', traceId: 't1', sources: [], suggestions: ['Ver detalle', 'Pasar a finalizada'] }
+    } });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.streaming')).toBeNull();
+    const followups = fixture.nativeElement.querySelectorAll('.followup');
+    expect(followups.length).toBe(2);
+    expect(followups[0].textContent).toContain('Ver detalle');
+    expect(fixture.componentInstance.busy).toBeFalse();
+    fixture.destroy();
   });
 
   afterEach(() => http.verify());

@@ -26,7 +26,16 @@ export interface AiMessage {
   /** false cuando la respuesta no consultó datos de Kodvian. */
   grounded?: boolean;
   pendingActions?: AiPendingAction[];
+  /** Próximos pasos sugeridos por el asistente (se muestran como botones). */
+  suggestions?: string[];
 }
+
+export type AiStreamEvent =
+  | { type: 'status'; data: { status: 'thinking' | 'tool'; label: string; toolName: string | null } }
+  | { type: 'delta'; data: { text: string } }
+  | { type: 'reset'; data: Record<string, never> }
+  | { type: 'done'; data: AiSendResult }
+  | { type: 'error'; data: { status: number; message: string } };
 
 export type AiPendingActionStatus = 'Pending' | 'Executing' | 'Confirmed' | 'Cancelled' | 'Expired' | 'Failed';
 

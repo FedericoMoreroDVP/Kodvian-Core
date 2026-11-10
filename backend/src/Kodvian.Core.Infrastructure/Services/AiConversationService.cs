@@ -91,7 +91,10 @@ public sealed class AiConversationService(
         };
     }
 
-    public async Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, CancellationToken cancellationToken)
+    public Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, CancellationToken cancellationToken) =>
+        SendMessageAsync(actor, conversationId, request, null, cancellationToken);
+
+    public async Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, IAiRunObserver? observer, CancellationToken cancellationToken)
     {
         await EnsureActorAsync(actor, cancellationToken);
         var content = request.Content?.Trim() ?? string.Empty;
@@ -202,7 +205,21 @@ public sealed class AiConversationService(
             for (var modelCall = 0; modelCall < MaxModelCalls; modelCall++)
             {
                 await EnsureActorAsync(actor, cancellationToken);
-                var response = await responsesClient.CreateAsync(provider.Version, input, toolSchemas, cancellationToken);
+                var streamedText = false;
+                AiModelResponseDto response;
+                if (observer is null)
+                {
+                    response = await responsesClient.CreateAsync(provider.Version, input, toolSchemas, cancellationToken);
+                }
+                else
+                {
+                    await observer.OnStatusAsync("thinking", modelCall == 0 ? "Pensando…" : "Armando la respuesta…", null, cancellationToken);
+                    response = await responsesClient.CreateStreamingAsync(provider.Version, input, toolSchemas, async (delta, ct) =>
+                    {
+                        streamedText = true;
+                        await observer.OnTextDeltaAsync(delta, ct);
+                    }, cancellationToken);
+                }
                 await EnsureActorAsync(actor, cancellationToken);
                 await EnsureProviderApprovalAsync(provider.Version, cancellationToken);
                 run.InputTokens += response.InputTokens;
@@ -221,6 +238,8 @@ public sealed class AiConversationService(
                     completed = true;
                     break;
                 }
+                // El texto previo a las herramientas ("Reviso las tareas…") es intermedio: la pantalla lo descarta.
+                if (observer is not null && streamedText) await observer.OnTextResetAsync(cancellationToken);
 
                 foreach (var call in calls)
                 {
@@ -236,6 +255,7 @@ public sealed class AiConversationService(
                     JsonObject arguments;
                     try { arguments = JsonNode.Parse(call["arguments"]?.GetValue<string>() ?? "{}") as JsonObject ?? new JsonObject(); }
                     catch (JsonException) { arguments = new JsonObject(); }
+                    if (observer is not null) await observer.OnStatusAsync("tool", AiToolLabels.Progress(toolName), toolName, cancellationToken);
 
                     try
                     {
@@ -284,6 +304,8 @@ public sealed class AiConversationService(
                 assistantText = pendingActions.Count > 0
                     ? "Te dejé la acción lista. Revisala y confirmala con el botón de la tarjeta."
                     : "No encontré información suficiente para responder con datos verificables.";
+            var (cleanText, suggestions) = AiSuggestionParser.Extract(assistantText);
+            assistantText = string.IsNullOrWhiteSpace(cleanText) ? assistantText : cleanText;
             if (assistantText.Length > MaxAssistantMessageLength) assistantText = assistantText[..MaxAssistantMessageLength];
             await EnsureActorAsync(actor, cancellationToken);
             await EnsureProviderApprovalAsync(provider.Version, cancellationToken);
@@ -298,6 +320,7 @@ public sealed class AiConversationService(
                 Content = assistantText,
                 SourcesJson = JsonSerializer.Serialize(uniqueSources),
                 Grounded = grounded,
+                SuggestionsJson = JsonSerializer.Serialize(suggestions),
                 CreatedAtUtc = DateTime.UtcNow
             };
             run.Status = partial ? "Partial" : "Completed";
@@ -577,10 +600,13 @@ public sealed class AiConversationService(
         IReadOnlyCollection<AiSourceReferenceDto> sources;
         try { sources = JsonSerializer.Deserialize<AiSourceReferenceDto[]>(message.SourcesJson) ?? []; }
         catch (JsonException) { sources = []; }
+        IReadOnlyCollection<string> suggestions;
+        try { suggestions = JsonSerializer.Deserialize<string[]>(message.SuggestionsJson) ?? []; }
+        catch (JsonException) { suggestions = []; }
         return new AiMessageDto
         {
             Id = message.Id, Role = message.Role, Content = message.Content, CreatedAtUtc = message.CreatedAtUtc, TraceId = message.TraceId,
-            Sources = sources, Grounded = message.Grounded, PendingActions = actions.Select(MapAction).ToArray()
+            Sources = sources, Grounded = message.Grounded, PendingActions = actions.Select(MapAction).ToArray(), Suggestions = suggestions
         };
     }
 

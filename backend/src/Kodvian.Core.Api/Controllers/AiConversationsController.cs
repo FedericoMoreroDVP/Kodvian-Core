@@ -48,6 +48,39 @@ public sealed class AiConversationsController(IAiConversationService service) : 
         return Ok(ApiResponseDto<AiSendMessageResultDto>.Ok(data, "Respuesta generada."));
     }
 
+    /// <summary>
+    /// Igual que <see cref="SendMessage"/>, pero responde con server-sent events: "status" (progreso por herramienta),
+    /// "delta" (texto a medida que llega), "reset" (descartar texto intermedio), "done" (resultado final) o "error".
+    /// </summary>
+    [HttpPost("{id:guid}/messages/stream")]
+    [RequestSizeLimit(20000)]
+    [EnableRateLimiting("AiConversationMessages")]
+    public async Task SendMessageStream(Guid id, [FromBody] AiSendMessageRequest request, CancellationToken cancellationToken)
+    {
+        var actor = CreateActor();
+        var observer = new AiSseObserver(Response);
+        try
+        {
+            var data = await service.SendMessageAsync(actor, id, request, observer, cancellationToken);
+            await observer.WriteAsync("done", data, cancellationToken);
+        }
+        catch (Exception exception) when (observer.Started && exception is not OperationCanceledException)
+        {
+            // Con el stream abierto ya no se puede cambiar el código HTTP: el error viaja como evento.
+            var (status, message) = exception switch
+            {
+                Kodvian.Core.Application.Ai.AiProviderUnavailableException => (503, exception.Message),
+                Kodvian.Core.Application.Ai.AiLiveDataApprovalRequiredException => (409, exception.Message),
+                Kodvian.Core.Application.Ai.AiConversationConflictException => (409, exception.Message),
+                UnauthorizedAccessException => (403, exception.Message),
+                KeyNotFoundException => (404, exception.Message),
+                ArgumentException => (400, exception.Message),
+                _ => (500, "No se pudo completar la consulta. La conversación quedó guardada para que puedas revisarla.")
+            };
+            await observer.WriteAsync("error", new { status, message }, CancellationToken.None);
+        }
+    }
+
     [HttpPost("{id:guid}/actions/{actionId:guid}/confirm")]
     [EnableRateLimiting("AiConversationMessages")]
     public async Task<ActionResult<ApiResponseDto<AiActionResolutionDto>>> ConfirmAction(Guid id, Guid actionId, CancellationToken cancellationToken)

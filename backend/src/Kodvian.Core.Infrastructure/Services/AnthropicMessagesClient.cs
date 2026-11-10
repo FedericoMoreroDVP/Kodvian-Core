@@ -29,7 +29,13 @@ public sealed class AnthropicMessagesClient(
 
     private readonly IDataProtector _protector = dataProtectionProvider.CreateProtector("Kodvian.Core.AiProviderApiKey.v1");
 
-    public async Task<AiModelResponseDto> CreateAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, CancellationToken cancellationToken)
+    public Task<AiModelResponseDto> CreateAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, CancellationToken cancellationToken) =>
+        SendAsync(expectedConfigurationVersion, input, tools, null, cancellationToken);
+
+    public Task<AiModelResponseDto> CreateStreamingAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, Func<string, CancellationToken, Task> onTextDelta, CancellationToken cancellationToken) =>
+        SendAsync(expectedConfigurationVersion, input, tools, onTextDelta, cancellationToken);
+
+    private async Task<AiModelResponseDto> SendAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, Func<string, CancellationToken, Task>? onTextDelta, CancellationToken cancellationToken)
     {
         var settings = await dbContext.AiProviderConfigurations.AsNoTracking().SingleOrDefaultAsync(cancellationToken);
         if (settings is null || settings.Provider != AiProviders.Anthropic || settings.Version != expectedConfigurationVersion
@@ -62,7 +68,17 @@ public sealed class AnthropicMessagesClient(
         Message response;
         try
         {
-            response = await client.Messages.Create(parameters, cancellationToken: cancellationToken);
+            if (onTextDelta is null)
+            {
+                response = await client.Messages.Create(parameters, cancellationToken: cancellationToken);
+            }
+            else
+            {
+                // Se transmite cada fragmento de texto y el agregador del SDK reconstruye el mensaje completo
+                // (incluidos tool_use y thinking) para seguir con el mismo formato que sin streaming.
+                response = await Anthropic.SseAggregatorExtensions.Aggregate(
+                    TapTextDeltas(client.Messages.CreateStreaming(parameters, cancellationToken: cancellationToken), onTextDelta, cancellationToken));
+            }
         }
         catch (AnthropicUnauthorizedException)
         {
@@ -90,6 +106,19 @@ public sealed class AnthropicMessagesClient(
         }
 
         return FromAnthropicResponse(response);
+    }
+
+    // Avisa cada fragmento de texto sin alterar el flujo de eventos que consume el agregador del SDK.
+    private static async IAsyncEnumerable<RawMessageStreamEvent> TapTextDeltas(IAsyncEnumerable<RawMessageStreamEvent> source,
+        Func<string, CancellationToken, Task> onTextDelta, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await foreach (var streamEvent in source.WithCancellation(cancellationToken))
+        {
+            if (streamEvent.TryPickContentBlockDelta(out var blockDelta) && blockDelta.Delta.TryPickText(out var textDelta)
+                && !string.IsNullOrEmpty(textDelta.Text))
+                await onTextDelta(textDelta.Text, cancellationToken);
+            yield return streamEvent;
+        }
     }
 
     internal static (string System, List<MessageParam> Messages) ToAnthropicMessages(JsonArray input)
@@ -283,16 +312,21 @@ public sealed class AiResponsesClientRouter(
     OpenAiResponsesClient openAi,
     AnthropicMessagesClient anthropic) : IAiResponsesClient
 {
-    public async Task<AiModelResponseDto> CreateAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, CancellationToken cancellationToken)
+    public async Task<AiModelResponseDto> CreateAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, CancellationToken cancellationToken) =>
+        await (await ResolveAsync(cancellationToken)).CreateAsync(expectedConfigurationVersion, input, tools, cancellationToken);
+
+    public async Task<AiModelResponseDto> CreateStreamingAsync(Guid expectedConfigurationVersion, JsonArray input, JsonArray tools, Func<string, CancellationToken, Task> onTextDelta, CancellationToken cancellationToken) =>
+        await (await ResolveAsync(cancellationToken)).CreateStreamingAsync(expectedConfigurationVersion, input, tools, onTextDelta, cancellationToken);
+
+    private async Task<IAiResponsesClient> ResolveAsync(CancellationToken cancellationToken)
     {
         var provider = await dbContext.AiProviderConfigurations.AsNoTracking().Select(x => x.Provider).SingleOrDefaultAsync(cancellationToken);
-        IAiResponsesClient client = provider switch
+        return provider switch
         {
             AiProviders.OpenAI => openAi,
             AiProviders.Anthropic => anthropic,
             _ => throw new AiProviderUnavailableException("El proveedor configurado no está disponible.")
         };
-        return await client.CreateAsync(expectedConfigurationVersion, input, tools, cancellationToken);
     }
 }
 

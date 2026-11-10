@@ -90,6 +90,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.Role).HasMaxLength(20).IsRequired();
             entity.Property(x => x.Content).HasMaxLength(16000).IsRequired();
             entity.Property(x => x.SourcesJson).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.SuggestionsJson).HasMaxLength(1000).IsRequired().HasDefaultValue("[]");
             entity.Property(x => x.TraceId).HasMaxLength(64);
             entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();

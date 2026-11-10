@@ -31,6 +31,8 @@ public sealed class AiMessageDto
     /// <summary>False cuando la respuesta no se apoyó en ninguna consulta a datos de Kodvian.</summary>
     public bool Grounded { get; init; } = true;
     public IReadOnlyCollection<AiPendingActionDto> PendingActions { get; init; } = [];
+    /// <summary>Sugerencias de seguimiento (2 o 3) que el usuario puede tocar para continuar.</summary>
+    public IReadOnlyCollection<string> Suggestions { get; init; } = [];
 }
 
 public sealed class AiPendingActionDto

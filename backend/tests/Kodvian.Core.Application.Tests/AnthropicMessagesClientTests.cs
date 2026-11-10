@@ -14,6 +14,40 @@ namespace Kodvian.Core.Application.Tests;
 public sealed class AnthropicMessagesClientTests
 {
     [Fact]
+    public async Task StreamingSendsTextDeltasAndRebuildsTheFullMessage()
+    {
+        var body = string.Join("", new[]
+        {
+            Sse("message_start", """{"type":"message_start","message":{"id":"msg_s","type":"message","role":"assistant","model":"claude-opus-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":50,"output_tokens":1}}}"""),
+            Sse("content_block_start", """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"""),
+            Sse("content_block_delta", """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hola "}}"""),
+            Sse("content_block_delta", """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Nicolás"}}"""),
+            Sse("content_block_stop", """{"type":"content_block_stop","index":0}"""),
+            Sse("content_block_start", """{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"toolu_s","name":"tasks__list","input":{}}}"""),
+            Sse("content_block_delta", """{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"days\":"}}"""),
+            Sse("content_block_delta", """{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"7}"}}"""),
+            Sse("content_block_stop", """{"type":"content_block_stop","index":1}"""),
+            Sse("message_delta", """{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":30}}"""),
+            Sse("message_stop", """{"type":"message_stop"}""")
+        });
+        var (client, version, handler) = await CreateClientAsync(body, mediaType: "text/event-stream");
+        var deltas = new List<string>();
+
+        var response = await client.CreateStreamingAsync(version, BasicInput(), Tools(), (text, _) => { deltas.Add(text); return Task.CompletedTask; }, CancellationToken.None);
+
+        Assert.Equal(["Hola ", "Nicolás"], deltas);
+        Assert.Equal("Hola Nicolás", response.OutputText);
+        Assert.Equal("completed", response.Status);
+        var call = response.OutputItems.OfType<JsonObject>().Single(x => x["type"]!.GetValue<string>() == "function_call");
+        Assert.Equal("toolu_s", call["call_id"]!.GetValue<string>());
+        Assert.Equal(7, JsonNode.Parse(call["arguments"]!.GetValue<string>())!["days"]!.GetValue<int>());
+        using var request = JsonDocument.Parse(handler.LastBody!);
+        Assert.True(request.RootElement.GetProperty("stream").GetBoolean());
+    }
+
+    private static string Sse(string eventName, string data) => $"event: {eventName}\ndata: {data}\n\n";
+
+    [Fact]
     public async Task ToolCallResponseIsReturnedInTheModuleFormatKeepingThinking()
     {
         const string body = """
@@ -171,7 +205,7 @@ public sealed class AnthropicMessagesClientTests
         }
     ];
 
-    private static async Task<(AnthropicMessagesClient Client, Guid Version, CapturingHandler Handler)> CreateClientAsync(string responseBody, string provider = AiProviders.Anthropic)
+    private static async Task<(AnthropicMessagesClient Client, Guid Version, CapturingHandler Handler)> CreateClientAsync(string responseBody, string provider = AiProviders.Anthropic, string mediaType = "application/json")
     {
         var db = new KodvianDbContext(new DbContextOptionsBuilder<KodvianDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var dataProtection = new EphemeralDataProtectionProvider();
@@ -190,11 +224,11 @@ public sealed class AnthropicMessagesClientTests
         };
         db.AiProviderConfigurations.Add(settings);
         await db.SaveChangesAsync();
-        var handler = new CapturingHandler(responseBody);
+        var handler = new CapturingHandler(responseBody, mediaType);
         return (new AnthropicMessagesClient(new HttpClient(handler), db, dataProtection), settings.Version, handler);
     }
 
-    private sealed class CapturingHandler(string body) : HttpMessageHandler
+    private sealed class CapturingHandler(string body, string mediaType) : HttpMessageHandler
     {
         public string? LastBody { get; private set; }
         public string? LastApiKey { get; private set; }
@@ -203,7 +237,7 @@ public sealed class AnthropicMessagesClientTests
         {
             LastBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             LastApiKey = request.Headers.TryGetValues("x-api-key", out var values) ? values.Single() : request.Headers.Authorization?.ToString();
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
         }
     }
 }

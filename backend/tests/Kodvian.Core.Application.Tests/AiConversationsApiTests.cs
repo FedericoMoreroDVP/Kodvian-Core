@@ -81,6 +81,23 @@ public sealed class AiConversationsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(cancelUrl, null)).StatusCode);
     }
 
+    [Fact]
+    public async Task StreamEndpointAnswersWithServerSentEvents()
+    {
+        Authenticate(Token(RoleNames.Administrator, PermissionCodes.AiOfficeUse));
+        var content = new StringContent($"{{\"clientRequestId\":\"{Guid.NewGuid()}\",\"content\":\"Hola\"}}", System.Text.Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync($"/api/ai/conversations/{Guid.NewGuid()}/messages/stream", content);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.StartsWith("text/event-stream", response.Content.Headers.ContentType!.ToString());
+        Assert.Contains("event: status", body);
+        Assert.Contains("event: delta", body);
+        Assert.Contains("event: done", body);
+        Assert.Contains("\"runId\"", body);
+    }
+
     private void Authenticate(string token) => client.DefaultRequestHeaders.Authorization =
         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
 
@@ -110,6 +127,15 @@ public sealed class AiConversationsApiTests : IDisposable
         public Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, PagedRequestDto request, CancellationToken cancellationToken) => Task.FromResult(new PagedResultDto<AiConversationDto>());
         public Task<AiConversationDetailDto?> GetByIdAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult<AiConversationDetailDto?>(null);
         public Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, CancellationToken cancellationToken) => Task.FromResult(new AiSendMessageResultDto());
+        public async Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, IAiRunObserver? observer, CancellationToken cancellationToken)
+        {
+            if (observer is not null)
+            {
+                await observer.OnStatusAsync("thinking", "Pensando…", null, cancellationToken);
+                await observer.OnTextDeltaAsync("Hola", cancellationToken);
+            }
+            return new AiSendMessageResultDto { RunId = Guid.NewGuid() };
+        }
         public Task<AiActionResolutionDto> ConfirmActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
         public Task<AiActionResolutionDto> CancelActionAsync(AiExecutionContext actor, Guid conversationId, Guid actionId, CancellationToken cancellationToken) => Task.FromResult(new AiActionResolutionDto());
         public Task<bool> DeleteAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult(false);
