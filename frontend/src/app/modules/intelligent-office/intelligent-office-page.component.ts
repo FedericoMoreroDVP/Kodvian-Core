@@ -6,12 +6,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { AiActionCardComponent, isActionable } from './ai-action-card.component';
 import { AiBriefingComponent } from './ai-briefing.component';
+import { AiMessageExtrasComponent } from './ai-message-extras.component';
 import { AiPreferencesComponent } from './ai-preferences.component';
+import { AiVoiceButtonComponent } from './ai-voice-button.component';
 import { renderAiMarkdown } from './ai-markdown';
 import { AiBriefing, AiConversation, AiMessage, AiPendingAction, AiSendResult, AiSourceReference } from './intelligent-office.models';
 import { IntelligentOfficeService, StreamUnavailableError } from './intelligent-office.service';
@@ -50,7 +52,7 @@ interface Suggestion {
 @Component({
   selector: 'app-intelligent-office-page',
   standalone: true,
-  imports: [AiActionCardComponent, AiBriefingComponent, AiPreferencesComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
+  imports: [AiActionCardComponent, AiBriefingComponent, AiMessageExtrasComponent, AiPreferencesComponent, AiVoiceButtonComponent, DatePipe, FormsModule, MatButtonModule, MatCardModule, MatIconModule, MatProgressSpinnerModule, MatTooltipModule, RouterLink],
   template: `
     <section class="office-page">
       <mat-card class="hero-card">
@@ -70,17 +72,22 @@ interface Suggestion {
         <mat-card class="history-panel">
           <button mat-flat-button color="primary" class="new-button" type="button" (click)="newConversation()" [disabled]="busy"><mat-icon>add</mat-icon> Nueva conversación</button>
           <h3 class="history-title">Conversaciones</h3>
+          <input class="history-search" type="search" name="search" [(ngModel)]="search" (ngModelChange)="onSearchChange()" placeholder="Buscar conversaciones…" aria-label="Buscar conversaciones" maxlength="100" />
           @if (loadingList) { <mat-spinner diameter="28" aria-label="Cargando conversaciones" /> }
           <div class="conversation-list">
             @for (item of conversations; track item.id) {
-              <button type="button" class="conversation-item" [class.selected]="item.id === activeConversation?.id" (click)="open(item)" [disabled]="busy">
-                <mat-icon class="conversation-icon">chat_bubble_outline</mat-icon>
-                <span class="conversation-body">
-                  <span class="conversation-title">{{ item.title }}</span>
-                  <span class="conversation-meta">{{ item.updatedAtUtc | date:'dd/MM HH:mm' }} · {{ item.messageCount }} mensajes</span>
-                </span>
-              </button>
-            } @empty { @if (!loadingList) { <p class="muted empty-history">Todavía no hay conversaciones. Escribí tu primera consulta a la derecha.</p> } }
+              <div class="conversation-row" [class.selected]="item.id === activeConversation?.id">
+                <button type="button" class="conversation-item" (click)="open(item)" [disabled]="busy">
+                  <mat-icon class="conversation-icon">{{ item.isPinned ? 'push_pin' : 'chat_bubble_outline' }}</mat-icon>
+                  <span class="conversation-body">
+                    <span class="conversation-title">{{ item.title }}</span>
+                    <span class="conversation-meta">{{ item.updatedAtUtc | date:'dd/MM HH:mm' }} · {{ item.messageCount }} mensajes</span>
+                  </span>
+                </button>
+                <button type="button" class="pin-button" [class.pinned]="item.isPinned" [attr.aria-label]="item.isPinned ? 'Desfijar conversación' : 'Fijar conversación'"
+                  [matTooltip]="item.isPinned ? 'Desfijar' : 'Fijar arriba'" (click)="togglePin(item)" [disabled]="busy"><mat-icon>push_pin</mat-icon></button>
+              </div>
+            } @empty { @if (!loadingList) { <p class="muted empty-history">{{ search.trim() ? 'No hay conversaciones que coincidan.' : 'Todavía no hay conversaciones. Escribí tu primera consulta a la derecha.' }}</p> } }
           </div>
           @if (conversations.length < totalConversations) { <button mat-button type="button" (click)="loadMoreConversations()" [disabled]="loadingList || busy">Cargar más</button> }
         </mat-card>
@@ -88,7 +95,14 @@ interface Suggestion {
         <mat-card class="chat-panel">
           <div class="chat-header">
             <div class="chat-heading">
-              <h3>{{ activeConversation?.title ?? 'Nueva conversación' }}</h3>
+              @if (renaming && activeConversation) {
+                <input class="rename-input" name="title" [(ngModel)]="titleDraft" maxlength="120" aria-label="Nuevo título" (keydown.enter)="saveTitle()" (keydown.escape)="renaming = false" (blur)="saveTitle()" />
+              } @else {
+                <h3>
+                  {{ activeConversation?.title ?? 'Nueva conversación' }}
+                  @if (activeConversation) { <button type="button" class="rename-button" aria-label="Renombrar conversación" matTooltip="Renombrar" (click)="startRename()"><mat-icon>edit</mat-icon></button> }
+                </h3>
+              }
               <p class="muted">Las conversaciones se conservan hasta que las elimines.</p>
             </div>
             <div class="chat-actions">
@@ -151,6 +165,7 @@ interface Suggestion {
                       <mat-icon>info_outline</mat-icon> Sin datos consultados
                     </p>
                   }
+                  @if (message.role === 'assistant') { <app-ai-message-extras [message]="message" (rate)="rate(message, $event)" /> }
                 </div>
               </article>
             } @empty {
@@ -206,6 +221,7 @@ interface Suggestion {
             <div class="composer-box" [class.disabled]="busy">
               <textarea #composerInput name="message" [(ngModel)]="draft" maxlength="4000" rows="2" [disabled]="busy" (keydown)="onComposerKeydown($event)"
                 aria-label="Escribí tu consulta" placeholder="Escribí tu consulta…"></textarea>
+              <app-ai-voice-button [disabled]="busy" (transcript)="onVoice($event)" (failed)="chatError = $event" />
               <button mat-flat-button color="primary" class="send-button" type="submit" [disabled]="busy || !draft.trim()" aria-label="Consultar">
                 @if (busy && pendingContent) { <mat-spinner diameter="18" /> } @else { <mat-icon>send</mat-icon> }
                 <span>Consultar</span>
@@ -241,12 +257,19 @@ interface Suggestion {
     .new-button { width: 100%; }
     .history-title { margin: 6px 4px 0; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-300); }
     .conversation-list { display: grid; align-content: start; gap: 4px; flex: 1; min-height: 0; overflow-y: auto; }
-    .conversation-item { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 9px 10px; text-align: left; color: var(--text-100); background: transparent; border: 1px solid transparent; border-radius: 10px; cursor: pointer; font: inherit; }
+    .conversation-item { display: flex; flex: 1; min-width: 0; align-items: flex-start; gap: 10px; padding: 9px 10px; text-align: left; color: var(--text-100); background: transparent; border: 0; border-radius: 10px; cursor: pointer; font: inherit; }
     .conversation-item:hover:not(:disabled) { background: rgba(255,255,255,.04); }
-    .conversation-item.selected { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .08); }
+    .conversation-row { display: flex; align-items: center; border: 1px solid transparent; border-radius: 10px; }
+    .conversation-row.selected { border-color: rgba(34, 197, 94, .35); background: rgba(34, 197, 94, .08); }
+    .pin-button { display: grid; place-items: center; width: 28px; height: 28px; margin-right: 4px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-300); cursor: pointer; opacity: 0; }
+    .conversation-row:hover .pin-button, .pin-button.pinned, .pin-button:focus-visible { opacity: 1; }
+    .pin-button.pinned { color: var(--brand-300); }
+    .pin-button mat-icon, .rename-button mat-icon { width: 16px; height: 16px; font-size: 16px; }
+    .history-search, .rename-input { width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--kd-border-subtle); background: rgba(0,0,0,.2); color: var(--text-100); font: inherit; font-size: 13px; }
+    .rename-button { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--text-300); cursor: pointer; vertical-align: middle; }
     .conversation-item:disabled { cursor: default; }
     .conversation-icon { width: 18px; height: 18px; font-size: 18px; margin-top: 1px; color: var(--text-300); }
-    .conversation-item.selected .conversation-icon { color: var(--brand-300); }
+    .conversation-row.selected .conversation-icon { color: var(--brand-300); }
     .conversation-body { display: grid; gap: 3px; min-width: 0; }
     .conversation-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
     .conversation-meta { color: var(--text-300); font-size: 11px; }
@@ -406,8 +429,26 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
 
   briefing: AiBriefing | null = null;
   showPreferences = false;
+  search = '';
+  renaming = false;
+  titleDraft = '';
+  private searchTimer?: ReturnType<typeof setTimeout>;
+  private voiceBase: string | null = null;
+  /** Pregunta y pantalla de origen cuando se abre desde el lanzador rápido (Ctrl+K). */
+  private quickQuestion: string | null = null;
+  private pendingPageContext: string | null = null;
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
 
   ngOnInit(): void {
+    const params = this.route.snapshot?.queryParamMap;
+    const question = params?.get('q')?.trim();
+    if (question) {
+      this.quickQuestion = question.slice(0, 4000);
+      this.pendingPageContext = params?.get('ctx') ?? null;
+      // Se limpia la URL para que recargar la página no repita la pregunta.
+      void this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+    }
     this.loadConversations();
     this.loadBriefing();
   }
@@ -513,19 +554,86 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
     this.send();
   }
 
-  loadConversations(reset = true): void {
+  loadConversations(reset = true, openFirst = true): void {
     this.loadingList = true;
     this.pageError = '';
     const requestedPage = reset ? 1 : this.conversationPage + 1;
-    this.api.list(requestedPage).pipe(finalize(() => this.loadingList = false)).subscribe({
+    this.api.list(requestedPage, this.search).pipe(finalize(() => this.loadingList = false)).subscribe({
       next: result => {
         this.conversationPage = requestedPage;
         this.totalConversations = result.totalCount;
         this.conversations = reset ? result.items : [...this.conversations, ...result.items];
-        if (reset && this.conversations.length) this.open(this.conversations[0]);
+        // Si se llegó con una pregunta rápida (Ctrl+K desde otra pantalla), se arranca una conversación nueva con ella.
+        if (reset && this.quickQuestion) { this.askQuickQuestion(); return; }
+        if (reset && openFirst && this.conversations.length) this.open(this.conversations[0]);
       },
       error: () => this.pageError = 'No se pudo cargar el historial de conversaciones.'
     });
+  }
+
+  onSearchChange(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => this.loadConversations(true, false), 300);
+  }
+
+  togglePin(conversation: AiConversation): void {
+    this.api.update(conversation.id, { isPinned: !conversation.isPinned }).subscribe({
+      next: updated => {
+        const merged = { ...conversation, ...updated };
+        const others = this.conversations.filter(x => x.id !== conversation.id);
+        this.conversations = merged.isPinned ? [merged, ...others] : [...others.filter(x => x.isPinned), merged, ...others.filter(x => !x.isPinned)];
+        if (this.activeConversation?.id === conversation.id) this.activeConversation = merged;
+      },
+      error: () => this.pageError = 'No se pudo fijar la conversación.'
+    });
+  }
+
+  startRename(): void {
+    if (!this.activeConversation) return;
+    this.titleDraft = this.activeConversation.title;
+    this.renaming = true;
+  }
+
+  saveTitle(): void {
+    const conversation = this.activeConversation;
+    const title = this.titleDraft.trim();
+    if (!this.renaming || !conversation) return;
+    this.renaming = false;
+    if (!title || title === conversation.title) return;
+    this.api.update(conversation.id, { title }).subscribe({
+      next: updated => {
+        this.activeConversation = { ...conversation, ...updated };
+        this.conversations = this.conversations.map(x => x.id === conversation.id ? this.activeConversation! : x);
+      },
+      error: () => this.chatError = 'No se pudo renombrar la conversación.'
+    });
+  }
+
+  rate(message: AiMessage, value: number): void {
+    const conversation = this.activeConversation;
+    if (!conversation) return;
+    const previous = message.feedback ?? null;
+    this.messages = this.messages.map(x => x.id === message.id ? { ...x, feedback: value === 0 ? null : value } : x);
+    this.api.feedback(conversation.id, message.id, value).subscribe({
+      error: () => this.messages = this.messages.map(x => x.id === message.id ? { ...x, feedback: previous } : x)
+    });
+  }
+
+  onVoice(result: { text: string; final: boolean }): void {
+    // El dictado se agrega a lo que ya estaba escrito; los resultados parciales se van reemplazando.
+    if (this.voiceBase === null) this.voiceBase = this.draft.trim();
+    this.draft = [this.voiceBase, result.text].filter(Boolean).join(' ');
+    if (result.final) this.voiceBase = null;
+  }
+
+  private askQuickQuestion(): void {
+    const question = this.quickQuestion;
+    this.quickQuestion = null;
+    if (!question) return;
+    this.activeConversation = undefined;
+    this.messages = [];
+    this.draft = question;
+    this.send();
   }
 
   loadMoreConversations(): void { if (!this.loadingList && this.conversations.length < this.totalConversations) this.loadConversations(false); }
@@ -583,6 +691,8 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
           return (character === 'x' ? random : (random & 0x3) | 0x8).toString(16);
         }) };
       const clientRequestId = this.pendingRequest.id;
+      const pageContext = this.pendingPageContext;
+      this.pendingPageContext = null;
       const applyResult = (result: AiSendResult): void => {
           this.pendingRequest = null;
           this.pendingContent = '';
@@ -598,11 +708,11 @@ export class IntelligentOfficePageComponent implements OnInit, AfterViewChecked 
       };
       const onError = (error: unknown): void => { this.resetStreaming(); fail(IntelligentOfficeService.errorMessage(error)); this.reloadActive(); };
       const sendWithoutStreaming = (): void => {
-        this.api.send(conversation.id, content, clientRequestId).pipe(finalize(() => this.busy = false)).subscribe({ next: applyResult, error: onError });
+        this.api.send(conversation.id, content, clientRequestId, pageContext).pipe(finalize(() => this.busy = false)).subscribe({ next: applyResult, error: onError });
       };
 
       // Respuesta en vivo; si el streaming no está disponible se usa el envío común con el mismo identificador.
-      this.api.sendStream(conversation.id, content, clientRequestId).subscribe({
+      this.api.sendStream(conversation.id, content, clientRequestId, pageContext).subscribe({
         next: event => {
           switch (event.type) {
             case 'status': this.progressLabel = event.data.label; break;

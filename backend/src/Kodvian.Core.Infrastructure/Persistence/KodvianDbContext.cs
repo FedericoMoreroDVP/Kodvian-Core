@@ -82,7 +82,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Title).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Version).IsConcurrencyToken();
-            entity.HasIndex(x => new { x.OwnerUserId, x.UpdatedAtUtc });
+            entity.HasIndex(x => new { x.OwnerUserId, x.IsPinned, x.UpdatedAtUtc });
         });
         modelBuilder.Entity<AiMessage>(entity =>
         {
@@ -93,6 +93,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.SourcesJson).HasMaxLength(8000).IsRequired();
             entity.Property(x => x.SuggestionsJson).HasMaxLength(1000).IsRequired().HasDefaultValue("[]");
             entity.Property(x => x.ContextJson).HasMaxLength(4000);
+            entity.Property(x => x.VisualJson).HasMaxLength(4000);
             entity.Property(x => x.TraceId).HasMaxLength(64);
             entity.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();

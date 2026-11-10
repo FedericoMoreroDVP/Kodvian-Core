@@ -4,6 +4,7 @@ export interface AiConversation {
   createdAtUtc: string;
   updatedAtUtc: string;
   messageCount: number;
+  isPinned?: boolean;
 }
 
 export interface AiSourceReference {
@@ -28,6 +29,9 @@ export interface AiMessage {
   pendingActions?: AiPendingAction[];
   /** Próximos pasos sugeridos por el asistente (se muestran como botones). */
   suggestions?: string[];
+  references?: AiEntityReference[];
+  visual?: AiVisual | null;
+  feedback?: number | null;
 }
 
 export type AiStreamEvent =
@@ -125,4 +129,16 @@ export interface AiUserPreferences {
   defaultScope: 'todo' | 'mio' | null;
   notes: string | null;
   updatedAtUtc?: string | null;
+}
+
+export interface AiEntityReference {
+  kind: 'Tarea' | 'Reunión' | 'Proyecto' | 'Cliente' | 'Usuario' | 'Desarrollador' | string;
+  name: string;
+  id: string;
+}
+
+/** Gráfico ingresos vs gastos: un grupo por moneda (nunca se mezclan ARS y USD). */
+export interface AiVisual {
+  title: string;
+  groups: { currency: string; labels: string[]; datasets: { label: string; values: number[] }[] }[];
 }

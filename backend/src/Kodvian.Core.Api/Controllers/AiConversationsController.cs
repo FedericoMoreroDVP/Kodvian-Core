@@ -15,10 +15,32 @@ namespace Kodvian.Core.Api.Controllers;
 public sealed class AiConversationsController(IAiConversationService service) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<ApiResponseDto<PagedResultDto<AiConversationDto>>>> GetPaged([FromQuery] PagedRequestDto request, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiResponseDto<PagedResultDto<AiConversationDto>>>> GetPaged([FromQuery] AiConversationListRequest request, CancellationToken cancellationToken)
     {
         var data = await service.GetPagedAsync(CreateActor(), request, cancellationToken);
         return Ok(ApiResponseDto<PagedResultDto<AiConversationDto>>.Ok(data, "Conversaciones obtenidas."));
+    }
+
+    /// <summary>Renombrar o fijar una conversación.</summary>
+    [HttpPatch("{id:guid}")]
+    [RequestSizeLimit(4096)]
+    public async Task<ActionResult<ApiResponseDto<AiConversationDto>>> Update(Guid id, [FromBody] AiConversationUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var data = await service.UpdateAsync(CreateActor(), id, request, cancellationToken);
+        return data is null
+            ? NotFound(ApiResponseDto<AiConversationDto>.Fail("Conversación no encontrada."))
+            : Ok(ApiResponseDto<AiConversationDto>.Ok(data, "Conversación actualizada."));
+    }
+
+    /// <summary>Valoración 👍/👎 de una respuesta del asistente.</summary>
+    [HttpPost("{id:guid}/messages/{messageId:guid}/feedback")]
+    [RequestSizeLimit(1024)]
+    public async Task<ActionResult<ApiResponseDto<AiMessageDto>>> Feedback(Guid id, Guid messageId, [FromBody] AiMessageFeedbackRequest request, CancellationToken cancellationToken)
+    {
+        var data = await service.SetFeedbackAsync(CreateActor(), id, messageId, request, cancellationToken);
+        return data is null
+            ? NotFound(ApiResponseDto<AiMessageDto>.Fail("Mensaje no encontrado."))
+            : Ok(ApiResponseDto<AiMessageDto>.Ok(data, "Gracias por tu valoración."));
     }
 
     [HttpPost]

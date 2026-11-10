@@ -15,6 +15,11 @@ public sealed class AiMessage
     public string SuggestionsJson { get; set; } = "[]";
     /// <summary>Referencias (id y nombre) de lo que consultaron las herramientas en este turno, para retomarlas en los siguientes.</summary>
     public string? ContextJson { get; set; }
+    /// <summary>Gráfico que acompaña la respuesta (ingresos vs gastos por moneda), en JSON.</summary>
+    public string? VisualJson { get; set; }
+    /// <summary>Valoración del usuario: 1 (útil) o -1 (no útil).</summary>
+    public int? Feedback { get; set; }
+    public DateTime? FeedbackAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public AiConversation? Conversation { get; set; }
 }

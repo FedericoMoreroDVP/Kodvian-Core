@@ -5,11 +5,12 @@ import { Router, RouterOutlet } from '@angular/router';
 import { AuthSessionService } from '../core/auth/auth-session.service';
 import { HeaderComponent } from './header.component';
 import { SidebarComponent } from './sidebar.component';
+import { AiQuickLauncherComponent } from './ai-quick-launcher.component';
 
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [MatSidenavModule, RouterOutlet, HeaderComponent, SidebarComponent],
+  imports: [MatSidenavModule, RouterOutlet, HeaderComponent, SidebarComponent, AiQuickLauncherComponent],
   templateUrl: './main-layout.component.html',
   styleUrl: './main-layout.component.scss'
 })

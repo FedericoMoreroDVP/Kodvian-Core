@@ -7,6 +7,33 @@ public sealed class AiConversationDto
     public DateTime CreatedAtUtc { get; init; }
     public DateTime UpdatedAtUtc { get; init; }
     public int MessageCount { get; init; }
+    public bool IsPinned { get; init; }
+}
+
+public sealed class AiConversationListRequest : Kodvian.Core.Application.Common.Models.PagedRequestDto
+{
+    /// <summary>Busca en el título y en el texto de los mensajes.</summary>
+    public string? Search { get; set; }
+}
+
+public sealed class AiConversationUpdateRequest
+{
+    public string? Title { get; set; }
+    public bool? IsPinned { get; set; }
+}
+
+public sealed class AiMessageFeedbackRequest
+{
+    /// <summary>1 (útil), -1 (no útil) o 0 para quitar la valoración.</summary>
+    public int Value { get; set; }
+}
+
+/// <summary>Entidad que consultó el asistente (tipo, nombre e id), para mostrarla como tarjeta clickeable.</summary>
+public sealed class AiEntityReferenceDto
+{
+    public string Kind { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public Guid Id { get; init; }
 }
 
 public sealed class AiSourceReferenceDto
@@ -33,6 +60,11 @@ public sealed class AiMessageDto
     public IReadOnlyCollection<AiPendingActionDto> PendingActions { get; init; } = [];
     /// <summary>Sugerencias de seguimiento (2 o 3) que el usuario puede tocar para continuar.</summary>
     public IReadOnlyCollection<string> Suggestions { get; init; } = [];
+    /// <summary>Tareas, reuniones, proyectos y clientes consultados en la respuesta.</summary>
+    public IReadOnlyCollection<AiEntityReferenceDto> References { get; init; } = [];
+    /// <summary>Gráfico opcional (ingresos vs gastos por moneda).</summary>
+    public System.Text.Json.Nodes.JsonObject? Visual { get; init; }
+    public int? Feedback { get; init; }
 }
 
 public sealed class AiPendingActionDto
@@ -85,6 +117,8 @@ public sealed class AiSendMessageRequest
 {
     public Guid ClientRequestId { get; set; }
     public string Content { get; set; } = string.Empty;
+    /// <summary>Pantalla desde la que se abrió el asistente (por ejemplo "/proyectos"), para dar contexto.</summary>
+    public string? PageContext { get; set; }
 }
 
 public sealed class AiSendMessageResultDto

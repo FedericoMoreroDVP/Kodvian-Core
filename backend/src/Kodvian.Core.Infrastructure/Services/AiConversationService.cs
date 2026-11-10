@@ -46,13 +46,21 @@ public sealed class AiConversationService(
         return new AiConversationDto { Id = entity.Id, Title = entity.Title, CreatedAtUtc = entity.CreatedAtUtc, UpdatedAtUtc = entity.UpdatedAtUtc, MessageCount = 0 };
     }
 
-    public async Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, PagedRequestDto request, CancellationToken cancellationToken)
+    public async Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, AiConversationListRequest request, CancellationToken cancellationToken)
     {
         await EnsureActorAsync(actor, cancellationToken);
         request.PageSize = Math.Min(request.PageSize, 50);
         var query = dbContext.AiConversations.AsNoTracking().Where(x => x.OwnerUserId == actor.UserId);
+        var search = request.Search?.Trim();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            if (search.Length > 100) throw new ArgumentException("La búsqueda no puede superar los 100 caracteres.");
+            var pattern = search.ToLower();
+            query = query.Where(x => x.Title.ToLower().Contains(pattern) || x.Messages.Any(m => m.Content.ToLower().Contains(pattern)));
+        }
         var total = await query.CountAsync(cancellationToken);
-        var items = await query.OrderByDescending(x => x.UpdatedAtUtc)
+        // Las fijadas primero, después las más recientes.
+        var items = await query.OrderByDescending(x => x.IsPinned).ThenByDescending(x => x.UpdatedAtUtc)
             .Skip((request.PageNumber - 1) * request.PageSize).Take(request.PageSize)
             .Select(x => new AiConversationDto
             {
@@ -60,9 +68,54 @@ public sealed class AiConversationService(
                 Title = x.Title,
                 CreatedAtUtc = x.CreatedAtUtc,
                 UpdatedAtUtc = x.UpdatedAtUtc,
-                MessageCount = x.Messages.Count
+                MessageCount = x.Messages.Count,
+                IsPinned = x.IsPinned
             }).ToListAsync(cancellationToken);
         return new PagedResultDto<AiConversationDto> { Items = items, PageNumber = request.PageNumber, PageSize = request.PageSize, TotalCount = total };
+    }
+
+    public async Task<AiConversationDto?> UpdateAsync(AiExecutionContext actor, Guid conversationId, AiConversationUpdateRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureActorAsync(actor, cancellationToken);
+        var conversation = await dbContext.AiConversations.SingleOrDefaultAsync(x => x.Id == conversationId && x.OwnerUserId == actor.UserId, cancellationToken);
+        if (conversation is null) return null;
+        if (request.Title is not null)
+        {
+            var title = request.Title.Trim();
+            if (title.Length is < 1 or > 120) throw new ArgumentException("El título debe tener entre 1 y 120 caracteres.");
+            conversation.Title = title;
+        }
+        if (request.IsPinned.HasValue) conversation.IsPinned = request.IsPinned.Value;
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AiConversationConflictException("La conversación cambió. Actualizá e intentá nuevamente.");
+        }
+        var count = await dbContext.AiMessages.CountAsync(x => x.ConversationId == conversationId, cancellationToken);
+        return new AiConversationDto { Id = conversation.Id, Title = conversation.Title, CreatedAtUtc = conversation.CreatedAtUtc, UpdatedAtUtc = conversation.UpdatedAtUtc, MessageCount = count, IsPinned = conversation.IsPinned };
+    }
+
+    public async Task<AiMessageDto?> SetFeedbackAsync(AiExecutionContext actor, Guid conversationId, Guid messageId, AiMessageFeedbackRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureActorAsync(actor, cancellationToken);
+        if (request.Value is not (-1 or 0 or 1)) throw new ArgumentException("La valoración no es válida.");
+        var message = await dbContext.AiMessages
+            .SingleOrDefaultAsync(x => x.Id == messageId && x.ConversationId == conversationId && x.Role == "assistant"
+                && dbContext.AiConversations.Any(c => c.Id == conversationId && c.OwnerUserId == actor.UserId), cancellationToken);
+        if (message is null) return null;
+        message.Feedback = request.Value == 0 ? null : request.Value;
+        message.FeedbackAtUtc = request.Value == 0 ? null : DateTime.UtcNow;
+        dbContext.AiAuditEvents.Add(new AiAuditEvent
+        {
+            ActorUserId = actor.UserId, ConversationId = conversationId, RunId = message.RunId, Decision = "Feedback",
+            ReasonCode = request.Value switch { 1 => "helpful", -1 => "not_helpful", _ => "cleared" }, CreatedAtUtc = DateTime.UtcNow
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var actions = await dbContext.AiPendingActions.AsNoTracking().Where(x => x.MessageId == messageId).OrderBy(x => x.CreatedAtUtc).ToListAsync(cancellationToken);
+        return MapMessage(message, actions);
     }
 
     public async Task<AiConversationDetailDto?> GetByIdAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken)
@@ -194,12 +247,13 @@ public sealed class AiConversationService(
         var pendingActions = new List<AiPendingAction>();
         // Memoria entre turnos: tipo, nombre e id de lo consultado, para retomarlo en las próximas preguntas.
         var references = new List<AiContextReferences.Reference>();
+        JsonObject? visual = null;
         var partial = false;
         try
         {
             var availableTools = toolExecutor.GetAvailableTools(actor);
             var toolSchemas = BuildToolSchemas(availableTools);
-            var input = await BuildInputAsync(actor, conversationId, availableTools, cancellationToken);
+            var input = await BuildInputAsync(actor, conversationId, availableTools, NormalizePageContext(request.PageContext), cancellationToken);
             string assistantText = string.Empty;
             var toolCalls = 0;
             var completed = false;
@@ -266,6 +320,7 @@ public sealed class AiConversationService(
                         {
                             sources.Add(execution.Source);
                             references.AddRange(AiContextReferences.Extract(toolName, execution.Data));
+                            visual = AiVisualBuilder.TryBuild(toolName, execution.Data) ?? visual;
                         }
                         var output = execution.Data;
                         if (execution.Proposal is not null)
@@ -328,6 +383,7 @@ public sealed class AiConversationService(
                 Grounded = grounded,
                 SuggestionsJson = JsonSerializer.Serialize(suggestions),
                 ContextJson = AiContextReferences.Serialize(references),
+                VisualJson = visual?.ToJsonString(),
                 CreatedAtUtc = DateTime.UtcNow
             };
             run.Status = partial ? "Partial" : "Completed";
@@ -524,6 +580,14 @@ public sealed class AiConversationService(
         return result;
     }
 
+    // Solo rutas internas de la app ("/proyectos", "/tareas"): nunca texto libre ni direcciones externas.
+    internal static string? NormalizePageContext(string? pageContext)
+    {
+        var value = pageContext?.Trim();
+        if (string.IsNullOrEmpty(value) || value.Length > 120 || !value.StartsWith('/') || value.StartsWith("//", StringComparison.Ordinal)) return null;
+        return value.All(c => char.IsLetterOrDigit(c) || c is '/' or '-' or '_') ? value : null;
+    }
+
     internal static readonly TimeSpan UndoWindow = TimeSpan.FromMinutes(15);
 
     private static bool CanUndo(AiPendingAction action, DateTime now) =>
@@ -663,11 +727,11 @@ public sealed class AiConversationService(
             throw new AiLiveDataApprovalRequiredException();
     }
 
-    private async Task<JsonArray> BuildInputAsync(AiExecutionContext actor, Guid conversationId, IReadOnlyCollection<AiToolDefinitionDto> tools, CancellationToken cancellationToken)
+    private async Task<JsonArray> BuildInputAsync(AiExecutionContext actor, Guid conversationId, IReadOnlyCollection<AiToolDefinitionDto> tools, string? pageContext, CancellationToken cancellationToken)
     {
         var userName = await dbContext.Users.AsNoTracking().Where(x => x.Id == actor.UserId).Select(x => x.FullName).SingleOrDefaultAsync(cancellationToken);
         var preferences = await AiPreferencesService.LoadAsync(dbContext, actor.UserId, cancellationToken);
-        var systemPrompt = AiSystemPromptBuilder.Build(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone, userName, tools, preferences);
+        var systemPrompt = AiSystemPromptBuilder.Build(DateTime.UtcNow, AiSystemPromptBuilder.BuenosAiresTimeZone, userName, tools, preferences, pageContext);
         var recent = await dbContext.AiMessages.AsNoTracking().Where(x => x.ConversationId == conversationId)
             .OrderByDescending(x => x.CreatedAtUtc).Take(MaxHistoryMessages)
             .Select(x => new { x.Role, x.Content, x.ContextJson, x.CreatedAtUtc }).ToListAsync(cancellationToken);
@@ -723,10 +787,28 @@ public sealed class AiConversationService(
         IReadOnlyCollection<string> suggestions;
         try { suggestions = JsonSerializer.Deserialize<string[]>(message.SuggestionsJson) ?? []; }
         catch (JsonException) { suggestions = []; }
+        IReadOnlyCollection<AiEntityReferenceDto> references = [];
+        if (!string.IsNullOrWhiteSpace(message.ContextJson))
+        {
+            try
+            {
+                references = (JsonSerializer.Deserialize<List<AiContextReferences.Reference>>(message.ContextJson) ?? [])
+                    .Where(x => Guid.TryParse(x.Id, out _)).Take(12)
+                    .Select(x => new AiEntityReferenceDto { Kind = x.Kind, Name = x.Name, Id = Guid.Parse(x.Id) }).ToArray();
+            }
+            catch (JsonException) { references = []; }
+        }
+        JsonObject? visual = null;
+        if (!string.IsNullOrWhiteSpace(message.VisualJson))
+        {
+            try { visual = JsonNode.Parse(message.VisualJson) as JsonObject; }
+            catch (JsonException) { visual = null; }
+        }
         return new AiMessageDto
         {
             Id = message.Id, Role = message.Role, Content = message.Content, CreatedAtUtc = message.CreatedAtUtc, TraceId = message.TraceId,
-            Sources = sources, Grounded = message.Grounded, PendingActions = actions.Select(MapAction).ToArray(), Suggestions = suggestions
+            Sources = sources, Grounded = message.Grounded, PendingActions = actions.Select(MapAction).ToArray(), Suggestions = suggestions,
+            References = references, Visual = visual, Feedback = message.Feedback
         };
     }
 

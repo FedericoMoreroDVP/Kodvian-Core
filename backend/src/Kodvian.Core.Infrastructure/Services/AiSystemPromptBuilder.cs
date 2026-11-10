@@ -20,7 +20,7 @@ public static class AiSystemPromptBuilder
         catch (TimeZoneNotFoundException) { return TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time"); }
     }
 
-    public static string Build(DateTime utcNow, TimeZoneInfo timeZone, string? userName, IReadOnlyCollection<AiToolDefinitionDto> tools, AiUserPreferencesDto? preferences = null)
+    public static string Build(DateTime utcNow, TimeZoneInfo timeZone, string? userName, IReadOnlyCollection<AiToolDefinitionDto> tools, AiUserPreferencesDto? preferences = null, string? pageContext = null)
     {
         var local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc), timeZone);
         var builder = new StringBuilder();
@@ -32,6 +32,8 @@ public static class AiSystemPromptBuilder
         builder.Append("- Zona horaria: America/Argentina/Buenos_Aires. Interpretá \"hoy\", \"mañana\", \"esta semana\" o \"el viernes\" a partir de esta fecha y mandá las fechas a las herramientas en formato yyyy-MM-dd (y las horas como yyyy-MM-ddTHH:mm, hora local).\n");
         if (!string.IsNullOrWhiteSpace(userName))
             builder.Append(CultureInfo.InvariantCulture, $"- Estás hablando con {userName.Trim()}.\n");
+        if (!string.IsNullOrWhiteSpace(pageContext))
+            builder.Append(CultureInfo.InvariantCulture, $"- Abrió el asistente desde la pantalla {pageContext} de Kodvian: si dice \"esto\" o \"acá\", se refiere a lo de esa pantalla.\n");
         builder.Append('\n');
 
         if (preferences is { IsEmpty: false })

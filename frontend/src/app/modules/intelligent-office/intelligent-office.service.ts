@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 
 import { ApiResponse } from '../../core/auth/auth.models';
-import { AiActionBatchResolution, AiActionResolution, AiBriefing, AiConversation, AiUserPreferences, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
+import { AiActionBatchResolution, AiActionResolution, AiBriefing, AiConversation, AiMessage, AiUserPreferences, AiConversationDetail, AiSendResult, AiStreamEvent, Paged } from './intelligent-office.models';
 
 /** El streaming no está disponible: hay que usar el envío común. */
 export class StreamUnavailableError extends Error {
@@ -30,8 +30,9 @@ export class IntelligentOfficeService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/ai/conversations';
 
-  list(pageNumber = 1): Observable<Paged<AiConversation>> {
-    return this.http.get<ApiResponse<Paged<AiConversation>>>(`${this.baseUrl}?pageNumber=${pageNumber}&pageSize=50`, { withCredentials: true })
+  list(pageNumber = 1, search = ''): Observable<Paged<AiConversation>> {
+    const query = search.trim() ? `&search=${encodeURIComponent(search.trim())}` : '';
+    return this.http.get<ApiResponse<Paged<AiConversation>>>(`${this.baseUrl}?pageNumber=${pageNumber}&pageSize=50${query}`, { withCredentials: true })
       .pipe(map(response => response.data));
   }
 
@@ -58,9 +59,19 @@ export class IntelligentOfficeService {
       .pipe(map(response => response.data));
   }
 
-  send(id: string, content: string, clientRequestId: string): Observable<AiSendResult> {
+  update(id: string, changes: { title?: string; isPinned?: boolean }): Observable<AiConversation> {
+    return this.http.patch<ApiResponse<AiConversation>>(`${this.baseUrl}/${encodeURIComponent(id)}`, changes, { withCredentials: true })
+      .pipe(map(response => response.data));
+  }
+
+  feedback(conversationId: string, messageId: string, value: number): Observable<AiMessage> {
+    return this.http.post<ApiResponse<AiMessage>>(`${this.baseUrl}/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/feedback`,
+      { value }, { withCredentials: true }).pipe(map(response => response.data));
+  }
+
+  send(id: string, content: string, clientRequestId: string, pageContext: string | null = null): Observable<AiSendResult> {
     return this.http.post<ApiResponse<AiSendResult>>(`${this.baseUrl}/${encodeURIComponent(id)}/messages`,
-      { content, clientRequestId }, { withCredentials: true }).pipe(map(response => response.data));
+      { content, clientRequestId, pageContext }, { withCredentials: true }).pipe(map(response => response.data));
   }
 
   /**
@@ -69,7 +80,7 @@ export class IntelligentOfficeService {
    * Si el streaming no está disponible (ruta inexistente, sesión vencida, error de red antes de empezar)
    * emite StreamUnavailableError para que la pantalla use el envío común como respaldo.
    */
-  sendStream(id: string, content: string, clientRequestId: string): Observable<AiStreamEvent> {
+  sendStream(id: string, content: string, clientRequestId: string, pageContext: string | null = null): Observable<AiStreamEvent> {
     const url = `${this.baseUrl}/${encodeURIComponent(id)}/messages/stream`;
     return new Observable<AiStreamEvent>(subscriber => {
       const controller = new AbortController();
@@ -80,7 +91,7 @@ export class IntelligentOfficeService {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-            body: JSON.stringify({ content, clientRequestId }),
+            body: JSON.stringify({ content, clientRequestId, pageContext }),
             signal: controller.signal
           });
         } catch {

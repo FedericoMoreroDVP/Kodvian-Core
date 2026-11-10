@@ -72,6 +72,9 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid");
 
@@ -89,7 +92,7 @@ namespace Kodvian.Core.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerUserId", "UpdatedAtUtc");
+                    b.HasIndex("OwnerUserId", "IsPinned", "UpdatedAtUtc");
 
                     b.ToTable("AiConversations", (string)null);
                 });
@@ -118,6 +121,12 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("Feedback")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("FeedbackAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("Grounded")
                         .HasColumnType("boolean");
 
@@ -144,6 +153,10 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Property<string>("TraceId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("VisualJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.HasKey("Id");
 

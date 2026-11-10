@@ -124,7 +124,9 @@ public sealed class AiConversationsApiTests : IDisposable
     private sealed class FakeAiConversationService : IAiConversationService
     {
         public Task<AiConversationDto> CreateAsync(AiExecutionContext actor, AiConversationCreateRequest request, CancellationToken cancellationToken) => Task.FromResult(new AiConversationDto());
-        public Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, PagedRequestDto request, CancellationToken cancellationToken) => Task.FromResult(new PagedResultDto<AiConversationDto>());
+        public Task<PagedResultDto<AiConversationDto>> GetPagedAsync(AiExecutionContext actor, AiConversationListRequest request, CancellationToken cancellationToken) => Task.FromResult(new PagedResultDto<AiConversationDto>());
+        public Task<AiConversationDto?> UpdateAsync(AiExecutionContext actor, Guid conversationId, AiConversationUpdateRequest request, CancellationToken cancellationToken) => Task.FromResult<AiConversationDto?>(null);
+        public Task<AiMessageDto?> SetFeedbackAsync(AiExecutionContext actor, Guid conversationId, Guid messageId, AiMessageFeedbackRequest request, CancellationToken cancellationToken) => Task.FromResult<AiMessageDto?>(null);
         public Task<AiConversationDetailDto?> GetByIdAsync(AiExecutionContext actor, Guid conversationId, CancellationToken cancellationToken) => Task.FromResult<AiConversationDetailDto?>(null);
         public Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, CancellationToken cancellationToken) => Task.FromResult(new AiSendMessageResultDto());
         public async Task<AiSendMessageResultDto> SendMessageAsync(AiExecutionContext actor, Guid conversationId, AiSendMessageRequest request, IAiRunObserver? observer, CancellationToken cancellationToken)
