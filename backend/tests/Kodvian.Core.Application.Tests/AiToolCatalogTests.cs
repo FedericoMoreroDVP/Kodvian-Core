@@ -570,6 +570,32 @@ public sealed class AiToolCatalogTests
     }
 
     [Fact]
+    public async Task ReadOnlyUsersOnlyGetQueriesAndCannotConfirmActions()
+    {
+        await using var db = CreateDatabase();
+        var (admin, project) = SeedProject(db);
+        var task = new TaskItem { Titulo = "Tarea", ProyectoId = project.Id, CreadoPorId = admin.UserId };
+        db.Tasks.Add(task);
+        db.SaveChanges();
+        var catalog = CreateCatalog(db);
+        var readOnly = RoleActor(RoleNames.ReadOnly);
+
+        var tools = catalog.GetAvailableTools(readOnly);
+        // Solo consultas; la única acción es guardar sus propias preferencias.
+        Assert.Equal(["preferences.update"], tools.Where(x => x.RequiresConfirmation).Select(x => x.Name).ToArray());
+        Assert.Contains(tools, x => x.Name == "projects.list");
+        Assert.Contains(tools, x => x.Name == "tasks.list");
+        Assert.DoesNotContain(tools, x => x.Name.StartsWith("finance.", StringComparison.Ordinal) || x.Name == "dashboard.get_snapshot");
+
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(readOnly, Guid.NewGuid(), Guid.Empty, "t", "tasks.update_status",
+            new JsonObject { ["taskId"] = task.Id.ToString(), ["status"] = "Finalizada" }, CancellationToken.None));
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteConfirmedActionAsync(readOnly, Guid.NewGuid(), "tasks.update_status",
+            new JsonObject { ["taskId"] = task.Id.ToString(), ["status"] = "Finalizada" }, CancellationToken.None));
+        await Assert.ThrowsAsync<AiToolRejectedException>(() => catalog.ExecuteAsync(readOnly, Guid.NewGuid(), Guid.Empty, "t", "finance.list_pending", new JsonObject(), CancellationToken.None));
+        Assert.Equal(Kodvian.Core.Domain.Enums.TaskStatus.Pendiente, db.Tasks.AsNoTracking().Single().Estado);
+    }
+
+    [Fact]
     public async Task UserWithoutPermissionCannotExecuteOrConfirmTheTool()
     {
         await using var db = CreateDatabase();

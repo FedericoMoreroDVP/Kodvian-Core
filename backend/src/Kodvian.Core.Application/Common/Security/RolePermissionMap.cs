@@ -71,7 +71,8 @@ public static class RolePermissionMap
                 PermissionCodes.TasksRead,
                 PermissionCodes.MeetingsRead,
                 PermissionCodes.TeamRead,
-                PermissionCodes.AdministrationRead
+                PermissionCodes.AdministrationRead,
+                PermissionCodes.AiOfficeUse
             ],
             RoleNames.Analyst =>
             [

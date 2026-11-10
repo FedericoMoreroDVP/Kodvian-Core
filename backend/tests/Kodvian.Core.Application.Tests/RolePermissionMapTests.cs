@@ -5,12 +5,12 @@ namespace Kodvian.Core.Application.Tests;
 public class RolePermissionMapTests
 {
     [Fact]
-    public void OperationalRolesReceiveAiOfficeUseButReadOnlyDoesNot()
+    public void AllRolesReceiveAiOfficeUse()
     {
         Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Administrator));
         Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Analyst));
         Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Operative));
-        Assert.DoesNotContain(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.ReadOnly));
+        Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.ReadOnly));
         Assert.Contains(PermissionCodes.AiOfficeUse, RolePermissionMap.GetPermissions(RoleNames.Developer));
     }
 

@@ -4,10 +4,11 @@ Asistente con IA de Kodvian Core. Responde consultas con datos verificables de l
 
 ## Quién lo usa
 
-- Cualquier usuario con el permiso `ai.office.use`: lo tienen los roles Administrador, Operativo, Analista y Desarrollador (Solo lectura no).
+- Cualquier usuario con el permiso `ai.office.use`: lo tienen todos los roles (Administrador, Operativo, Analista, Desarrollador y Solo lectura).
 - Cada herramienta exige además sus permisos de dominio y recorta los datos según el rol. Se revalidan al ejecutar la herramienta, al confirmar una acción y al deshacerla.
   - Un Desarrollador solo ve su día, sus tareas y sus reuniones, y solo puede cambiar el estado de sus propias tareas.
   - Operativo y Analista ven lo operativo (proyectos, tareas, clientes, agenda) pero no finanzas ni el panel ejecutivo.
+  - Solo lectura usa únicamente herramientas de consulta (proyectos, tareas, clientes, agenda y equipo): no puede proponer ni confirmar acciones sobre datos de la empresa; solo puede guardar sus propias preferencias del asistente.
   - Las reuniones usan el mismo alcance que la pantalla Agenda: fuera de Administración, solo las propias o de proyectos con acceso.
 - La configuración del proveedor y el tablero de Uso de IA son solo para Administradores.
 - Los permisos viajan en la sesión: después de un cambio de roles hay que volver a iniciar sesión.
