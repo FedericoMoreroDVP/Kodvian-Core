@@ -54,10 +54,12 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
             </mat-form-field>
             <div class="actions">
               <button mat-flat-button type="submit" [disabled]="busy || !model.trim() || (keyRequired && !apiKey.trim())">Guardar configuración</button>
-              <button mat-stroked-button type="button" (click)="testConnection()" [disabled]="busy || !configuration.isConfigured">Probar conexión</button>
+              <button mat-stroked-button type="button" (click)="testConnection()" [disabled]="busy || !configuration.isConfigured || hasUnsavedChanges">Probar conexión</button>
               @if (configuration.isConfigured) { <button mat-button type="button" (click)="remove()" [disabled]="busy">Quitar proveedor</button> }
             </div>
           </form>
+          @if (configuration.isConfigured && hasUnsavedChanges) { <p class="warning" role="status">Hay cambios sin guardar. Guardá la configuración antes de probar la conexión.</p> }
+          @if (looksLikeWorkspaceId) { <p class="warning" role="alert">Eso parece el ID de un workspace, no de un modelo. Escribí el nombre del modelo, por ejemplo {{ selectedProvider.defaultModel || 'el identificador del modelo' }}.</p> }
           <p class="notice">{{ selectedProvider.testNotice }}</p>
           @if (configuration.isConfigured) {
             <section class="privacy-approval" aria-labelledby="privacy-title">
@@ -92,6 +94,7 @@ import { AiProviderConfigurationService } from './ai-provider-configuration.serv
     .privacy-approval h3 { margin-top: 0; color: var(--kd-text-secondary); }
     .approval-label { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0; line-height: 1.5; }
     .error { color: #ff9b9b; }
+    .warning { margin: 12px 0 0; color: #ffd08a; font-size: 13px; }
     .message { color: var(--brand-300); }
     mat-spinner { margin: 12px 0; }
   `]
@@ -116,6 +119,13 @@ export class AiProviderConfigurationPageComponent implements OnInit {
   get savedProvider(): AiProviderOption { return providerOption(this.configuration?.provider); }
 
   get providerChanged(): boolean { return !!this.configuration?.isConfigured && this.configuration.provider !== this.provider; }
+
+  get hasUnsavedChanges(): boolean {
+    if (!this.configuration?.isConfigured) return false;
+    return this.providerChanged || this.model.trim() !== (this.configuration.model ?? '') || this.apiKey.trim() !== '';
+  }
+
+  get looksLikeWorkspaceId(): boolean { return /^wrkspc_/i.test(this.model.trim()); }
 
   get keyRequired(): boolean { return !this.configuration?.isConfigured || this.providerChanged; }
 

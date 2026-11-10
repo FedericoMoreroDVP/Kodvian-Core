@@ -59,6 +59,12 @@ describe('Configuración del proveedor de IA', () => {
 
     expect(component.providerChanged).toBeTrue();
     expect(component.keyRequired).toBeTrue();
+    expect(component.hasUnsavedChanges).toBeTrue();
+    const testButton = Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>).find(b => b.textContent?.includes('Probar conexión'))!;
+    expect(testButton.disabled).toBeTrue();
+    component.model = 'wrkspc_0123';
+    expect(component.looksLikeWorkspaceId).toBeTrue();
+    component.model = 'model-test';
     expect(component.model).toBe('model-test');
     expect(fixture.nativeElement.textContent).toContain('no genera texto ni costo');
 
