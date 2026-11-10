@@ -17,6 +17,9 @@ public class MeetingDto
     public Guid CreatedById { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public IReadOnlyCollection<MeetingParticipantDto> Participants { get; set; } = [];
+    /// <summary>Synced, Failed o null si la reunión no se sincroniza con Google Calendar.</summary>
+    public string? GoogleSyncStatus { get; set; }
+    public string? GoogleSyncError { get; set; }
 }
 
 public class MeetingParticipantDto

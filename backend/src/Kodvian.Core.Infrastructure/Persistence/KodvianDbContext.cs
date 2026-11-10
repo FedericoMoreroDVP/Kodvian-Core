@@ -48,6 +48,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<AiPendingAction> AiPendingActions => Set<AiPendingAction>();
     public DbSet<AiUserPreference> AiUserPreferences => Set<AiUserPreference>();
     public DbSet<AiUsageSettings> AiUsageSettings => Set<AiUsageSettings>();
+    public DbSet<GoogleCalendarConnection> GoogleCalendarConnections => Set<GoogleCalendarConnection>();
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -117,6 +118,14 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(x => new { x.ConversationId, x.ClientRequestId }).IsUnique();
             entity.HasIndex(x => x.ConversationId).IsUnique().HasFilter("\"Status\" = 'Running'");
             entity.HasOne(x => x.Conversation).WithMany(x => x.Runs).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<GoogleCalendarConnection>(entity =>
+        {
+            entity.ToTable("GoogleCalendarConnections");
+            entity.HasKey(x => x.UserId);
+            entity.Property(x => x.GoogleEmail).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ProtectedRefreshToken).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.LastError).HasMaxLength(300);
         });
         modelBuilder.Entity<AiUsageSettings>(entity =>
         {
@@ -294,6 +303,9 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(x => x.Descripcion).HasMaxLength(2000);
             entity.Property(x => x.Enlace).HasMaxLength(2048);
             entity.Property(x => x.Ubicacion).HasMaxLength(300);
+            entity.Property(x => x.GoogleEventId).HasMaxLength(1024);
+            entity.Property(x => x.GoogleSyncStatus).HasMaxLength(20);
+            entity.Property(x => x.GoogleSyncError).HasMaxLength(300);
             entity.Property(x => x.Prioridad).HasConversion<int>();
             entity.Property(x => x.Estado).HasConversion<int>();
             entity.HasIndex(x => x.ProyectoId);

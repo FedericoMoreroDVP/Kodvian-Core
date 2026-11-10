@@ -21,6 +21,9 @@ export interface Reunion {
   createdById: string;
   createdByName: string;
   participants: ReunionParticipante[];
+  /** Synced, Failed o null si la reunión no se sincroniza con Google Calendar. */
+  googleSyncStatus?: 'Synced' | 'Failed' | null;
+  googleSyncError?: string | null;
 }
 
 export interface ReunionFormulario {

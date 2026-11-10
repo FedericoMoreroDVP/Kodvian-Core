@@ -127,6 +127,18 @@ public static class DependencyInjectionExtensions
         services.AddScoped<Kodvian.Core.Application.Ai.Abstractions.IAiUsageService, AiUsageService>();
         services.AddHostedService<AiAuditRetentionWorker>();
         services.AddScoped<IMeetingService, MeetingService>();
+        // Google Calendar: se habilita solo si están las variables GOOGLE_CALENDAR_CLIENT_ID, GOOGLE_CALENDAR_CLIENT_SECRET y GOOGLE_CALENDAR_REDIRECT_URI
+        // (o la sección GoogleCalendar). Sin ellas, Agenda funciona igual y la pantalla muestra la función como no disponible.
+        services.Configure<Kodvian.Core.Infrastructure.GoogleCalendar.GoogleCalendarOptions>(options =>
+        {
+            options.ClientId = configuration["GoogleCalendar:ClientId"] ?? configuration["GOOGLE_CALENDAR_CLIENT_ID"];
+            options.ClientSecret = configuration["GoogleCalendar:ClientSecret"] ?? configuration["GOOGLE_CALENDAR_CLIENT_SECRET"];
+            options.RedirectUri = configuration["GoogleCalendar:RedirectUri"] ?? configuration["GOOGLE_CALENDAR_REDIRECT_URI"];
+        });
+        services.AddHttpClient<Kodvian.Core.Infrastructure.GoogleCalendar.IGoogleCalendarClient, Kodvian.Core.Infrastructure.GoogleCalendar.GoogleCalendarHttpClient>(client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddScoped<Kodvian.Core.Infrastructure.GoogleCalendar.GoogleCalendarService>();
+        services.AddScoped<Kodvian.Core.Application.Integrations.GoogleCalendar.IGoogleCalendarService>(sp => sp.GetRequiredService<Kodvian.Core.Infrastructure.GoogleCalendar.GoogleCalendarService>());
+        services.AddScoped<Kodvian.Core.Application.Integrations.GoogleCalendar.IMeetingCalendarSync>(sp => sp.GetRequiredService<Kodvian.Core.Infrastructure.GoogleCalendar.GoogleCalendarService>());
         services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
         services.AddScoped<UserAccessGuard>();
         services.AddScoped<Kodvian.Core.Application.Administration.IUserAdministrationService, UserAdministrationService>();

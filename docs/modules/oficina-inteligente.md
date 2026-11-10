@@ -111,10 +111,13 @@ Flujo:
 
 ## Pendientes (requieren una decisión y credenciales externas)
 
-- **Google Calendar**: crear un proyecto en Google Cloud con OAuth (pantalla de consentimiento, client id y secret), guardar los tokens de cada usuario cifrados y, al confirmar `meetings.create`/`meetings.update`/`meetings.cancel`, crear, mover o cancelar el evento en el calendario de los participantes. Hace falta definir si se sincroniza en un solo sentido o en ambos.
 - **WhatsApp o Telegram**: Telegram necesita un bot (token de BotFather) y vincular cada chat con un usuario de Kodvian; WhatsApp necesita la API de Meta Business (número verificado, plantillas aprobadas y webhook público). En ambos casos las acciones tendrían que confirmarse con un botón del chat y reutilizar el mismo flujo de `AiPendingAction`.
 - **Resumen semanal por mail**: elegir un servicio de envío (SMTP, Resend, SendGrid…), guardar su credencial como secreto de Railway y programar un trabajo semanal que reutilice `AiBriefingService` por usuario, con opción de darse de baja.
 - **Servidor MCP**: exponer el catálogo (`AiToolCatalog`) como servidor MCP remoto con OAuth para usar Kodvian desde Claude Desktop, Claude Code u otros clientes, reutilizando permisos, confirmaciones y auditoría. Conviene antes desacoplar el catálogo en una definición más un handler por herramienta.
+
+## Integraciones
+
+- **Google Calendar**: cada usuario conecta su cuenta de Google y las reuniones que organiza (también las que confirma desde el asistente) se agendan en su calendario. Ver [Google Calendar](google-calendar.md).
 
 ## Verificación
 

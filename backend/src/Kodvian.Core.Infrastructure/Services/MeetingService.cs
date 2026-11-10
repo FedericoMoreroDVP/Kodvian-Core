@@ -1,4 +1,5 @@
 using Kodvian.Core.Application.Common.Models;
+using Kodvian.Core.Application.Integrations.GoogleCalendar;
 using Kodvian.Core.Application.Meetings.Abstractions;
 using Kodvian.Core.Application.Meetings.Dtos;
 using Kodvian.Core.Application.Meetings.Requests;
@@ -12,8 +13,17 @@ namespace Kodvian.Core.Infrastructure.Services;
 public class MeetingService : IMeetingService
 {
     private readonly KodvianDbContext _dbContext;
+    private readonly IMeetingCalendarSync? _calendarSync;
 
-    public MeetingService(KodvianDbContext dbContext) => _dbContext = dbContext;
+    // La sincronización con Google Calendar es opcional: sin ella (por ejemplo, en tests) Agenda funciona igual.
+    public MeetingService(KodvianDbContext dbContext, IMeetingCalendarSync? calendarSync = null)
+    {
+        _dbContext = dbContext;
+        _calendarSync = calendarSync;
+    }
+
+    private Task SyncCalendarAsync(Guid meetingId, CancellationToken cancellationToken) =>
+        _calendarSync?.SyncMeetingAsync(meetingId, cancellationToken) ?? Task.CompletedTask;
 
     public async Task<PagedResultDto<MeetingDto>> GetPagedAsync(Guid userId, bool isAdministrator, MeetingListRequestDto request, CancellationToken cancellationToken = default)
     {
@@ -54,6 +64,7 @@ public class MeetingService : IMeetingService
         AddParticipants(meeting, request.ParticipantIds);
         _dbContext.Meetings.Add(meeting);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await SyncCalendarAsync(meeting.Id, cancellationToken);
         return (await GetByIdAsync(userId, true, meeting.Id, cancellationToken))!;
     }
 
@@ -67,9 +78,13 @@ public class MeetingService : IMeetingService
         ApplyRequest(meeting, request);
         _dbContext.MeetingParticipants.RemoveRange(meeting.Participantes);
         meeting.Participantes.Clear();
-        AddParticipants(meeting, request.ParticipantIds);
+        // En una reunión existente los participantes nuevos se agregan explícitamente: si se agregan por la navegación,
+        // EF los toma como filas existentes (su Id ya viene generado) e intenta actualizarlas, y el guardado falla.
+        foreach (var participantId in request.ParticipantIds.Distinct())
+            _dbContext.MeetingParticipants.Add(new MeetingParticipant { MeetingId = meeting.Id, UserId = participantId });
         meeting.FechaActualizacion = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await SyncCalendarAsync(meeting.Id, cancellationToken);
         return await GetByIdAsync(userId, isAdministrator, id, cancellationToken);
     }
 
@@ -83,6 +98,7 @@ public class MeetingService : IMeetingService
         meeting.Estado = MeetingStatus.Cancelada;
         meeting.FechaActualizacion = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await SyncCalendarAsync(meeting.Id, cancellationToken);
         return await GetByIdAsync(userId, isAdministrator, id, cancellationToken);
     }
 
@@ -159,7 +175,8 @@ public class MeetingService : IMeetingService
         Title = meeting.Titulo, Description = meeting.Descripcion, StartsAt = meeting.Inicio, EndsAt = meeting.Fin,
         Priority = meeting.Prioridad.ToString(), Status = meeting.Estado.ToString(), Link = meeting.Enlace, Location = meeting.Ubicacion,
         CreatedById = meeting.CreadoPorId, CreatedByName = meeting.CreadoPor?.FullName ?? string.Empty,
-        Participants = meeting.Participantes.OrderBy(x => x.User!.FullName).Select(x => new MeetingParticipantDto { Id = x.UserId, Name = x.User!.FullName }).ToList()
+        Participants = meeting.Participantes.OrderBy(x => x.User!.FullName).Select(x => new MeetingParticipantDto { Id = x.UserId, Name = x.User!.FullName }).ToList(),
+        GoogleSyncStatus = meeting.GoogleSyncStatus, GoogleSyncError = meeting.GoogleSyncError
     };
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

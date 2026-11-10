@@ -989,6 +989,37 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.ToTable("FinancialMovements", (string)null);
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.GoogleCalendarConnection", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ConnectedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GoogleEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime?>("LastSyncAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProtectedRefreshToken")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("GoogleCalendarConnections", (string)null);
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.Meeting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1019,6 +1050,24 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("Fin")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GoogleCalendarOwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("GoogleEventId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<string>("GoogleSyncError")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("GoogleSyncStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("GoogleSyncedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("Inicio")

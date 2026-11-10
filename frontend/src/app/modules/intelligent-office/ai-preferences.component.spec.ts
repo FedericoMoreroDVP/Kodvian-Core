@@ -23,6 +23,10 @@ describe('Preferencias del asistente', () => {
     fixture.detectChanges();
     http.expectOne('/api/ai/preferences').flush({ data: { preferredCurrency: 'ARS', defaultMeetingMinutes: null, defaultTaskPriority: null, responseStyle: null, defaultScope: null, notes: null } });
     expect(fixture.componentInstance.model.preferredCurrency).toBe('ARS');
+    fixture.detectChanges();
+    http.expectOne('/api/integrations/google-calendar/status').flush({ data: { enabled: true, connected: true, email: 'nico@gmail.com', connectedAtUtc: null, lastSyncAtUtc: null, lastError: null } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Conectado con nico@gmail.com');
 
     fixture.componentInstance.model.defaultMeetingMinutes = '30' as unknown as number;
     fixture.componentInstance.model.responseStyle = 'breve';

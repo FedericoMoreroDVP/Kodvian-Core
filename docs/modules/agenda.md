@@ -35,3 +35,7 @@ Los horarios se almacenan en UTC. Las reuniones canceladas se conservan como his
 - `MeetingParticipant`: relación única entre una reunión y un usuario interno.
 
 Las restricciones aseguran que el fin sea posterior al inicio, que el proyecto exista y que los participantes estén activos.
+
+## Google Calendar
+
+El organizador puede conectar su cuenta de Google desde el encabezado de Agenda. Sus reuniones se crean, mueven o eliminan en su Google Calendar con los participantes como invitados, y el detalle muestra si la reunión está sincronizada o permite reintentar. Configuración y detalles en [Google Calendar](google-calendar.md).

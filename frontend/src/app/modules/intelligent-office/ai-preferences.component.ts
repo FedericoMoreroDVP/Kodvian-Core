@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { finalize } from 'rxjs';
 
+import { GoogleCalendarConnectComponent } from '../../shared/google-calendar/google-calendar-connect.component';
 import { AiUserPreferences } from './intelligent-office.models';
 import { IntelligentOfficeService } from './intelligent-office.service';
 
@@ -11,7 +12,7 @@ import { IntelligentOfficeService } from './intelligent-office.service';
 @Component({
   selector: 'app-ai-preferences',
   standalone: true,
-  imports: [FormsModule, MatButtonModule, MatIconModule],
+  imports: [FormsModule, MatButtonModule, MatIconModule, GoogleCalendarConnectComponent],
   template: `
     <form class="preferences" (ngSubmit)="save()" aria-label="Preferencias del asistente">
       <header>
@@ -50,6 +51,7 @@ import { IntelligentOfficeService } from './intelligent-office.service';
         </label>
         @if (error) { <p class="error" role="alert">{{ error }}</p> }
         @if (saved) { <p class="ok" role="status"><mat-icon>check_circle</mat-icon> Guardado</p> }
+        <app-google-calendar-connect />
         <div class="buttons">
           <button mat-flat-button color="primary" type="submit" [disabled]="saving">Guardar</button>
           <button mat-button type="button" (click)="closed.emit()">Cerrar</button>

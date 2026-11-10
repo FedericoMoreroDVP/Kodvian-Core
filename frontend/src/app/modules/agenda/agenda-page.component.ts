@@ -9,6 +9,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { GoogleCalendarConnectComponent } from '../../shared/google-calendar/google-calendar-connect.component';
+import { GoogleSyncBadgeComponent } from '../../shared/google-calendar/google-sync-badge.component';
 import { AuthSessionService } from '../../core/auth/auth-session.service';
 import { ReunionFormDialogComponent } from './components/reunion-form-dialog/reunion-form-dialog.component';
 import { AgendaLookupItem, EstadoReunion, PrioridadReunion, Reunion } from './models/agenda.models';
@@ -19,7 +21,7 @@ const WORKDAY_START = 0;
 const WORKDAY_END = 24;
 const SLOT_MINUTES = 30;
 const PIXELS_PER_HOUR = 64;
-@Component({ selector: 'app-agenda-page', standalone: true, imports: [DatePipe, DecimalPipe, NgStyle, ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule], templateUrl: './agenda-page.component.html', styleUrl: './agenda-page.component.scss' })
+@Component({ selector: 'app-agenda-page', standalone: true, imports: [DatePipe, DecimalPipe, NgStyle, ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule, GoogleCalendarConnectComponent, GoogleSyncBadgeComponent], templateUrl: './agenda-page.component.html', styleUrl: './agenda-page.component.scss' })
 export class AgendaPageComponent implements OnInit {
   private readonly agenda = inject(AgendaService);
   private readonly dialog = inject(MatDialog);
