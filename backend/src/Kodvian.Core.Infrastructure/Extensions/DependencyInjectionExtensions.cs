@@ -83,7 +83,7 @@ public static class DependencyInjectionExtensions
         services.AddHttpClient<OpenAiResponsesClient>(client =>
             {
                 client.BaseAddress = new Uri("https://api.openai.com/v1/");
-                client.Timeout = TimeSpan.FromSeconds(30);
+                client.Timeout = TimeSpan.FromSeconds(120);
             })
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         // El SDK de Anthropic aplica su propio timeout por solicitud; el HttpClient solo pone un tope externo.

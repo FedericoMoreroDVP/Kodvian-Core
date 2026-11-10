@@ -89,7 +89,41 @@ public sealed class AnthropicMessagesClientTests
         var result = messages[2].GetProperty("content")[0];
         Assert.Equal("tool_result", result.GetProperty("type").GetString());
         Assert.Equal("toolu_1", result.GetProperty("tool_use_id").GetString());
+        Assert.False(result.TryGetProperty("is_error", out var isError) && isError.GetBoolean());
+        Assert.True(request.RootElement.TryGetProperty("cache_control", out _));
     }
+
+    [Fact]
+    public async Task ToolErrorIsSentAsToolResultWithIsError()
+    {
+        const string body = """
+        {
+          "id": "msg_3", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+          "content": [ { "type": "text", "text": "Ese proyecto no existe." } ],
+          "stop_reason": "end_turn", "stop_sequence": null,
+          "usage": { "input_tokens": 10, "output_tokens": 5 }
+        }
+        """;
+        var (client, version, handler) = await CreateClientAsync(body);
+        var input = BasicInput();
+        input.Add(new JsonObject { ["type"] = "function_call", ["call_id"] = "toolu_9", ["name"] = "tasks__list", ["arguments"] = "{}" });
+        input.Add(new JsonObject { ["type"] = "function_call_output", ["call_id"] = "toolu_9", ["output"] = "{\"error\":\"El proyecto seleccionado no existe\"}" });
+
+        await client.CreateAsync(version, input, Tools(), CancellationToken.None);
+
+        using var request = JsonDocument.Parse(handler.LastBody!);
+        var result = request.RootElement.GetProperty("messages")[2].GetProperty("content")[0];
+        Assert.Equal("tool_result", result.GetProperty("type").GetString());
+        Assert.True(result.GetProperty("is_error").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("{\"error\":\"falló\"}", true)]
+    [InlineData("{\"result\":[],\"error\":null,\"traceId\":\"x\"}", false)]
+    [InlineData("{\"status\":\"pending_confirmation\"}", false)]
+    [InlineData("texto", false)]
+    public void ToolErrorDetectionOnlyMatchesTheErrorEnvelope(string output, bool expected) =>
+        Assert.Equal(expected, AnthropicMessagesClient.IsToolError(output));
 
     [Fact]
     public async Task RefusalIsReportedAsProviderUnavailable()

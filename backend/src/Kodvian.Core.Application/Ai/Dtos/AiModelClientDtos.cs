@@ -17,6 +17,8 @@ public sealed class AiToolDefinitionDto
     public string Description { get; init; } = string.Empty;
     public JsonObject Parameters { get; init; } = new();
     public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [];
+    /// <summary>Las herramientas de acción no escriben: preparan una propuesta que el usuario confirma.</summary>
+    public bool RequiresConfirmation { get; init; }
 }
 
 public sealed class AiToolExecutionResultDto

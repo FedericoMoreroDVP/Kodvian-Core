@@ -53,7 +53,9 @@ public sealed class AnthropicMessagesClient(
             MaxTokens = MaxOutputTokens,
             System = system,
             Messages = messages,
-            Tools = ToAnthropicTools(tools)
+            Tools = ToAnthropicTools(tools),
+            // Cachea automáticamente el prefijo (sistema, herramientas e historial) entre las vueltas del ciclo de herramientas.
+            CacheControl = new CacheControlEphemeral()
         };
 
         var client = AnthropicClientFactory.Create(httpClient, apiKey, TimeSpan.FromSeconds(120));
@@ -129,10 +131,12 @@ public sealed class AnthropicMessagesClient(
                     });
                     continue;
                 case "function_call_output":
+                    var output = item["output"]?.GetValue<string>() ?? string.Empty;
                     Append("user", new ToolResultBlockParam
                     {
                         ToolUseID = item["call_id"]?.GetValue<string>() ?? string.Empty,
-                        Content = item["output"]?.GetValue<string>() ?? string.Empty
+                        Content = output,
+                        IsError = IsToolError(output)
                     });
                     continue;
                 case ThinkingItemType:
@@ -235,6 +239,20 @@ public sealed class AnthropicMessagesClient(
             InputTokens = (int)Math.Min(int.MaxValue, response.Usage.InputTokens),
             OutputTokens = (int)Math.Min(int.MaxValue, response.Usage.OutputTokens)
         };
+    }
+
+    // Los errores de herramienta viajan como {"error": "..."} (formato compartido con OpenAI).
+    internal static bool IsToolError(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output) || !output.TrimStart().StartsWith('{')) return false;
+        try
+        {
+            return JsonNode.Parse(output) is JsonObject obj && obj.Count == 1 && obj["error"] is JsonValue;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static Dictionary<string, JsonElement> ParseArguments(string? arguments)

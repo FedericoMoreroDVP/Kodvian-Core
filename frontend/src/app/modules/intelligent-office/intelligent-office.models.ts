@@ -23,6 +23,8 @@ export interface AiMessage {
   createdAtUtc: string;
   traceId: string | null;
   sources: AiSourceReference[];
+  /** false cuando la respuesta no consultó datos de Kodvian. */
+  grounded?: boolean;
 }
 
 export interface AiConversationDetail {

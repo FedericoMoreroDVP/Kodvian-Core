@@ -28,6 +28,8 @@ public sealed class AiMessageDto
     public DateTime CreatedAtUtc { get; init; }
     public string? TraceId { get; init; }
     public IReadOnlyCollection<AiSourceReferenceDto> Sources { get; init; } = [];
+    /// <summary>False cuando la respuesta no se apoyó en ninguna consulta a datos de Kodvian.</summary>
+    public bool Grounded { get; init; } = true;
 }
 
 public sealed class AiConversationDetailDto

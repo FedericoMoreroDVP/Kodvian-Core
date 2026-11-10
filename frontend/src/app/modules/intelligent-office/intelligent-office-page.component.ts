@@ -99,6 +99,10 @@ const SOURCE_LABELS: Record<string, string> = {
                         }
                       }
                     </div>
+                  } @else if (message.role === 'assistant' && message.grounded === false) {
+                    <p class="ungrounded" matTooltip="Esta respuesta no consultó datos de Kodvian.">
+                      <mat-icon>info_outline</mat-icon> Sin datos consultados
+                    </p>
                   }
                 </div>
               </article>
@@ -212,6 +216,8 @@ const SOURCE_LABELS: Record<string, string> = {
     .source-chip { padding: 3px 9px; border-radius: 999px; font-size: 11px; color: var(--text-100); background: rgba(255,255,255,.05); border: 1px solid var(--kd-border-subtle); text-decoration: none; }
     a.source-chip { color: var(--brand-300); }
     a.source-chip:hover { border-color: rgba(34, 197, 94, .45); }
+    .ungrounded { display: inline-flex; align-items: center; gap: 4px; margin: 8px 0 0; color: var(--text-300); font-size: 11px; }
+    .ungrounded mat-icon { width: 14px; height: 14px; font-size: 14px; }
 
     .thinking { display: flex; align-items: center; gap: 5px; padding: 14px 16px; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-300); animation: blink 1.2s infinite ease-in-out; }

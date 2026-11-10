@@ -43,7 +43,7 @@ public sealed class OpenAiResponsesClient(
                 tools,
                 tool_choice = "auto",
                 parallel_tool_calls = false,
-                max_output_tokens = 1200,
+                max_output_tokens = 4000,
                 store = false
             })
         };

@@ -54,6 +54,30 @@ public sealed class AiToolCatalogTests
     }
 
     [Fact]
+    public async Task MeetingsWithoutDatesReturnTheNextSevenDays()
+    {
+        await using var db = CreateDatabase();
+        var actor = AdminActor();
+        var client = new Client { CommercialName = "Cliente" };
+        var project = new Project { ClienteId = client.Id, Nombre = "Proyecto" };
+        db.Clients.Add(client);
+        db.Projects.Add(project);
+        db.Users.Add(new User { Id = actor.UserId, FullName = "Admin", Email = "admin@example.test" });
+        db.Meetings.AddRange(
+            new Meeting { ProyectoId = project.Id, CreadoPorId = actor.UserId, Titulo = "Reunion proxima", Inicio = DateTime.UtcNow.AddDays(1), Fin = DateTime.UtcNow.AddDays(1).AddHours(1) },
+            new Meeting { ProyectoId = project.Id, CreadoPorId = actor.UserId, Titulo = "Reunion pasada", Inicio = DateTime.UtcNow.AddDays(-10), Fin = DateTime.UtcNow.AddDays(-10).AddHours(1) },
+            new Meeting { ProyectoId = project.Id, CreadoPorId = actor.UserId, Titulo = "Reunion lejana", Inicio = DateTime.UtcNow.AddDays(20), Fin = DateTime.UtcNow.AddDays(20).AddHours(1) });
+        db.SaveChanges();
+
+        var result = await CreateCatalog(db).ExecuteAsync(actor, Guid.NewGuid(), Guid.Empty, "trace", "meetings.list", new JsonObject(), CancellationToken.None);
+        var json = result.Data.ToJsonString();
+
+        Assert.Contains("Reunion proxima", json);
+        Assert.DoesNotContain("Reunion pasada", json);
+        Assert.DoesNotContain("Reunion lejana", json);
+    }
+
+    [Fact]
     public async Task ToolsRequireAdminAiPermissionAndCurrentSession()
     {
         await using var db = CreateDatabase();

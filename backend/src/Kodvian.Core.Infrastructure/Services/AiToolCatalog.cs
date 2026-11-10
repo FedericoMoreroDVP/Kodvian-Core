@@ -55,7 +55,7 @@ public sealed class AiToolCatalog(
             [("search", StringSchema(120)), ("projectId", GuidSchema()), ("status", EnumSchema(TaskStatuses)), ("dueDateFrom", DateSchema()), ("dueDateTo", DateSchema()), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
         new() { Name = "clients.list", Description = "Lista clientes visibles con nombre comercial y estado; excluye datos de contacto, montos y notas.", RequiredPermissions = [PermissionCodes.ClientsRead], Parameters = ObjectSchema(
             [("search", StringSchema(100)), ("status", EnumSchema(ClientStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) },
-        new() { Name = "meetings.list", Description = "Lista reuniones visibles durante un período de hasta 90 días. No devuelve enlaces, ubicación ni nombres de participantes.", RequiredPermissions = [PermissionCodes.MeetingsRead], Parameters = ObjectSchema(
+        new() { Name = "meetings.list", Description = "Lista reuniones visibles durante un período de hasta 90 días. Sin fechas devuelve los próximos 7 días (desde hoy). Para reuniones pasadas indicá from y to. No devuelve enlaces, ubicación ni nombres de participantes.", RequiredPermissions = [PermissionCodes.MeetingsRead], Parameters = ObjectSchema(
             [("from", DateSchema()), ("to", DateSchema()), ("projectId", GuidSchema()), ("status", EnumSchema(MeetingStatuses)), ("pageSize", IntegerSchema(1, MaxPageSize))], []) }
     ];
 
@@ -103,16 +103,32 @@ public sealed class AiToolCatalog(
             throw;
         }
         var now = DateTime.UtcNow;
-        var (data, source) = toolName switch
+        JsonObject data;
+        AiSourceReferenceDto source;
+        try
         {
-            "dashboard.get_snapshot" => await DashboardAsync(arguments, now, cancellationToken),
-            "finance.get_summary" => await FinanceAsync(arguments, now, traceId, cancellationToken),
-            "projects.list" => await ProjectsAsync(arguments, now, cancellationToken),
-            "tasks.list" => await TasksAsync(arguments, now, cancellationToken),
-            "clients.list" => await ClientsAsync(arguments, now, cancellationToken),
-            "meetings.list" => await MeetingsAsync(actor, arguments, now, cancellationToken),
-            _ => throw new AiToolRejectedException("La herramienta solicitada no está habilitada.")
-        };
+            (data, source) = toolName switch
+            {
+                "dashboard.get_snapshot" => await DashboardAsync(arguments, now, cancellationToken),
+                "finance.get_summary" => await FinanceAsync(arguments, now, traceId, cancellationToken),
+                "projects.list" => await ProjectsAsync(arguments, now, cancellationToken),
+                "tasks.list" => await TasksAsync(arguments, now, cancellationToken),
+                "clients.list" => await ClientsAsync(arguments, now, cancellationToken),
+                "meetings.list" => await MeetingsAsync(actor, arguments, now, cancellationToken),
+                _ => throw new AiToolRejectedException("La herramienta solicitada no está habilitada.")
+            };
+        }
+        catch (AiToolRejectedException)
+        {
+            await WriteAuditAsync(actor, runId, toolName, "Denied", "invalid_arguments", cancellationToken);
+            throw;
+        }
+        catch (Exception exception) when (IsDomainRejection(exception))
+        {
+            // Validaciones de los servicios de dominio: se devuelven al modelo como error de herramienta.
+            await WriteAuditAsync(actor, runId, toolName, "Denied", "domain_rejected", cancellationToken);
+            throw new AiToolRejectedException(exception.Message);
+        }
 
         await WriteAuditAsync(actor, runId, toolName, "Allowed", "completed", cancellationToken);
         data["traceId"] = traceId;
@@ -204,7 +220,7 @@ public sealed class AiToolCatalog(
 
     private async Task<(JsonObject, AiSourceReferenceDto)> MeetingsAsync(AiExecutionContext actor, JsonObject args, DateTime now, CancellationToken ct)
     {
-        var (fromDate, toDate) = ResolvePeriod(args, "from", "to", now);
+        var (fromDate, toDate) = ResolveUpcomingPeriod(args, "from", "to", now, 7);
         var request = new MeetingListRequestDto
         {
             From = BuenosAiresStartUtc(fromDate),
@@ -261,6 +277,22 @@ public sealed class AiToolCatalog(
         if (actualTo.DayNumber - actualFrom.DayNumber > 89) throw new AiToolRejectedException("El período máximo de consulta es de 90 días.");
         return (actualFrom, actualTo);
     }
+
+    // Para agenda: sin fechas, los próximos días desde hoy (hora de Buenos Aires).
+    private static (DateOnly From, DateOnly To) ResolveUpcomingPeriod(JsonObject args, string fromProperty, string toProperty, DateTime utcNow, int defaultDays)
+    {
+        var localToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(utcNow, BuenosAiresTimeZone));
+        var from = GetDate(args, fromProperty);
+        var to = GetDate(args, toProperty);
+        var actualFrom = from ?? (to.HasValue && to.Value < localToday ? to.Value.AddDays(-(defaultDays - 1)) : localToday);
+        var actualTo = to ?? actualFrom.AddDays(defaultDays - 1);
+        if (actualFrom > actualTo) throw new AiToolRejectedException("El inicio del período no puede ser posterior al fin.");
+        if (actualTo.DayNumber - actualFrom.DayNumber > 89) throw new AiToolRejectedException("El período máximo de consulta es de 90 días.");
+        return (actualFrom, actualTo);
+    }
+
+    private static bool IsDomainRejection(Exception exception) =>
+        exception is ArgumentException or KeyNotFoundException or UnauthorizedAccessException;
 
     private static (DateOnly? From, DateOnly? To) ResolveOptionalBoundedRange(JsonObject args, string fromProperty, string toProperty)
     {
