@@ -8,4 +8,5 @@ public class Partner : BaseEntity
     public Developer? Developer { get; set; }
     public Guid? UserId { get; set; }
     public User? User { get; set; }
+    public decimal ParticipationPercentage { get; set; }
 }

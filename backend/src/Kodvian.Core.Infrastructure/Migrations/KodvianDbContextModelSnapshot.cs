@@ -863,6 +863,110 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.ToTable("FinancialCategories", (string)null);
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("CapitalizedAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<decimal>("DistributableAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ExpensesCovered")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("FechaActualizacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("IncomeMovementId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("SharesConfigured")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IncomeMovementId")
+                        .IsUnique();
+
+                    b.ToTable("FinancialIncomeAllocations", (string)null);
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomeExpenseApplication", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ExpenseMovementId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpenseMovementId");
+
+                    b.HasIndex("AllocationId", "ExpenseMovementId")
+                        .IsUnique();
+
+                    b.ToTable("FinancialIncomeExpenseApplications", (string)null);
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomePartnerDistribution", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AllocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("PartnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PartnerName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<decimal>("Percentage")
+                        .HasColumnType("numeric(5,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartnerId");
+
+                    b.HasIndex("AllocationId", "PartnerId")
+                        .IsUnique();
+
+                    b.ToTable("FinancialIncomePartnerDistributions", (string)null);
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialMovement", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1163,6 +1267,9 @@ namespace Kodvian.Core.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)");
+
+                    b.Property<decimal>("ParticipationPercentage")
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<Guid?>("UserId")
                         .HasColumnType("uuid");
@@ -1873,6 +1980,55 @@ namespace Kodvian.Core.Infrastructure.Migrations
                     b.Navigation("UploadedBy");
                 });
 
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", b =>
+                {
+                    b.HasOne("Kodvian.Core.Domain.Entities.FinancialMovement", "IncomeMovement")
+                        .WithOne()
+                        .HasForeignKey("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", "IncomeMovementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("IncomeMovement");
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomeExpenseApplication", b =>
+                {
+                    b.HasOne("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", "Allocation")
+                        .WithMany("ExpenseApplications")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Kodvian.Core.Domain.Entities.FinancialMovement", "ExpenseMovement")
+                        .WithMany()
+                        .HasForeignKey("ExpenseMovementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+
+                    b.Navigation("ExpenseMovement");
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomePartnerDistribution", b =>
+                {
+                    b.HasOne("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", "Allocation")
+                        .WithMany("PartnerDistributions")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Kodvian.Core.Domain.Entities.Partner", "Partner")
+                        .WithMany()
+                        .HasForeignKey("PartnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+
+                    b.Navigation("Partner");
+                });
+
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialMovement", b =>
                 {
                     b.HasOne("Kodvian.Core.Domain.Entities.FinancialCategory", "Category")
@@ -2198,6 +2354,13 @@ namespace Kodvian.Core.Infrastructure.Migrations
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialCategory", b =>
                 {
                     b.Navigation("FinancialMovements");
+                });
+
+            modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialIncomeAllocation", b =>
+                {
+                    b.Navigation("ExpenseApplications");
+
+                    b.Navigation("PartnerDistributions");
                 });
 
             modelBuilder.Entity("Kodvian.Core.Domain.Entities.FinancialMovement", b =>

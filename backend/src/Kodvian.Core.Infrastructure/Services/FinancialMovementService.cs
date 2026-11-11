@@ -115,6 +115,9 @@ public class FinancialMovementService : IFinancialMovementService
 
         _dbContext.FinancialMovements.Add(movement);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (movement.MovementType == FinancialMovementType.Ingreso && movement.Nature == "Operacion"
+            && movement.Funding == "Empresa" && movement.Status == FinancialMovementStatus.Cobrado)
+            await new FinancialIncomeAllocationService(_dbContext).AllocateAsync(movement.Id, cancellationToken);
         if (tx != null) await tx.CommitAsync(cancellationToken);
 
         return await _dbContext.FinancialMovements
@@ -139,12 +142,27 @@ public class FinancialMovementService : IFinancialMovementService
         if (movement.ExchangeId != null) throw new ArgumentException("Anula el cambio de moneda completo y registra la corrección");
         if (await _dbContext.DeveloperPayments.AnyAsync(x => x.FinancialMovementId == id, cancellationToken))
             throw new ArgumentException("Este egreso está vinculado a un pago. Edítalo o anúlalo desde el proyecto.");
+        var existingAllocation = await _dbContext.FinancialIncomeAllocations.SingleOrDefaultAsync(x => x.IncomeMovementId == id, cancellationToken);
+        if (existingAllocation != null && (movement.Amount != request.Amount || movement.Currency != request.Currency
+            || movement.MovementType.ToString() != request.MovementType || movement.Nature != request.Nature
+            || movement.Funding != request.Funding || movement.Status.ToString() != request.Status))
+            throw new ArgumentException("Este cobro ya tiene una distribución calculada. No puedes cambiar sus importes ni anularlo.");
+        var expenseCovered = await _dbContext.FinancialIncomeExpenseApplications.AnyAsync(x => x.ExpenseMovementId == id, cancellationToken);
+        if (expenseCovered && (movement.Amount != request.Amount || movement.Currency != request.Currency
+            || movement.MovementType.ToString() != request.MovementType || movement.Nature != request.Nature
+            || movement.Funding != request.Funding || request.Status == "Anulado"))
+            throw new ArgumentException("Este gasto ya fue cubierto por un cobro. Conserva su importe y clasificación; registra el pago cuando ocurra.");
+        var wasSettledIncome = movement.MovementType == FinancialMovementType.Ingreso
+            && movement.Nature == "Operacion" && movement.Funding == "Empresa" && movement.Status == FinancialMovementStatus.Cobrado;
         await ValidateFinanceAsync(request, movement, cancellationToken);
         ApplyRequest(movement, request);
         movement.Version = Guid.NewGuid();
         movement.FechaActualizacion = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        if (!wasSettledIncome && movement.MovementType == FinancialMovementType.Ingreso && movement.Nature == "Operacion"
+            && movement.Funding == "Empresa" && movement.Status == FinancialMovementStatus.Cobrado)
+            await new FinancialIncomeAllocationService(_dbContext).AllocateAsync(movement.Id, cancellationToken);
         if (tx != null) await tx.CommitAsync(cancellationToken);
 
         return await _dbContext.FinancialMovements

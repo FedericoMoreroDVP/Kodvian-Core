@@ -139,6 +139,76 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
         return response;
     }
 
+    public async Task<CapitalAllocationReportDto> GetCapitalAllocationsAsync(int year, CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (year is < 2000 or > 2100 || year > today.Year) throw new ArgumentException("Año inválido o futuro");
+        await using var snapshot = db.Database.IsRelational() && db.Database.CurrentTransaction == null
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, ct) : null;
+        var yearStart = new DateOnly(year, 1, 1);
+        var yearEnd = new DateOnly(year, 12, 31);
+        var cutoff = yearEnd < today ? yearEnd : today;
+        var allocations = await db.FinancialIncomeAllocations.AsNoTracking()
+            .Where(x => x.IncomeMovement.Activo && x.IncomeMovement.SettlementDate.HasValue && x.IncomeMovement.SettlementDate <= cutoff)
+            .Include(x => x.IncomeMovement)
+            .Include(x => x.ExpenseApplications).ThenInclude(x => x.ExpenseMovement)
+            .Include(x => x.PartnerDistributions)
+            .OrderBy(x => x.IncomeMovement.SettlementDate).ThenBy(x => x.IncomeMovement.FechaCreacion)
+            .ToListAsync(ct);
+        var pendingExpenses = await db.FinancialMovements.AsNoTracking()
+            .Where(x => x.Activo && x.MovementType == FinancialMovementType.Egreso && x.Nature == "Operacion"
+                && x.Funding == "Empresa" && (x.Status == FinancialMovementStatus.Pendiente || x.Status == FinancialMovementStatus.Vencido
+                    || x.Status == FinancialMovementStatus.Pagado && db.FinancialIncomeExpenseApplications.Any(a =>
+                        a.ExpenseMovementId == x.Id)))
+            .Select(x => new { x.Id, x.Currency, x.Description, x.MovementDate, x.Amount })
+            .ToListAsync(ct);
+        var allExpenseCoverage = await db.FinancialIncomeExpenseApplications.AsNoTracking()
+            .GroupBy(x => x.ExpenseMovementId).Select(g => new { Id = g.Key, Amount = g.Sum(x => x.Amount) })
+            .ToDictionaryAsync(x => x.Id, x => x.Amount, ct);
+        var result = new CapitalAllocationReportDto { Year = year };
+        foreach (var currency in FinanceRules.Currencies)
+        {
+            var currencyRows = allocations.Where(x => x.Currency == currency).ToList();
+            var openingCapital = currencyRows.Where(x => x.IncomeMovement.SettlementDate < yearStart).Sum(x => x.CapitalizedAmount);
+            var yearRows = currencyRows.Where(x => x.IncomeMovement.SettlementDate >= yearStart).ToList();
+            decimal cumulative = openingCapital;
+            var monthCount = cutoff < yearStart ? 0 : cutoff.Month;
+            var months = new List<CapitalAllocationMonthDto>();
+            for (var month = 1; month <= monthCount; month++)
+            {
+                var monthRows = yearRows.Where(x => x.IncomeMovement.SettlementDate!.Value.Month == month).ToList();
+                cumulative += monthRows.Sum(x => x.CapitalizedAmount);
+                months.Add(new(year, month, monthRows.Sum(x => x.GrossAmount), monthRows.Sum(x => x.ExpensesCovered),
+                    monthRows.Sum(x => x.CapitalizedAmount), monthRows.Sum(x => x.DistributableAmount), cumulative));
+            }
+            var receipts = yearRows.Select(x => new IncomeAllocationDto
+            {
+                IncomeMovementId = x.IncomeMovementId,
+                SettlementDate = x.IncomeMovement.SettlementDate!.Value,
+                Description = x.IncomeMovement.Description,
+                Currency = x.Currency,
+                GrossAmount = x.GrossAmount,
+                ExpensesCovered = x.ExpensesCovered,
+                CapitalizedAmount = x.CapitalizedAmount,
+                DistributableAmount = x.DistributableAmount,
+                SharesConfigured = x.SharesConfigured || x.PartnerDistributions.Count > 0,
+                Expenses = x.ExpenseApplications.Select(a => new IncomeExpenseCoverageDto(a.ExpenseMovementId, a.ExpenseMovement.Description, a.Amount)).ToArray(),
+                Partners = x.PartnerDistributions.OrderBy(p => p.PartnerName).Select(p => new IncomePartnerDistributionDto(p.PartnerId, p.PartnerName, p.Percentage, p.Amount)).ToArray()
+            }).ToArray();
+            var waiting = pendingExpenses.Where(x => x.Currency == currency)
+                .Select(x => new PendingExpenseForAllocationDto(x.Id, x.Description, x.MovementDate,
+                    Math.Max(0, x.Amount - allExpenseCoverage.GetValueOrDefault(x.Id))))
+                .Where(x => x.RemainingAmount > 0).OrderBy(x => x.MovementDate).ToArray();
+            result.Currencies = result.Currencies.Append(new CapitalAllocationCurrencyDto {
+                Currency = currency, OpeningCapital = openingCapital, CapitalizedInYear = yearRows.Sum(x => x.CapitalizedAmount),
+                DistributableInYear = yearRows.Sum(x => x.DistributableAmount), ExpensesAwaitingCoverage = waiting.Sum(x => x.RemainingAmount),
+                PendingExpenses = waiting, Months = months, Receipts = receipts
+            }).ToArray();
+        }
+        if (snapshot != null) await snapshot.CommitAsync(ct);
+        return result;
+    }
+
     private sealed class Aggregate
     {
         public string Currency { get; set; } = ""; public string Nature { get; set; } = ""; public string Funding { get; set; } = "";
@@ -176,6 +246,7 @@ public class FinanceOverviewService(KodvianDbContext db, ICurrentUser currentUse
     }
     private static FinanceSetupDto Map(FinanceSettings? x) => new() { StartDate = x?.StartDate, OpeningArs = x?.OpeningArs, OpeningUsd = x?.OpeningUsd, HistoryComplete = x?.HistoryComplete ?? false, Version = x?.Version ?? Guid.Empty };
     public Task<IReadOnlyCollection<PartnerDto>> PartnersAsync(CancellationToken ct) => new PartnerDirectoryService(db).ListAsync(ct);
+    public Task SavePartnerParticipationsAsync(PartnerParticipationRequest request, CancellationToken ct) => new PartnerDirectoryService(db).SaveParticipationsAsync(request, ct);
     public Task<Kodvian.Core.Application.Common.Models.PagedResultDto<PartnerPersonDto>> PartnerPeopleAsync(PartnerPeopleRequest request, CancellationToken ct) => new PartnerDirectoryService(db).PeopleAsync(request, ct);
     public Task<PartnerDto> SavePartnerAsync(Guid? id, PartnerRequest request, CancellationToken ct) => new PartnerDirectoryService(db).SaveAsync(id, request, ct);
     public async Task<Guid> ExchangeAsync(ExchangeRequest request, CancellationToken ct)

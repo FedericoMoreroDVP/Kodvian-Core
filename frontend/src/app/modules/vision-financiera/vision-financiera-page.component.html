@@ -100,6 +100,27 @@
             <button mat-stroked-button (click)="selectSection('compromisos')">Explorar compromisos</button>
           </aside>
         </div>
+
+        <section class="visual-panel capital-panel">
+          <header class="panel-heading"><div><span class="eyebrow">CAPITAL EMPRESARIAL</span><h2>Asignación de los cobros</h2></div><label>Año<input type="number" min="2000" max="2100" [(ngModel)]="capitalYear" /></label><button mat-stroked-button [disabled]="capitalLoading" (click)="loadCapitalAllocations()">Consultar</button></header>
+          <p class="panel-description">Cada cobro cubre primero gastos operativos pendientes no cubiertos antes. Del remanente, se capitaliza el 10% y se propone distribuir el 90% según las participaciones. Los pagos reales de gastos y retiros se registran manualmente.</p>
+          @if (capitalLoading) { <p role="status">Calculando asignaciones…</p> }
+          @if (capitalError) { <p class="error" role="alert">{{ capitalError }} <button mat-button (click)="loadCapitalAllocations()">Reintentar</button></p> }
+          @if (capitalRow; as allocation) {
+            <div class="partner-summary capital-summary"><article><span>Gastos pendientes de cubrir</span><strong>{{ money(allocation.expensesAwaitingCoverage, state.currency) }}</strong></article><article><span>Capital al iniciar {{ capitalYear }}</span><strong>{{ money(allocation.openingCapital, state.currency) }}</strong></article><article><span>Capitalizado este año</span><strong>{{ money(allocation.capitalizedInYear, state.currency) }}</strong></article><article><span>Capital acumulado</span><strong>{{ money(accumulatedCapital, state.currency) }}</strong></article><article><span>Propuesto para distribuir este año</span><strong>{{ money(allocation.distributableInYear, state.currency) }}</strong></article></div>
+            @if (allocation.pendingExpenses.length) { <details class="data-table"><summary>Gastos que se cubrirán primero en el próximo cobro</summary><div class="table-scroll"><table><thead><tr><th>Gasto</th><th>Fecha</th><th>Importe por cubrir</th></tr></thead><tbody>@for (expense of allocation.pendingExpenses; track expense.expenseMovementId) { <tr><td>{{ expense.description }}</td><td>{{ dateLabel(expense.movementDate) }}</td><td>{{ money(expense.remainingAmount, state.currency) }}</td></tr> }</tbody></table></div></details> }
+            <details class="data-table"><summary>Capital y distribución mes a mes</summary><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Cobros registrados</th><th>Gastos cubiertos</th><th>Capitalizado · 10%</th><th>Propuesto a socios</th><th>Capital acumulado</th></tr></thead><tbody>@for (month of allocation.months; track month.month) { <tr><td>{{ capitalMonth(month.month) }}</td><td>{{ money(month.grossIncome, state.currency) }}</td><td>{{ money(month.expensesCovered, state.currency) }}</td><td>{{ money(month.capitalized, state.currency) }}</td><td>{{ money(month.distributable, state.currency) }}</td><td>{{ money(month.cumulativeCapital, state.currency) }}</td></tr> } @empty { <tr><td colspan="6">No hay cobros con asignación registrada este año.</td></tr> }</tbody></table></div></details>
+            <h3 class="capital-receipts-title">Detalle por cobro</h3>
+            @for (receipt of allocation.receipts; track receipt.incomeMovementId) {
+              <details class="capital-receipt"><summary><span>{{ dateLabel(receipt.settlementDate) }} · {{ receipt.description }}</span><strong>{{ money(receipt.grossAmount, state.currency) }}</strong></summary>
+                <div class="receipt-waterfall"><span>Gastos cubiertos <strong>{{ money(receipt.expensesCovered, state.currency) }}</strong></span><span>Capitalizado <strong>{{ money(receipt.capitalizedAmount, state.currency) }}</strong></span><span>Propuesto a distribuir <strong>{{ money(receipt.distributableAmount, state.currency) }}</strong></span></div>
+                @if (receipt.expenses.length) { <p class="panel-description">Gastos descontados:</p><ul>@for (expense of receipt.expenses; track expense.expenseMovementId) { <li>{{ expense.description }} · {{ money(expense.amount, state.currency) }}</li> }</ul> }
+                @if (!receipt.sharesConfigured) { <p class="error">Configura las participaciones activas (total 100%) para calcular este reparto.</p> }
+                @else { <div class="receipt-partners">@for (partner of receipt.partners; track partner.partnerId) { <span>{{ partner.partnerName }} · {{ partner.percentage }}%: <strong>{{ money(partner.amount, state.currency) }}</strong></span> }</div> }
+              </details>
+            } @empty { <p class="panel-description">Al registrar un nuevo cobro operativo, aparecerá aquí la liquidación calculada para ese ingreso.</p> }
+          }
+        </section>
       }
     }
 

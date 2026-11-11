@@ -140,6 +140,153 @@ public class FinanceHistoryTests : IDisposable
     }
 
     [Fact]
+    public async Task EachReceiptCoversUncoveredExpensesThenCapitalizesTenPercentAndDistributesTheRemainder()
+    {
+        var first = new Partner { FullName = "Socio 60", ParticipationPercentage = 60 };
+        var second = new Partner { FullName = "Socio 40", ParticipationPercentage = 40 };
+        db.Partners.AddRange(first, second); db.SaveChanges();
+        var allocator = new FinancialIncomeAllocationService(db);
+        Add(300, income: false, status: FinancialMovementStatus.Pendiente);
+        var income1 = Add(1000, settlementDate: new DateOnly(2025, 1, 10));
+        await allocator.AllocateAsync(income1.Id, default);
+
+        Add(200, income: false, status: FinancialMovementStatus.Pendiente);
+        var income2 = Add(500, settlementDate: new DateOnly(2025, 2, 10));
+        await allocator.AllocateAsync(income2.Id, default);
+
+        var usdIncome = Add(100, "USD", settlementDate: new DateOnly(2025, 2, 12));
+        await allocator.AllocateAsync(usdIncome.Id, default);
+
+        Assert.Equal(2, db.FinancialIncomeAllocations.Count(x => x.Currency == "ARS"));
+        var capital = await Overview.GetCapitalAllocationsAsync(2025, default);
+        var ars = capital.Currencies.Single(x => x.Currency == "ARS");
+        Assert.Equal(100, ars.CapitalizedInYear);
+        Assert.Equal(900, ars.DistributableInYear);
+        Assert.Equal(0, ars.ExpensesAwaitingCoverage);
+        var firstReceipt = ars.Receipts.Single(x => x.IncomeMovementId == income1.Id);
+        Assert.Equal(300, firstReceipt.ExpensesCovered);
+        Assert.Equal(70, firstReceipt.CapitalizedAmount);
+        Assert.Equal(630, firstReceipt.DistributableAmount);
+        Assert.Equal(378, firstReceipt.Partners.Single(x => x.PartnerId == first.Id).Amount);
+        Assert.Equal(252, firstReceipt.Partners.Single(x => x.PartnerId == second.Id).Amount);
+        var secondReceipt = ars.Receipts.Single(x => x.IncomeMovementId == income2.Id);
+        Assert.Equal(200, secondReceipt.ExpensesCovered);
+        Assert.Equal(30, secondReceipt.CapitalizedAmount);
+        Assert.Equal(270, secondReceipt.DistributableAmount);
+        Assert.Single(secondReceipt.Expenses);
+        Assert.Equal(70, ars.Months.ElementAt(0).CumulativeCapital);
+        Assert.Equal(100, ars.Months.ElementAt(1).CumulativeCapital);
+
+        var usd = capital.Currencies.Single(x => x.Currency == "USD");
+        var usdReceipt = Assert.Single(usd.Receipts);
+        Assert.Equal(10, usdReceipt.CapitalizedAmount);
+        Assert.Equal(90, usdReceipt.DistributableAmount);
+        Assert.Empty(usdReceipt.Expenses);
+    }
+
+    [Fact]
+    public async Task PartnerParticipationAllocationRequiresExactlyOneHundredPercent()
+    {
+        var first = new Partner { FullName = "Socio 1" };
+        var second = new Partner { FullName = "Socio 2" };
+        db.Partners.AddRange(first, second); db.SaveChanges();
+        await Assert.ThrowsAsync<ArgumentException>(() => new PartnerDirectoryService(db).SaveParticipationsAsync(new()
+        {
+            Partners = [new(first.Id, 55, true), new(second.Id, 44.99m, true)]
+        }, default));
+        await new PartnerDirectoryService(db).SaveParticipationsAsync(new()
+        {
+            Partners = [new(first.Id, 55, true), new(second.Id, 45, true)]
+        }, default);
+        Assert.Equal(100, db.Partners.Sum(x => x.ParticipationPercentage));
+    }
+
+    [Fact]
+    public async Task RecordingACollectedOperationalIncomeCreatesOneInformationalAllocation()
+    {
+        var request = new FinancialMovementUpsertRequestDto
+        {
+            RequestId = Guid.NewGuid(), Amount = 1000, Currency = "ARS", Description = "Cobro",
+            CategoryId = incomeCategory.Id, MovementType = "Ingreso", Status = "Cobrado",
+            MovementDate = date, SettlementDate = date
+        };
+        var created = await Movements.CreateAsync(user.Id, request);
+        var retry = await Movements.CreateAsync(user.Id, request);
+        Assert.Equal(created.Id, retry.Id);
+        var allocation = Assert.Single(db.FinancialIncomeAllocations);
+        Assert.Equal(created.Id, allocation.IncomeMovementId);
+        Assert.Equal(100, allocation.CapitalizedAmount);
+        Assert.Equal(900, allocation.DistributableAmount);
+        Assert.False(allocation.SharesConfigured);
+        Assert.Empty(db.FinancialMovements.Where(x => x.Id != created.Id));
+    }
+
+    [Fact]
+    public async Task SettingPartnerSharesCompletesPreviouslyUnassignedReceiptDistributions()
+    {
+        var partner = new Partner { FullName = "Socio" }; db.Partners.Add(partner); db.SaveChanges();
+        var income = Add(1000);
+        await new FinancialIncomeAllocationService(db).AllocateAsync(income.Id, default);
+        var allocation = await db.FinancialIncomeAllocations.SingleAsync();
+        Assert.False(allocation.SharesConfigured);
+        Assert.Empty(db.FinancialIncomePartnerDistributions);
+
+        await new PartnerDirectoryService(db).SaveParticipationsAsync(new()
+        {
+            Partners = [new(partner.Id, 100, true)]
+        }, default);
+        allocation = await db.FinancialIncomeAllocations.SingleAsync();
+        Assert.Equal(900, Assert.Single(db.FinancialIncomePartnerDistributions).Amount);
+        var report = await Overview.GetCapitalAllocationsAsync(2025, default);
+        Assert.True(Assert.Single(report.Currencies.Single(x => x.Currency == "ARS").Receipts).SharesConfigured);
+    }
+
+    [Fact]
+    public async Task SettlingAnEarlierPendingIncomeIncludesExpensesEnteredBeforeCollection()
+    {
+        var request = new FinancialMovementUpsertRequestDto
+        {
+            RequestId = Guid.NewGuid(), Amount = 1000, Currency = "ARS", Description = "Cobro pendiente",
+            CategoryId = incomeCategory.Id, MovementType = "Ingreso", Status = "Pendiente", MovementDate = date
+        };
+        var income = await Movements.CreateAsync(user.Id, request);
+        Add(300, income: false, status: FinancialMovementStatus.Pendiente);
+
+        request.ExpectedVersion = income.Version;
+        request.Status = "Cobrado";
+        request.SettlementDate = date;
+        await Movements.UpdateAsync(income.Id, request);
+
+        var allocation = await db.FinancialIncomeAllocations.SingleAsync();
+        Assert.Equal(300, allocation.ExpensesCovered);
+        Assert.Equal(70, allocation.CapitalizedAmount);
+        Assert.Equal(630, allocation.DistributableAmount);
+    }
+
+    [Fact]
+    public async Task LaterIncomeCoversTheUnfundedRemainderEvenIfTheExpenseWasManuallyPaid()
+    {
+        var expense = Add(150, income: false, status: FinancialMovementStatus.Pendiente);
+        var firstIncome = Add(100);
+        var allocator = new FinancialIncomeAllocationService(db);
+        await allocator.AllocateAsync(firstIncome.Id, default);
+        Assert.Equal(100, (await db.FinancialIncomeAllocations.SingleAsync()).ExpensesCovered);
+
+        expense.Status = FinancialMovementStatus.Pagado;
+        expense.SettlementDate = date;
+        db.SaveChanges();
+        var secondIncome = Add(100, settlementDate: date.AddDays(1));
+        await allocator.AllocateAsync(secondIncome.Id, default);
+
+        var secondAllocation = await db.FinancialIncomeAllocations.SingleAsync(x => x.IncomeMovementId == secondIncome.Id);
+        Assert.Equal(50, secondAllocation.ExpensesCovered);
+        Assert.Equal(5, secondAllocation.CapitalizedAmount);
+        Assert.Equal(45, secondAllocation.DistributableAmount);
+        var report = await Overview.GetCapitalAllocationsAsync(2025, default);
+        Assert.Equal(0, report.Currencies.Single(x => x.Currency == "ARS").ExpensesAwaitingCoverage);
+    }
+
+    [Fact]
     public async Task ExistingReceiptsRemainInHistoryWithoutOpeningBalanceAndMonthlyViewStaysMonthly()
     {
         Add(1500000, settlementDate: new DateOnly(2025, 5, 7));

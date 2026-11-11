@@ -72,6 +72,15 @@ La condición de socio y su actividad financiera son independientes de los roles
 `Nature` admite Operacion, AporteSocio, RetiroSocio, ReintegroSocio y CambioMoneda.
 `Funding` admite Empresa, SocioAporte y SocioReintegrable.
 
+### Reserva de capital empresarial
+
+- Cuando se registra un cobro operativo efectivo, primero se aplica a los gastos operativos de Empresa que ya estaban ingresados al sistema y aún no fueron cubiertos por cobros anteriores, incluidos saldos arrastrados.
+- Del remanente se capitaliza el 10%; el 90% restante se propone para distribuir entre socios activos según sus porcentajes. El cálculo es independiente para ARS y USD.
+- La pantalla guarda cada aplicación de gasto por cobro, el capitalizado y el reparto propuesto. Un gasto cubierto por un cobro no se vuelve a descontar mientras se completa su pago manual. Si el cobro anterior solo cubrió una parte, el remanente sigue reduciendo los siguientes cobros aunque el gasto ya se haya marcado pagado.
+- Los importes son una liquidación interna informativa: no marcan gastos como pagados ni crean retiros. Los gastos se marcan pagados y los retiros se registran manualmente cuando ocurren.
+- Las participaciones de socios activos se guardan en conjunto y deben sumar exactamente 100%, con hasta dos decimales. La pantalla informa la distribución estimada; cada pago real se registra aparte como retiro efectivo en Finanzas.
+- Los cobros anteriores a la implementación no reciben asignaciones retroactivas. El capital acumulado suma las asignaciones registradas desde que se habilitó esta función.
+
 - Operacion/Egreso pagado por Empresa reduce resultado y caja.
 - Operacion/Egreso con SocioAporte reduce resultado y registra aporte no monetario; no reduce caja de la empresa.
 - Operacion/Egreso con SocioReintegrable reduce resultado, genera saldo a devolver al socio y no reduce caja de la empresa.
@@ -141,9 +150,11 @@ que permita consolidarlos automáticamente sin duplicación.
 Todas las rutas financieras requieren Administrador; las escrituras además usan FinancesWrite.
 
 - `GET /api/finance/overview?from=&to=`: configuración, indicadores por moneda con recordedCashBalance, evolución mensual, categorías con identificador y saldos de socios; consumido por Visión financiera.
+- `GET /api/finance/capital-allocations?year=2026`: asignaciones de los cobros del año, gastos aún no cubiertos, capital acumulado y distribución propuesta por socio.
 - `GET /api/financial-movements/monthly-summary`: totales mensuales por moneda sin el análisis histórico completo. Inicio utiliza la misma operación de servicio y devuelve ese resumen reducido en `finance`.
 - `PUT /api/finance/setup`: startDate, openingArs, openingUsd, historyComplete, version.
 - `GET/POST /api/finance/partners`, `PUT /api/finance/partners/{id}`: socios y actividad.
+- `PUT /api/finance/partners/participations`: guarda en conjunto el estado y las participaciones de todos los socios; las participaciones activas deben sumar 100%.
 - `POST /api/finance/exchanges`: requestId, fromCurrency/fromAmount, toCurrency/toAmount, date, notes.
 - `DELETE /api/finance/exchanges/{id}`: anulación de las dos partes.
 - `GET /api/finance/team-obligations?year=2026&pageNumber=1&pageSize=10`: acuerdos y saldos separados por moneda.

@@ -59,6 +59,14 @@ export class VisionSettingsDialogComponent implements OnInit {
     if (this.partnerMode === 'new') return !!this.partnerName.trim();
     return !this.peopleLoading && !!this.selectedPerson && (!this.selectedPerson.registeredPartnerId || this.selectedPerson.registeredPartnerId === this.linkingPartner?.id);
   }
+  get activeParticipationTotal(): number { return this.partners.filter(p => p.isActive).reduce((sum, p) => sum + Number(p.participationPercentage || 0), 0); }
+  get canSaveParticipations(): boolean {
+    const active = this.partners.filter(p => p.isActive);
+    return !this.saving && active.length > 0 && active.every(p => Number.isFinite(Number(p.participationPercentage))
+      && Number(p.participationPercentage) >= 0 && Number(p.participationPercentage) <= 100
+      && Math.round(Number(p.participationPercentage) * 100) === Number(p.participationPercentage) * 100)
+      && Math.round(this.activeParticipationTotal * 100) === 10000;
+  }
   isLinked(partner: Partner): boolean { return !!partner.personId; }
   selectPartnerMode(mode: 'existing' | 'new'): void {
     if (this.saving) return;
@@ -90,6 +98,7 @@ export class VisionSettingsDialogComponent implements OnInit {
   }
   async savePartner(partner?: Partner): Promise<void> {
     if (!partner && !this.canAddPartner) { this.error = this.partnerMode === 'existing' ? 'Selecciona una persona disponible' : 'Indica el nombre de la persona'; return; }
+    const draftShares = new Map(this.partners.map(item => [item.id, item.participationPercentage]));
     if (this.saving) return; this.busy(true); this.error = '';
     try {
       if (partner) {
@@ -104,8 +113,20 @@ export class VisionSettingsDialogComponent implements OnInit {
       }
       this.changed = true; this.partnerName = ''; this.partnerEmail = ''; this.selectedPersonKey = ''; this.linkingPartner = undefined;
       await this.loadPartners();
+      for (const item of this.partners) if (draftShares.has(item.id)) item.participationPercentage = draftShares.get(item.id);
       if (this.partnerMode === 'existing') await this.loadPeople(this.peoplePage);
     } catch (e: any) { this.error = e?.error?.message ?? 'No se pudo guardar el socio'; }
+    finally { this.busy(false); }
+  }
+  async saveParticipations(): Promise<void> {
+    if (!this.canSaveParticipations) { this.error = 'Los porcentajes de socios activos deben sumar exactamente 100% (hasta dos decimales).'; return; }
+    this.busy(true); this.error = '';
+    try {
+      await firstValueFrom(this.api.savePartnerParticipations(this.partners
+        .map(p => ({ partnerId: p.id, percentage: Number(p.participationPercentage || 0), isActive: p.isActive }))));
+      this.changed = true;
+      await this.loadPartners();
+    } catch (e: any) { this.error = e?.error?.message ?? 'No se pudieron guardar las participaciones'; }
     finally { this.busy(false); }
   }
   async save(): Promise<void> {

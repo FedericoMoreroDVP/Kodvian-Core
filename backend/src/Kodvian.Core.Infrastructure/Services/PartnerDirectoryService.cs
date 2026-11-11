@@ -15,7 +15,8 @@ public sealed class PartnerDirectoryService(KodvianDbContext db)
     {
         Email = p.Developer != null ? p.Developer.Email : p.User != null ? p.User.Email : p.Email,
         Source = p.DeveloperId != null ? "Developer" : p.UserId != null ? "User" : "Manual",
-        PersonId = p.DeveloperId ?? p.UserId
+        PersonId = p.DeveloperId ?? p.UserId,
+        ParticipationPercentage = p.ParticipationPercentage
     };
 
     public async Task<IReadOnlyCollection<PartnerDto>> ListAsync(CancellationToken ct) => await db.Partners.AsNoTracking()
@@ -54,6 +55,17 @@ public sealed class PartnerDirectoryService(KodvianDbContext db)
         await using var transaction = await FinanceWriteScope.BeginAsync(db, ct);
         var entity = id.HasValue ? await db.Partners.SingleOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new KeyNotFoundException("Socio no encontrado") : new Partner();
+        if (id.HasValue && entity.Activo != request.IsActive)
+        {
+            var activeShares = await db.Partners.Where(x => x.Activo).SumAsync(x => x.ParticipationPercentage, ct);
+            if (activeShares == 100m)
+            {
+                var resultingShares = activeShares - (entity.Activo ? entity.ParticipationPercentage : 0m)
+                    + (request.IsActive ? entity.ParticipationPercentage : 0m);
+                if (resultingShares != 100m)
+                    throw new ArgumentException("Modifica el estado y las participaciones desde la configuración conjunta de socios");
+            }
+        }
         var currentSource = entity.DeveloperId.HasValue ? "Developer" : entity.UserId.HasValue ? "User" : "Manual";
         var currentPersonId = entity.DeveloperId ?? entity.UserId;
         var source = request.Source ?? currentSource;
@@ -107,5 +119,27 @@ public sealed class PartnerDirectoryService(KodvianDbContext db)
         await db.SaveChangesAsync(ct);
         if (transaction != null) await transaction.CommitAsync(ct);
         return await db.Partners.AsNoTracking().Where(x => x.Id == entity.Id).Select(Projection()).SingleAsync(ct);
+    }
+
+    public async Task SaveParticipationsAsync(PartnerParticipationRequest request, CancellationToken ct)
+    {
+        await using var transaction = await FinanceWriteScope.BeginAsync(db, ct);
+        var allPartners = await db.Partners.ToListAsync(ct);
+        var allocations = request.Partners.ToDictionary(x => x.PartnerId, x => x.Percentage);
+        var submitted = request.Partners.ToDictionary(x => x.PartnerId);
+        var active = allPartners.Where(x => submitted.TryGetValue(x.Id, out var item) && item.IsActive).ToList();
+        if (active.Count == 0 || submitted.Count != allPartners.Count || allPartners.Any(x => !submitted.ContainsKey(x.Id)))
+            throw new ArgumentException("Incluye exactamente a todos los socios y deja al menos uno activo");
+        if (request.Partners.Any(x => x.Percentage < 0 || x.Percentage > 100 || decimal.Round(x.Percentage, 2) != x.Percentage)
+            || active.Sum(x => submitted[x.Id].Percentage) != 100m)
+            throw new ArgumentException("Los porcentajes de socios activos deben sumar exactamente 100% (hasta dos decimales)");
+        foreach (var partner in allPartners)
+        {
+            partner.Activo = submitted[partner.Id].IsActive;
+            partner.ParticipationPercentage = allocations[partner.Id];
+        }
+        await db.SaveChangesAsync(ct);
+        await new FinancialIncomeAllocationService(db).CompletePendingDistributionsAsync(ct);
+        if (transaction != null) await transaction.CommitAsync(ct);
     }
 }

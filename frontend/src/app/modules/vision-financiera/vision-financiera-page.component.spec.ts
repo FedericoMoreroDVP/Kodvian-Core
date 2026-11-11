@@ -39,7 +39,9 @@ describe('Visión financiera: navegación y detalle', () => {
   afterEach(() => http.verify());
   function initialize() {
     const fixture = TestBed.createComponent(VisionFinancieraPageComponent); fixture.detectChanges();
-    http.expectOne('/api/finance/overview').flush({ data: data() }); fixture.detectChanges(); return fixture;
+    http.expectOne('/api/finance/overview').flush({ data: data() });
+    http.expectOne(r => r.url === '/api/finance/capital-allocations').flush({ data: { year: new Date().getFullYear(), currencies: [] } });
+    fixture.detectChanges(); return fixture;
   }
   it('muestra cuatro indicadores y gráficos sin montar formularios de configuración', () => {
     const fixture = initialize();
@@ -72,7 +74,8 @@ describe('Visión financiera: navegación y detalle', () => {
     query.next(convertToParamMap({ periodo: 'personalizado', moneda: 'ARS', seccion: 'resumen', desde: '2025-05-15', hasta: '2025-09-22' }));
     const fixture = TestBed.createComponent(VisionFinancieraPageComponent); fixture.detectChanges();
     const request = http.expectOne(r => r.url === '/api/finance/overview'); expect(request.request.params.get('from')).toBe('2025-05-15');
-    request.flush({ data: { ...data(), from: '2025-05-15' } }); fixture.detectChanges();
+     request.flush({ data: { ...data(), from: '2025-05-15' } });
+     http.expectOne(r => r.url === '/api/finance/capital-allocations').flush({ data: { year: new Date().getFullYear(), currencies: [] } }); fixture.detectChanges();
     fixture.componentInstance.openMonth(fixture.componentInstance.buckets[0], 'income');
     expect(dialog.open.calls.mostRecent().args[1].data.filters.dateFrom).toBe('2025-05-15'); fixture.destroy();
   });
@@ -82,7 +85,9 @@ describe('Visión financiera: navegación y detalle', () => {
     http.expectNone(r => r.url === '/api/finance/overview'); expect(fixture.componentInstance.error).toContain('fechas válidas');
     query.next(convertToParamMap({})); http.expectOne('/api/finance/overview').flush({}, { status: 500, statusText: 'Error' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('No pudimos cargar'); fixture.componentInstance.reload();
-    http.expectOne('/api/finance/overview').flush({ data: data() }); fixture.detectChanges(); expect(fixture.nativeElement.querySelectorAll('.metric-card').length).toBe(4); fixture.destroy();
+     http.expectOne('/api/finance/overview').flush({ data: data() });
+     http.expectOne(r => r.url === '/api/finance/capital-allocations').flush({ data: { year: new Date().getFullYear(), currencies: [] } });
+     fixture.detectChanges(); expect(fixture.nativeElement.querySelectorAll('.metric-card').length).toBe(4); fixture.destroy();
   });
   it('carga socios y acuerdos solo al seleccionar sus secciones', () => {
     const fixture = initialize();

@@ -38,6 +38,23 @@ describe('Configuración financiera separada', () => {
     http.expectOne('/api/finance/partners').flush({ data: [{ id: 'p', fullName: 'Socio', isActive: true }] }); tick();
     expect(component.partners.length).toBe(1); expect(component.changed).toBeTrue();
   }));
+  it('guarda las participaciones de forma conjunta y exige que sumen cien por ciento', fakeAsync(() => {
+    const component = TestBed.runInInjectionContext(() => new VisionSettingsDialogComponent({ mode: 'partners', overview }));
+    component.partners = [
+      { id: 'p1', fullName: 'Socio 1', isActive: true, participationPercentage: 60 },
+      { id: 'p2', fullName: 'Socio 2', isActive: true, participationPercentage: 40 }
+    ];
+    component.partners[1].participationPercentage = 39;
+    expect(component.canSaveParticipations).toBeFalse();
+    void component.saveParticipations(); http.expectNone('/api/finance/partners/participations');
+    component.partners[1].participationPercentage = 40;
+    expect(component.canSaveParticipations).toBeTrue(); void component.saveParticipations();
+    const request = http.expectOne('/api/finance/partners/participations');
+    expect(request.request.body.partners.map((p: any) => p.percentage)).toEqual([60, 40]);
+    request.flush({ data: {} }); tick();
+    http.expectOne('/api/finance/partners').flush({ data: component.partners }); tick();
+    expect(component.changed).toBeTrue(); expect(component.saving).toBeFalse();
+  }));
   it('selecciona una persona existente y envía su identidad, sin duplicar los datos maestros', fakeAsync(() => {
     const component = TestBed.runInInjectionContext(() => new VisionSettingsDialogComponent({ mode: 'partners', overview }));
     component.ngOnInit();

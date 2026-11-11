@@ -29,6 +29,13 @@ Muestra aportes, retiros, gastos reintegrables, reintegros y pendientes por soci
 la moneda seleccionada. Estos importes son acumulados al corte, independientemente de
 la fecha inicial del período. Los perfiles activos sin movimientos se muestran con ceros.
 
+En Resumen, la sección de capital empresarial muestra la aplicación por cobro: gastos
+operativos pendientes cubiertos primero, 10% del remanente capitalizado y 90% propuesto
+para distribuir según participaciones activas. Incluye los gastos todavía pendientes de
+cobertura, el acumulado mensual de capital y el detalle de cada cobro. ARS y USD se
+mantienen separados. Los gastos pagados y los retiros se siguen registrando manualmente;
+las asignaciones informativas no modifican movimientos ni saldos de caja.
+
 Cada importe abre sus movimientos. Un gasto afrontado como aporte cuenta positivamente
 en Aportes, aunque su movimiento sea un egreso. El pendiente de reintegro suma los gastos
 reintegrables y resta las devoluciones.

@@ -46,10 +46,12 @@
         <div class="partner"><div class="partner-data">
           @if (isLinked(partner)) { <strong>{{ partner.fullName }}</strong><span>{{ partner.email || 'Sin correo registrado' }}</span><small class="linked-note">Datos de {{ partner.source === 'Developer' ? 'Equipo' : 'la cuenta vinculada' }} · se actualizan desde su ficha de origen.</small> }
           @else { <label>Nombre<input [(ngModel)]="partner.fullName" maxlength="160" [disabled]="saving" /></label><label>Correo (opcional)<input type="email" [(ngModel)]="partner.email" maxlength="120" [disabled]="saving" /></label><small class="linked-note">Ficha manual</small> }
-        </div><div class="partner-actions"><label class="check"><input type="checkbox" [(ngModel)]="partner.isActive" [disabled]="saving" /> Activo</label><button mat-button [disabled]="saving" (click)="savePartner(partner)">Guardar socio</button>
+        </div><div class="partner-actions"><label class="check"><input type="checkbox" [(ngModel)]="partner.isActive" [disabled]="saving" /> Activo</label><label>Participación (%)<input type="number" min="0" max="100" step="0.01" [(ngModel)]="partner.participationPercentage" [disabled]="saving || !partner.isActive" /></label><button mat-button [disabled]="saving" (click)="savePartner(partner)">Guardar socio</button>
           @if (!isLinked(partner)) { <button mat-button [disabled]="saving" (click)="linkExistingPartner(partner)">Vincular a una persona</button> }
         </div></div>
       }
+      <p>Participación activa configurada: <strong>{{ activeParticipationTotal }}%</strong>. La suma debe ser 100%. Los cambios de estado Activo también se aplican con este guardado conjunto.</p>
+      <button mat-flat-button type="button" [disabled]="!canSaveParticipations" (click)="saveParticipations()">{{ saving ? 'Guardando…' : 'Guardar participaciones activas' }}</button>
       @if (!loading && error) { <button mat-button (click)="loadPartners()">Reintentar carga</button> }
     }
     @case ('exchange') {

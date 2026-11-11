@@ -26,6 +26,9 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<FinancialCategory> FinancialCategories => Set<FinancialCategory>();
     public DbSet<FinancialMovement> FinancialMovements => Set<FinancialMovement>();
+    public DbSet<FinancialIncomeAllocation> FinancialIncomeAllocations => Set<FinancialIncomeAllocation>();
+    public DbSet<FinancialIncomeExpenseApplication> FinancialIncomeExpenseApplications => Set<FinancialIncomeExpenseApplication>();
+    public DbSet<FinancialIncomePartnerDistribution> FinancialIncomePartnerDistributions => Set<FinancialIncomePartnerDistribution>();
     public DbSet<FinanceSettings> FinanceSettings => Set<FinanceSettings>();
     public DbSet<Partner> Partners => Set<Partner>();
     public DbSet<Provider> Providers => Set<Provider>();
@@ -188,6 +191,7 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
             entity.ToTable("Partners", t => t.HasCheckConstraint("CK_Partners_OnePersonSource", "\"DeveloperId\" IS NULL OR \"UserId\" IS NULL"));
             entity.Property(x => x.FullName).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(120);
+            entity.Property(x => x.ParticipationPercentage).HasColumnType("numeric(5,2)");
             entity.HasIndex(x => x.DeveloperId).IsUnique();
             entity.HasIndex(x => x.UserId).IsUnique();
             entity.HasOne(x => x.Developer).WithMany().HasForeignKey(x => x.DeveloperId).OnDelete(DeleteBehavior.Restrict);
@@ -479,6 +483,36 @@ public class KodvianDbContext : DbContext, IDataProtectionKeyContext
                 .WithMany(x => x.FinancialMovementsCreated)
                 .HasForeignKey(x => x.CreatedById)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<FinancialIncomeAllocation>(entity =>
+        {
+            entity.ToTable("FinancialIncomeAllocations");
+            entity.HasIndex(x => x.IncomeMovementId).IsUnique();
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.GrossAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.ExpensesCovered).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.CapitalizedAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.DistributableAmount).HasColumnType("numeric(18,2)");
+            entity.HasOne(x => x.IncomeMovement).WithOne().HasForeignKey<FinancialIncomeAllocation>(x => x.IncomeMovementId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<FinancialIncomeExpenseApplication>(entity =>
+        {
+            entity.ToTable("FinancialIncomeExpenseApplications");
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.AllocationId, x.ExpenseMovementId }).IsUnique();
+            entity.HasOne(x => x.Allocation).WithMany(x => x.ExpenseApplications).HasForeignKey(x => x.AllocationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ExpenseMovement).WithMany().HasForeignKey(x => x.ExpenseMovementId).OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<FinancialIncomePartnerDistribution>(entity =>
+        {
+            entity.ToTable("FinancialIncomePartnerDistributions");
+            entity.Property(x => x.PartnerName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Percentage).HasColumnType("numeric(5,2)");
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.AllocationId, x.PartnerId }).IsUnique();
+            entity.HasOne(x => x.Allocation).WithMany(x => x.PartnerDistributions).HasForeignKey(x => x.AllocationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Partner).WithMany().HasForeignKey(x => x.PartnerId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DocumentFile>(entity =>

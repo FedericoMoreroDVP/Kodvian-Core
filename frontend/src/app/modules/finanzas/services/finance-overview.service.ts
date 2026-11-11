@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map } from 'rxjs';
 import { ApiResponse, PagedResult } from '../../../shared/models/api.models';
 import { LedgerContrato } from '../../proyectos/models/proyectos.models';
-import { FinanceOverview, FinanceSetup, Partner, PartnerDetails, PartnerPerson } from '../models/finance-overview.models';
+import { CapitalAllocationReport, FinanceOverview, FinanceSetup, Partner, PartnerDetails, PartnerPerson } from '../models/finance-overview.models';
 
 @Injectable({ providedIn: 'root' })
 export class FinanceOverviewService {
@@ -15,6 +15,7 @@ export class FinanceOverviewService {
     let params = new HttpParams(); if (from) params = params.set('from', from); if (to) params = params.set('to', to);
     return this.http.get<ApiResponse<FinanceOverview>>('/api/finance/overview', { params }).pipe(map(r => r.data));
   }
+  capitalAllocations(year: number) { return this.http.get<ApiResponse<CapitalAllocationReport>>('/api/finance/capital-allocations', { params: { year } }).pipe(map(r => r.data)); }
   setup(value: FinanceSetup) { return this.http.put<ApiResponse<FinanceSetup>>('/api/finance/setup', value).pipe(map(r => r.data)); }
   partners() { return this.http.get<ApiResponse<Partner[]>>('/api/finance/partners').pipe(map(r => r.data)); }
   partnerPeople(search = '', pageNumber = 1) {
@@ -23,6 +24,9 @@ export class FinanceOverviewService {
   savePartner(fullName: string, isActive = true, id?: string, details: PartnerDetails = {}) {
     return (id ? this.http.put<ApiResponse<Partner>>(`/api/finance/partners/${id}`, { fullName, isActive, ...details })
       : this.http.post<ApiResponse<Partner>>('/api/finance/partners', { fullName, isActive, ...details })).pipe(map(r => r.data));
+  }
+  savePartnerParticipations(partners: { partnerId: string; percentage: number; isActive: boolean }[]) {
+    return this.http.put<ApiResponse<void>>('/api/finance/partners/participations', { partners }).pipe(map(r => r.data));
   }
   exchange(value: { requestId: string; fromCurrency: string; toCurrency: string; fromAmount: number; toAmount: number; date: string; notes: string }) {
     return this.http.post<ApiResponse<string>>('/api/finance/exchanges', value).pipe(map(r => r.data));

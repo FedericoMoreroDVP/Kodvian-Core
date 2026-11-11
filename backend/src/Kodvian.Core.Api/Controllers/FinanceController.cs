@@ -13,6 +13,8 @@ public class FinanceController(IFinanceOverviewService service) : ControllerBase
         Ok(ApiResponseDto<PagedResultDto<Kodvian.Core.Application.Developers.Dtos.ContractLedgerDto>>.Ok(await service.TeamObligationsAsync(year, request, ct), "Saldos del equipo obtenidos"));
     [HttpGet("overview")]
     public async Task<IActionResult> Overview(DateOnly? from, DateOnly? to, CancellationToken ct) => Ok(ApiResponseDto<FinanceOverviewDto>.Ok(await service.GetAsync(from, to, ct), "Situación financiera obtenida"));
+    [HttpGet("capital-allocations")]
+    public async Task<IActionResult> CapitalAllocations([FromQuery] int year, CancellationToken ct) => Ok(ApiResponseDto<CapitalAllocationReportDto>.Ok(await service.GetCapitalAllocationsAsync(year, ct), "Asignaciones de capital obtenidas"));
     [HttpPut("setup"), Authorize(Policy = "FinancesWrite")]
     public async Task<IActionResult> Setup(FinanceSetupDto request, CancellationToken ct) => Ok(ApiResponseDto<FinanceSetupDto>.Ok(await service.SetupAsync(request, ct), "Configuración guardada"));
     [HttpGet("partners")]
@@ -24,6 +26,8 @@ public class FinanceController(IFinanceOverviewService service) : ControllerBase
     public async Task<IActionResult> CreatePartner(PartnerRequest request, CancellationToken ct) => Ok(ApiResponseDto<PartnerDto>.Ok(await service.SavePartnerAsync(null, request, ct), "Socio guardado"));
     [HttpPut("partners/{id:guid}"), Authorize(Policy = "FinancesWrite")]
     public async Task<IActionResult> UpdatePartner(Guid id, PartnerRequest request, CancellationToken ct) => Ok(ApiResponseDto<PartnerDto>.Ok(await service.SavePartnerAsync(id, request, ct), "Socio guardado"));
+    [HttpPut("partners/participations"), Authorize(Policy = "FinancesWrite")]
+    public async Task<IActionResult> PartnerParticipations(PartnerParticipationRequest request, CancellationToken ct) { await service.SavePartnerParticipationsAsync(request, ct); return Ok(ApiResponseDto<object>.Ok(new { }, "Participaciones guardadas")); }
     [HttpPost("exchanges"), Authorize(Policy = "FinancesWrite")]
     public async Task<IActionResult> Exchange(ExchangeRequest request, CancellationToken ct) => Ok(ApiResponseDto<Guid>.Ok(await service.ExchangeAsync(request, ct), "Cambio registrado"));
     [HttpDelete("exchanges/{id:guid}"), Authorize(Policy = "FinancesWrite")]

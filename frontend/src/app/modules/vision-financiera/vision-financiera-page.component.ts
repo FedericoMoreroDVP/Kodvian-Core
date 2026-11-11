@@ -9,7 +9,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subscription } from 'rxjs';
 import { FinanceOverviewService } from '../finanzas/services/finance-overview.service';
-import { FinanceOverview, Partner, PartnerBalance } from '../finanzas/models/finance-overview.models';
+import { CapitalAllocationReport, FinanceOverview, Partner, PartnerBalance } from '../finanzas/models/finance-overview.models';
 import { LedgerContrato } from '../proyectos/models/proyectos.models';
 import { ContratoLedgerDialogComponent } from '../proyectos/components/contrato-ledger-dialog/contrato-ledger-dialog.component';
 import { FinanceChartComponent } from './finance-chart.component';
@@ -27,6 +27,7 @@ export class VisionFinancieraPageComponent implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
   private request?: Subscription;
+  private capitalRequest?: Subscription;
   private obligationsRequest?: Subscription;
   private partnersRequest?: Subscription;
   private rangeKey = '';
@@ -39,6 +40,9 @@ export class VisionFinancieraPageComponent implements OnInit {
   range = { from: '', to: '' };
   draftPeriod: VisionPeriod = 'historico'; draftFrom = ''; draftTo = ''; filterError = '';
   data?: FinanceOverview;
+  capital?: CapitalAllocationReport;
+  capitalYear = new Date().getFullYear();
+  capitalLoading = false; capitalError = '';
   loading = false; error = ''; loadedAt = '';
   grouping = 'Mensual'; buckets: VisionBucket[] = [];
   expenses: FinanceOverview['expenses'] = []; showAllCategories = false;
@@ -109,10 +113,21 @@ export class VisionFinancieraPageComponent implements OnInit {
     this.request?.unsubscribe(); this.rangeKey = `${this.range.from}|${this.range.to}`;
     this.loading = true; this.error = ''; this.data = undefined;
     this.request = this.api.overview(this.range.from, this.range.to).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: data => { this.data = data; this.buildCharts(); this.loading = false; this.loadedAt = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(new Date()); },
+      next: data => { this.data = data; this.buildCharts(); this.loading = false; this.loadedAt = new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(new Date()); this.loadCapitalAllocations(); },
       error: e => { this.loading = false; this.error = e?.error?.message ?? 'No se pudo cargar la visión financiera.'; }
     });
   }
+  loadCapitalAllocations(): void {
+    this.capitalLoading = true; this.capitalError = ''; this.capital = undefined;
+    this.capitalRequest?.unsubscribe();
+    this.capitalRequest = this.api.capitalAllocations(this.capitalYear).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: data => { this.capital = data; this.capitalLoading = false; },
+      error: e => { this.capitalError = e?.error?.message ?? 'No se pudieron consultar las asignaciones de los cobros.'; this.capitalLoading = false; }
+    });
+  }
+  get capitalRow() { return this.capital?.currencies.find(x => x.currency === this.state.currency); }
+  get accumulatedCapital(): number { return (this.capitalRow?.openingCapital ?? 0) + (this.capitalRow?.capitalizedInYear ?? 0); }
+  capitalMonth(month: number): string { return new Intl.DateTimeFormat('es-AR', { month: 'long' }).format(new Date(this.capitalYear, month - 1, 1)); }
   private buildCharts(): void {
     if (!this.data) return;
     const grouped = monthlyBuckets(this.data.months, this.state.currency); this.grouping = grouped.grouping; this.buckets = grouped.buckets;
